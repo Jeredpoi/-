@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Отчеты</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="primary-action">
+      <button id="openForm" class="btn btn-primary btn-wide">
+        Подать отчет
+      </button>
+    </div>
+
+    <header class="header">
+      <div>
+        <div class="title">Отчеты</div>
+        <div class="subtitle">История отправок формы</div>
+      </div>
+      <button id="addEntry" class="btn btn-primary">Добавить</button>
+    </header>
+
+    <section class="summary">
+      <div class="summary-label">Последняя запись</div>
+      <div id="lastSubmission" class="summary-value">Нет записей</div>
+      <div id="deadlineStatus" class="deadline"></div>
+      <div id="pendingStatus" class="status-pill status-idle">Нет активности</div>
+    </section>
+
+    <section class="list-section">
+      <div class="list-header">
+        <div>Записи</div>
+        <button id="clearAll" class="btn btn-text">Очистить все</button>
+      </div>
+      <ul id="entries" class="entries"></ul>
+    </section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

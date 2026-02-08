@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Form Submission Tracker",
+  "version": "1.0.0",
+  "description": "Tracks Google Form submissions and shows a quick note in the popup.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Form Submission Tracker"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "alarms", "notifications"],
+  "host_permissions": [
+    "https://forms.gle/zCsbwhSNvqkXvCPS7",
+    "https://docs.google.com/forms/d/e/1FAIpQLSfJ2Tq20loiKS2hxmAV_JJjr4kLjVF-z2VnIqCkWtdBKaeCmA/*",
+    "https://docs.google.com/forms/u/*/d/e/1FAIpQLSfJ2Tq20loiKS2hxmAV_JJjr4kLjVF-z2VnIqCkWtdBKaeCmA/*",
+    "https://forms.gle/ipVLVoTxso49MkUZ9",
+    "https://docs.google.com/forms/d/e/1FAIpQLSf21tWWx7g_AJQluVjXgGUYv8hX06_Y-3D1LkkgqoygmjideQ/*",
+    "https://docs.google.com/forms/u/*/d/e/1FAIpQLSf21tWWx7g_AJQluVjXgGUYv8hX06_Y-3D1LkkgqoygmjideQ/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://forms.gle/zCsbwhSNvqkXvCPS7",
+        "https://docs.google.com/forms/d/e/1FAIpQLSfJ2Tq20loiKS2hxmAV_JJjr4kLjVF-z2VnIqCkWtdBKaeCmA/*",
+        "https://docs.google.com/forms/u/*/d/e/1FAIpQLSfJ2Tq20loiKS2hxmAV_JJjr4kLjVF-z2VnIqCkWtdBKaeCmA/*",
+        "https://forms.gle/ipVLVoTxso49MkUZ9",
+        "https://docs.google.com/forms/d/e/1FAIpQLSf21tWWx7g_AJQluVjXgGUYv8hX06_Y-3D1LkkgqoygmjideQ/*",
+        "https://docs.google.com/forms/u/*/d/e/1FAIpQLSf21tWWx7g_AJQluVjXgGUYv8hX06_Y-3D1LkkgqoygmjideQ/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
