@@ -28,6 +28,8 @@ namespace Isle.Services
     {
         private const string Repo = "Jeredpoi/-";
         private static readonly HttpClient Http = CreateClient();
+        /// <summary>Отдельный клиент для скачивания файла: заголовок GitHub API тут мешает.</summary>
+        private static readonly HttpClient Download = new() { Timeout = TimeSpan.FromMinutes(10) };
         private static readonly DispatcherTimer Timer = new() { Interval = TimeSpan.FromHours(6) };
         private static bool _notified;
 
@@ -113,7 +115,9 @@ namespace Isle.Services
         public static async Task DownloadAndInstallAsync(UpdateInfo info, IProgress<double> progress)
         {
             var path = Path.Combine(Path.GetTempPath(), "Isle-Setup-" + info.Version.ToString(3) + ".exe");
-            using (var resp = await Http.GetAsync(info.SetupUrl, HttpCompletionOption.ResponseHeadersRead))
+            Download.DefaultRequestHeaders.UserAgent.Clear();
+            Download.DefaultRequestHeaders.UserAgent.ParseAdd("Isle-Updater");
+            using (var resp = await Download.GetAsync(info.SetupUrl, HttpCompletionOption.ResponseHeadersRead))
             {
                 resp.EnsureSuccessStatusCode();
                 long total = resp.Content.Headers.ContentLength ?? info.Size;

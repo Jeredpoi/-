@@ -34,6 +34,8 @@ namespace Isle
                 return;
             }
 
+            if (SwitchToInstalledCopy()) { Shutdown(); return; }
+
             DispatcherUnhandledException += OnError;
             AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject?.ToString());
             base.OnStartup(e);
@@ -87,6 +89,33 @@ namespace Isle
                 "\n\nПодробности записаны в " + Path.Combine(Storage.Dir, "errors.log"),
                 "Isle", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
+        }
+
+        /// <summary>
+        /// Если запущена старая копия exe (например, скачанная из Actions), а установщик уже поставил
+        /// более новую версию в %LocalAppData%\Programs\Isle — запускаем установленную и выходим.
+        /// </summary>
+        private static bool SwitchToInstalledCopy()
+        {
+            try
+            {
+                var installed = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Isle", "Isle.exe");
+                var me = Environment.ProcessPath ?? "";
+                if (!File.Exists(installed) || string.Equals(Path.GetFullPath(installed), Path.GetFullPath(me), StringComparison.OrdinalIgnoreCase)) return false;
+                var vi = System.Diagnostics.FileVersionInfo.GetVersionInfo(installed);
+                if (!Version.TryParse(vi.FileVersion ?? "", out var instVer)) return false;
+                var myVer = typeof(App).Assembly.GetName().Version ?? new Version(0, 0);
+                if (instVer <= myVer) return false;
+                Trace("запущена старая копия " + myVer + " (" + me + "), переключаюсь на установленную " + instVer, true);
+                // автозапуск — на установленную версию
+                try { using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"); if (k.GetValue("Isle") != null) k.SetValue("Isle", "\"" + installed + "\""); } catch { }
+                _single?.ReleaseMutex();
+                _single?.Dispose();
+                _single = null;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(installed) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(installed) });
+                return true;
+            }
+            catch { return false; }
         }
 
         /// <summary>Журнал запуска %AppData%\Isle\startup.log — по нему видно, на каком шаге что-то сломалось.</summary>
