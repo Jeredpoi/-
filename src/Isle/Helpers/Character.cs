@@ -6,7 +6,8 @@ using Isle.Native;
 
 namespace Isle.Helpers
 {
-    public enum Mood { Idle, Music, Thinking, Done, Attention, Sleep, Working }
+    /// <summary>Drowsy — ночью, пока ты ещё за компьютером: глаза слипаются, зевает и потягивается.</summary>
+    public enum Mood { Idle, Music, Thinking, Done, Attention, Sleep, Working, Drowsy }
 
     /// <summary>Одежда по погоде: шапка и шарф в холод, очки и зонтик от солнца в жару, зонт в дождь.</summary>
     public enum Outfit { None, Winter, Summer, Rain }
@@ -48,6 +49,11 @@ namespace Isle.Helpers
         /// <summary>Громкость музыки 0..1 — пляшет в такт.</summary>
         public float Beat { get; set; }
         public Outfit Outfit { get; set; }
+        /// <summary>Ночь: спит в ночном колпаке.</summary>
+        public bool Night { get; set; }
+
+        private double _yawn;                // 0..1 — фаза зевка
+        private DateTime _nextYawn = DateTime.Now.AddSeconds(4);
 
         /// <summary>Своё занятие в покое: стоит, сидит или оглядывается — меняется само раз в полминуты.</summary>
         private int _activity;
@@ -94,6 +100,7 @@ namespace Isle.Helpers
                 ty = -0.7;                           // и смотрят вверх
             }
             else if (mood == Mood.Sleep) { tx = 0; ty = 0.6; }
+            else if (mood == Mood.Drowsy) { tx = Math.Sin(_time * 0.4) * 0.3; ty = 0.45; } // клюёт носом, смотрит вниз
             else if (mood == Mood.Working) { tx = Math.Sin(_time * 0.9) * 0.5; ty = 0.9; } // смотрит в ноутбук, читает строки
             else if (FollowCursor && Win32.GetCursorPos(out var p))
             {
@@ -125,8 +132,28 @@ namespace Isle.Helpers
             _lookX += (tx - _lookX) * 0.28;
             _lookY += (ty - _lookY) * 0.28;
 
+            // ---- зевок: раз в 7–15 секунд, ~1,6 с
+            if (mood == Mood.Drowsy)
+            {
+                if (_yawn > 0) _yawn = Math.Min(1.0001, _yawn + 0.025);
+                if (_yawn > 1) { _yawn = 0; _nextYawn = DateTime.Now.AddSeconds(7 + _rnd.NextDouble() * 8); }
+                else if (_yawn == 0 && DateTime.Now >= _nextYawn) _yawn = 0.001;
+            }
+            else _yawn = 0;
+
             // ---- моргание
-            if (mood != Mood.Sleep)
+            if (mood == Mood.Drowsy)
+            {
+                // веки полуприкрыты, моргает медленно, во время зевка жмурится
+                if (DateTime.Now >= _nextBlink)
+                {
+                    _blinkUntil = DateTime.Now.AddMilliseconds(420);
+                    _nextBlink = DateTime.Now.AddSeconds(2 + _rnd.NextDouble() * 3);
+                }
+                double target = _yawn > 0.15 && _yawn < 0.85 || DateTime.Now < _blinkUntil ? 1 : 0.55;
+                _blink += (target - _blink) * 0.15;
+            }
+            else if (mood != Mood.Sleep)
             {
                 if (DateTime.Now >= _nextBlink)
                 {
@@ -191,6 +218,11 @@ namespace Isle.Helpers
                 case Mood.Working:
                     dy = Math.Sin(_time * 1.6) * 0.2 * px;
                     break;
+                case Mood.Drowsy:
+                    // медленно покачивается и клюёт носом, на зевке вытягивается вверх
+                    dy = (0.3 + Math.Sin(_time * 0.9) * 0.35) * px - Math.Sin(_yawn * Math.PI) * 0.8 * px;
+                    tilt = Math.Sin(_time * 0.45) * 4;
+                    break;
             }
             if (_cheer > 0)
             {
@@ -228,6 +260,8 @@ namespace Isle.Helpers
                         bool up = Math.Sin(_time * 10 + (x == 0 ? 0 : Math.PI)) > 0;
                         cy = up ? y - 1 : y;
                     }
+                    // зевая, потягивается — ручки вверх
+                    if ((x == 0 || x == 12) && _yawn > 0.1 && _yawn < 0.9) cy = y - 1 - (Math.Sin(_yawn * Math.PI) > 0.6 ? 1 : 0);
                     if ((x == 0 || x == 12) && mood == Mood.Working)
                     {
                         bool tap = Math.Sin(_time * 22 + (x == 0 ? 0 : 1.7)) > 0.3;
@@ -239,7 +273,31 @@ namespace Isle.Helpers
 
             // ---- одежда по погоде
             bool glasses = false;
-            if (Outfit == Outfit.Winter)
+            bool nightcap = Night && (mood == Mood.Sleep || mood == Mood.Drowsy);
+            if (nightcap)
+            {
+                // ночной колпак со звёздочками, кончик свисает набок, на конце помпон
+                var cap = new SolidColorBrush(Color.FromRgb(0x2E, 0x3F, 0x9E));
+                var star = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x82));
+                var pom = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
+                for (int x = 2; x <= 10; x++) dc.DrawRectangle(pom, null, new Rect(ox + x * px, oy + 0 * px, px + 0.35, px * 0.6)); // отворот
+                for (int x = 2; x <= 10; x++) dc.DrawRectangle(cap, null, new Rect(ox + x * px, oy - 1 * px, px + 0.35, px + 0.35));
+                for (int x = 4; x <= 10; x++) dc.DrawRectangle(cap, null, new Rect(ox + x * px, oy - 2 * px, px + 0.35, px + 0.35));
+                for (int x = 8; x <= 11; x++) dc.DrawRectangle(cap, null, new Rect(ox + x * px, oy - 3 * px, px + 0.35, px + 0.35));
+                dc.DrawRectangle(cap, null, new Rect(ox + 12 * px, oy - 2 * px, px + 0.35, px + 0.35));
+                double sway = Math.Sin(_time * 1.2) * 0.25 * px; // помпон чуть качается
+                dc.DrawRectangle(pom, null, new Rect(ox + 12.2 * px + sway, oy - 1 * px, px, px));
+                dc.DrawRectangle(star, null, new Rect(ox + 5 * px, oy - 1.6 * px, px * 0.5, px * 0.5));
+                dc.DrawRectangle(star, null, new Rect(ox + 9 * px, oy - 2.6 * px, px * 0.5, px * 0.5));
+            }
+            if (Outfit == Outfit.Winter && nightcap)
+            {
+                // в холод под колпаком ещё и шарф
+                var scarf = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+                for (int x = 2; x <= 10; x++) dc.DrawRectangle(scarf, null, new Rect(ox + x * px, oy + 4 * px, px + 0.35, px + 0.35));
+                dc.DrawRectangle(scarf, null, new Rect(ox + 9 * px, oy + 5 * px, px + 0.35, 2 * px));
+            }
+            else if (Outfit == Outfit.Winter)
             {
                 var hat = new SolidColorBrush(Color.FromRgb(0x3B, 0x6F, 0xD9));
                 var band = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
@@ -262,7 +320,7 @@ namespace Isle.Helpers
                 dc.DrawRectangle(shine, null, new Rect(ox + 3.4 * px, oy + 2.3 * px, 0.6 * px, 0.4 * px));
                 dc.DrawRectangle(shine, null, new Rect(ox + 7.4 * px, oy + 2.3 * px, 0.6 * px, 0.4 * px));
             }
-            else if (Outfit == Outfit.Rain)
+            else if (Outfit == Outfit.Rain && !nightcap)
             {
                 var canopy = new SolidColorBrush(Color.FromRgb(0x5B, 0x6C, 0xF0));
                 for (int x = 1; x <= 11; x++) dc.DrawRectangle(canopy, null, new Rect(ox + x * px, oy - 2 * px, px + 0.35, px + 0.35));
@@ -279,6 +337,13 @@ namespace Isle.Helpers
                 double x = ox + e.X * px + ex, y = oy + e.Y * px + ey;
                 if (eh < 0.45 * px) dc.DrawRectangle(eye, null, new Rect(x - 0.15 * px, y + 1.2 * px, px * 1.3, Math.Max(0.4, 0.35 * px)));
                 else dc.DrawRectangle(eye, null, new Rect(x, y + (2 * px - eh) / 2, px, eh));
+            }
+            if (_yawn > 0)
+            {
+                // рот при зевке: открывается и закрывается
+                double open = Math.Sin(_yawn * Math.PI);
+                double mh = 1.8 * px * open, mw = (1 + 0.6 * open) * px;
+                if (mh > 0.2 * px) dc.DrawRectangle(eye, null, new Rect(ox + 6.5 * px - mw / 2, oy + 4.6 * px - mh / 2, mw, mh));
             }
             dc.Pop();
 

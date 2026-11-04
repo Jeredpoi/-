@@ -1169,14 +1169,18 @@ namespace Isle
                 float beat = playing ? (AppHost.Audio?.Peak ?? 0) : 0;
                 var idle = IdleTime();
                 UpdateWorking(idle);
+                // ночью (23:00–6:00) Клоди хочет спать: засыпает уже через минуту без тебя, а пока ты здесь — зевает
+                int hour = DateTime.Now.Hour;
+                bool night = hour >= 23 || hour < 6;
                 var mood = _aiBusy ? Helpers.Mood.Thinking
                     : State == IslandState.Toast && _currentToast?.Kind == ToastKind.Notification ? Helpers.Mood.Attention
                     : playing ? Helpers.Mood.Music
-                    : idle > TimeSpan.FromMinutes(5) ? Helpers.Mood.Sleep
+                    : idle > TimeSpan.FromMinutes(night ? 1 : 5) ? Helpers.Mood.Sleep
                     : DateTime.Now < _workingUntil ? Helpers.Mood.Working
+                    : night ? Helpers.Mood.Drowsy
                     : Helpers.Mood.Idle;
                 var outfit = OutfitForWeather();
-                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; b.Outfit = outfit; }
+                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; b.Outfit = outfit; b.Night = night; }
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {
