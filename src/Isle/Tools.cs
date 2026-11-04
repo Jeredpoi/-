@@ -151,7 +151,18 @@ namespace Isle
                 }
                 return;
             }
-            ToastBus.Show(new Toast { Title = "OBS не запущен — открываю «Ножницы»", Subtitle = "Запусти OBS, и кнопка будет писать через него", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
+            // OBS установлен, но закрыт — запускаем его свёрнутым и сразу начинаем запись
+            if (AppLauncher.Find("obs") is string obs && obs.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                AppLauncher.Launch(obs, "--startrecording --minimize-to-tray --disable-shutdown-check");
+                ToastBus.Show(new Toast
+                {
+                    Title = "Запускаю OBS и начинаю запись", Subtitle = "Нажми «Запись экрана» ещё раз, чтобы остановить",
+                    Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(4)
+                });
+                return;
+            }
+            ToastBus.Show(new Toast { Title = "OBS не установлен — открываю «Ножницы»", Subtitle = "Поставь OBS Studio, и кнопка будет писать через него", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
             await Task.Delay(300);
             Win32.SendKeyCombo(Win32.VK_LWIN, 0x10 /*Shift*/, 0x52 /*R*/);
         }

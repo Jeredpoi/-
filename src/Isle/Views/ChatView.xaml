@@ -6,19 +6,23 @@
         <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Style="{StaticResource Flat}" Width="40" Click="OnNew" ToolTip="Новый разговор">
-                <h:Icon Kind="Note" Width="15" Height="15"/>
+            <Button Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Click="OnNew" ToolTip="Новый разговор">
+                <h:Icon Kind="Plus" Width="15" Height="15"/>
             </Button>
-            <TextBox x:Name="Input" Grid.Column="1" Margin="8,0" Tag="Сообщение для ИИ…" AcceptsReturn="True" TextWrapping="Wrap"
+            <Button x:Name="HistoryBtn" Grid.Column="1" Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Margin="8,0,0,0" Click="OnHistory" ToolTip="История разговоров">
+                <h:Icon Kind="Clipboard" Width="15" Height="15"/>
+            </Button>
+            <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Сообщение для ИИ…" AcceptsReturn="True" TextWrapping="Wrap"
                      MaxHeight="90" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey"/>
-            <ToggleButton x:Name="MicBtn" Grid.Column="2" Style="{StaticResource Chip}" Height="40" Width="40" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать (Ctrl+Alt+D)">
-                <h:Icon Kind="Mic" Width="15" Height="15"/>
-            </ToggleButton>
-            <Button x:Name="SendBtn" Grid.Column="3" Style="{StaticResource Primary}" Width="40" Click="OnSend" ToolTip="Отправить (Enter)">
+            <Button x:Name="MicBtn" Grid.Column="3" Style="{StaticResource Flat}" Height="40" Width="40" Padding="0" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать (Ctrl+Alt+D)">
+                <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
+            </Button>
+            <Button x:Name="SendBtn" Grid.Column="4" Height="40" Style="{StaticResource Primary}" Width="40" Click="OnSend" ToolTip="Отправить (Enter)">
                 <h:Icon Kind="Send" Width="15" Height="15" Foreground="#08080A"/>
             </Button>
         </Grid>

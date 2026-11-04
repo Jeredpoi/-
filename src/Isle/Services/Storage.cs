@@ -109,7 +109,7 @@ namespace Isle.Services
         public string VoiceModel { get; set; } = "whisper-large-v3-turbo";
         public string VoiceKeyProtected { get; set; } = "";
         public string VoiceLanguage { get; set; } = ""; // "" — сам определит, ru, en
-        public bool VoiceAutoPaste { get; set; } = false;
+        public bool VoiceAutoPaste { get; set; } = true;
         [System.Text.Json.Serialization.JsonIgnore]
         public string VoiceKey { get => Unprotect(VoiceKeyProtected); set => VoiceKeyProtected = Protect(value); }
 
@@ -127,6 +127,7 @@ namespace Isle.Services
         public bool AutoUpdateCheck { get; set; } = true;
         public bool ScaleFixV2 { get; set; } = false;
         public bool ObsStatus { get; set; } = true;
+        public bool VoiceDefaultsV2 { get; set; } = false;
 
         // Музыка
         /// <summary>Пилюля во время музыки: bars (обычная) | title (с названием) | mini (мини-плеер) | lyrics (с текстом).</summary>

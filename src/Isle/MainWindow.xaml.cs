@@ -68,6 +68,14 @@ namespace Isle
             AppHost.Notifications = new NotificationService();
             AppHost.Voice = new VoiceService();
             AppHost.Spectrum = new SpectrumService();
+            // живой индикатор громкости голоса в чёлке, пока идёт диктовка
+            AppHost.Voice.Level += lvl => Dispatcher.InvokeAsync(() =>
+            {
+                if (_currentToast?.ReplaceKey != "voice" || !AppHost.Voice.Recording) return;
+                ToastBar.Visibility = Visibility.Visible;
+                double barW = Math.Max(0, Island.ActualWidth - 16 * 2 - 36 - 12);
+                ToastBarFill.Width = Math.Clamp(lvl * 2.2, 0.03, 1) * barW;
+            });
             AppHost.Lyrics = new LyricsState(AppHost.Media);
             AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
@@ -82,6 +90,7 @@ namespace Isle
                 s.Save();
             }
             ApplyScale();
+            if (!s.VoiceDefaultsV2) { s.VoiceAutoPaste = true; s.VoiceDefaultsV2 = true; s.Save(); } // диктовка сразу вставляет текст, где стоит курсор
             AppHost.Vpn = new VpnService();
             AppHost.Vpn.Changed += () =>
             {

@@ -75,6 +75,15 @@ namespace Isle.Views
             });
         }
 
+        /// <summary>Диктовка: остров сворачивается, фокус возвращается в прошлое окно, текст вставится туда.</summary>
+        private void OnVoice(object s, RoutedEventArgs e)
+        {
+            var target = AppHost.Window.PreviousForeground;
+            AppHost.Window.Collapse();
+            if (target != IntPtr.Zero) Isle.Native.Win32.SetForegroundWindow(target);
+            AppHost.Voice.Toggle();
+        }
+
         private void OnLauncherAdd(object s, RoutedEventArgs e)
         {
             AppHost.Window.SuppressAutoCollapse = true;

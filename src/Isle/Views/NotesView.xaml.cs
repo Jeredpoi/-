@@ -40,6 +40,8 @@ namespace Isle.Views
             UpdateRemHint();
             UpdateTimer();
             Open(_data.Notes[0]);
+            Editor.GotKeyboardFocus += (_, __) => EditorHint.Visibility = Visibility.Collapsed;
+            Editor.LostKeyboardFocus += (_, __) => EditorHint.Visibility = PlainText().Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public void OnShown() { UpdateTimer(); BuildTabs(); }
@@ -93,7 +95,7 @@ namespace Isle.Views
         {
             if (_loading || _current == null) return;
             var plain = PlainText();
-            EditorHint.Visibility = plain.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            EditorHint.Visibility = plain.Length == 0 && !Editor.IsKeyboardFocusWithin ? Visibility.Visible : Visibility.Collapsed;
             _current.Text = plain;
             _current.Xaml = DocXaml();
             _current.Updated = DateTime.Now;

@@ -190,8 +190,16 @@
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="Text" Value="">
+                        <!-- подсказка видна только пока поле пустое и в нём нет курсора -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="Text" Value=""/>
+                                <Condition Property="IsKeyboardFocused" Value="False"/>
+                            </MultiTrigger.Conditions>
                             <Setter TargetName="ph" Property="Visibility" Value="Visible"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter Property="BorderBrush" Value="#3A3A42"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

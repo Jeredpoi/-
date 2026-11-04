@@ -129,10 +129,11 @@ namespace Isle.Services
                     Shell("https://www.google.com/search?q=" + Uri.EscapeDataString(line.Substring(1).Trim()));
                     return true;
                 }
+                // «калькулятор», «obs», «телеграм», путь, сайт — ищем программу по-человечески
+                if (AppLauncher.Find(line) != null || !line.Contains(' ')) return AppLauncher.Open(line);
                 int sp = line.IndexOf(' ');
-                if (sp > 0) Shell(line.Substring(0, sp), line.Substring(sp + 1));
-                else Shell(line);
-                return true;
+                if (AppLauncher.Find(line.Substring(0, sp)) != null) return AppLauncher.Launch(line.Substring(0, sp), line.Substring(sp + 1));
+                return AppLauncher.Open(line);
             }
             catch { return false; }
         }

@@ -38,7 +38,9 @@ namespace Isle.Services
         public const string Prompt =
             "\n\nТы можешь управлять компьютером пользователя (Windows). Когда пользователь просит что-то СДЕЛАТЬ, вставь в ответ " +
             "отдельные строки-команды в двойных квадратных скобках, а рядом коротко скажи, что делаешь. Команды:\n" +
-            "[[open: адрес сайта, путь к файлу/папке или имя программы]] — открыть (например [[open: https://youtube.com]], [[open: notepad]], [[open: calc]]);\n" +
+            "[[open: что открыть]] — сайт, файл, папку или программу ПРОСТЫМ названием, Isle сам найдёт её в меню «Пуск» " +
+            "(например [[open: калькулятор]], [[open: obs]], [[open: telegram]], [[open: блокнот]], [[open: https://youtube.com]]). " +
+            "Не придумывай пути и не открывай магазин приложений;\n" +
             "[[search: запрос]] — поиск в интернете;\n" +
             "[[timer: 10m]] — таймер (s — секунды, m — минуты, h — часы);\n" +
             "[[remind: позвонить маме завтра в 9]] — напоминание обычной фразой;\n" +
@@ -76,7 +78,7 @@ namespace Isle.Services
                 switch (a.Name)
                 {
                     case "open":
-                        return SystemControls.RunCommand(a.Arg) ? "✓ Открыл " + a.Arg : "✗ Не получилось открыть " + a.Arg;
+                        return AppLauncher.Open(a.Arg) ? "✓ Открыл " + a.Arg : "✗ Не нашёл «" + a.Arg + "» — проверь, что программа установлена";
                     case "search":
                         SystemControls.Shell("https://www.google.com/search?q=" + Uri.EscapeDataString(a.Arg));
                         return "✓ Ищу: " + a.Arg;

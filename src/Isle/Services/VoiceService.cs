@@ -46,8 +46,9 @@ namespace Isle.Services
                 RecordingChanged?.Invoke(true);
                 ToastBus.Show(new Toast
                 {
-                    Kind = ToastKind.Info, Title = "Слушаю…", Subtitle = "Говори. Ctrl+Alt+D ещё раз — распознать",
-                    Icon = Icons.Mic, ReplaceKey = "voice", Duration = TimeSpan.FromMinutes(5), Important = true
+                    Kind = ToastKind.Info, Title = "Слушаю…", Subtitle = "Говори. Ctrl+Alt+D ещё раз — вставить текст",
+                    Icon = Icons.Mic, Accent = System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71), Progress = 0.03,
+                    ReplaceKey = "voice", Duration = TimeSpan.FromMinutes(5), Important = true
                 });
             }
             catch (Exception ex)

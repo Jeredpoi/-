@@ -142,15 +142,32 @@ namespace Isle.Services
         private static async Task<string> OpenAiAsync(IReadOnlyList<ChatMessage> history, string baseUrl, string key, string model, CancellationToken ct)
         {
             var msgs = new List<object> { new { role = "system", content = SystemPrompt } };
-            msgs.AddRange(history.Select(m => (object)new { role = m.Role, content = m.Text }));
-            var body = new { model, messages = msgs };
-            using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/chat/completions");
-            AddAuth(req, "openai", key);
-            req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-            using var resp = await Http.SendAsync(req, ct);
-            var json = await resp.Content.ReadAsStringAsync(ct);
+            // последние 16 реплик: бесплатным тарифам (Groq) важен размер запроса
+            msgs.AddRange(history.Skip(Math.Max(0, history.Count - 16)).Select(m => (object)new { role = m.Role, content = m.Text }));
+            int maxTokens = 800;
+            string json = null;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                var body = new { model, messages = msgs, max_tokens = maxTokens };
+                using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/chat/completions");
+                AddAuth(req, "openai", key);
+                req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                using var resp = await Http.SendAsync(req, ct);
+                json = await resp.Content.ReadAsStringAsync(ct);
+                if (resp.IsSuccessStatusCode) break;
+                using var err = JsonDocument.Parse(json);
+                var text = ErrorText(err.RootElement, (int)resp.StatusCode);
+                // «Request too large … Limit 1000, Requested 2048» — повторяем с меньшим ответом
+                var lim = System.Text.RegularExpressions.Regex.Match(text, @"Limit\s+(\d+)");
+                if (attempt < 2 && (text.Contains("max_tokens") || text.Contains("too large") || text.Contains("Limit")) && lim.Success)
+                {
+                    maxTokens = Math.Max(150, int.Parse(lim.Groups[1].Value) - 150);
+                    if (msgs.Count > 5) msgs.RemoveRange(1, Math.Min(msgs.Count - 5, 6)); // и укорачиваем историю
+                    continue;
+                }
+                return "Ошибка: " + text;
+            }
             using var doc = JsonDocument.Parse(json);
-            if (!resp.IsSuccessStatusCode) return "Ошибка: " + ErrorText(doc.RootElement, (int)resp.StatusCode);
             var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
             // некоторые модели (qwen, deepseek-r1) присылают рассуждения в <think>…</think> — пользователю они не нужны
             content = System.Text.RegularExpressions.Regex.Replace(content, @"<think>[\s\S]*?</think>", "").Trim();
@@ -173,5 +190,41 @@ namespace Isle.Services
         }
 
         private static string Trim(string s, int n) => s.Length > n ? s.Substring(0, n) + "…" : s;
+    }
+}
+
+namespace Isle.Services
+{
+    public class ChatSession
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Title { get; set; } = "Разговор";
+        public DateTime Updated { get; set; } = DateTime.Now;
+        public List<ChatMessage> Messages { get; set; } = new();
+    }
+
+    public class ChatHistoryData { public List<ChatSession> Chats { get; set; } = new(); }
+
+    /// <summary>История разговоров с ИИ (до 50 последних), %AppData%\Isle\chats.json.</summary>
+    public static class ChatHistory
+    {
+        private static ChatHistoryData _data;
+        private static ChatHistoryData Data => _data ??= Storage.Load<ChatHistoryData>("chats.json");
+
+        public static List<ChatSession> All() => Data.Chats.OrderByDescending(c => c.Updated).ToList();
+
+        public static void Save(ChatSession s)
+        {
+            Data.Chats.RemoveAll(c => c.Id == s.Id);
+            Data.Chats.Add(s);
+            foreach (var old in Data.Chats.OrderByDescending(c => c.Updated).Skip(50).ToList()) Data.Chats.Remove(old);
+            Storage.Save("chats.json", Data);
+        }
+
+        public static void Clear()
+        {
+            Data.Chats.Clear();
+            Storage.Save("chats.json", Data);
+        }
     }
 }
