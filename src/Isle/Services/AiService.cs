@@ -61,6 +61,51 @@ namespace Isle.Services
 
         public static event Action<bool> BusyChanged;
 
+        /// <summary>
+        /// Расставляет знаки препинания и заглавные буквы в надиктованном тексте, не меняя слов.
+        /// Если ключа нет или сервис не ответил — возвращает текст как есть.
+        /// </summary>
+        public static async Task<string> PunctuateAsync(string text)
+        {
+            var s = AppSettings.Current;
+            if (string.IsNullOrWhiteSpace(text) || text.Length > 4000) return text;
+            if (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama") return text;
+            const string sys = "Ты корректор. Расставь знаки препинания и заглавные буквы в тексте пользователя. " +
+                               "Не меняй, не добавляй и не убирай слова, не переводи, не отвечай на текст. Верни только исправленный текст.";
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+                string result;
+                if (s.AiProvider == "anthropic")
+                {
+                    var body = new { model = s.AiModel, max_tokens = 600, system = sys, messages = new[] { new { role = "user", content = text } } };
+                    using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+                    AddAuth(req, "anthropic", s.AiKey);
+                    req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                    using var resp = await Http.SendAsync(req, cts.Token);
+                    if (!resp.IsSuccessStatusCode) return text;
+                    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cts.Token));
+                    result = string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
+                        .Where(b => b.TryGetProperty("type", out var t) && t.GetString() == "text").Select(b => b.GetProperty("text").GetString()));
+                }
+                else
+                {
+                    var body = new { model = s.AiModel, max_tokens = 600, temperature = 0, messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = text } } };
+                    using var req = new HttpRequestMessage(HttpMethod.Post, s.AiBaseUrl.TrimEnd('/') + "/chat/completions");
+                    AddAuth(req, "openai", s.AiKey);
+                    req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                    using var resp = await Http.SendAsync(req, cts.Token);
+                    if (!resp.IsSuccessStatusCode) return text;
+                    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cts.Token));
+                    result = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+                }
+                result = System.Text.RegularExpressions.Regex.Replace(result, @"<think>[\s\S]*?</think>", "").Trim().Trim('"', '«', '»');
+                // защита: если модель «переписала» текст (сильно другая длина) — берём оригинал
+                return result.Length > 0 && Math.Abs(result.Length - text.Length) < text.Length * 0.35 + 12 ? result : text;
+            }
+            catch { return text; }
+        }
+
         public static async Task<string> AskAsync(IReadOnlyList<ChatMessage> history, CancellationToken ct = default)
         {
             var s = AppSettings.Current;

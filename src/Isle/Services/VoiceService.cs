@@ -124,6 +124,7 @@ namespace Isle.Services
                 ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
+            if (AppSettings.Current.VoicePunctuate) text = await AiService.PunctuateAsync(text);
             ClipboardService.SetText(text);
             if (onText != null) onText(text);
             else if (AppSettings.Current.VoiceAutoPaste)
@@ -169,6 +170,11 @@ namespace Isle.Services
             form.Add(new StringContent(string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3-turbo" : s.VoiceModel), "model");
             if (!string.IsNullOrEmpty(s.VoiceLanguage)) form.Add(new StringContent(s.VoiceLanguage), "language");
             form.Add(new StringContent("json"), "response_format");
+            // подсказка-образец с пунктуацией: Whisper подстраивается под стиль и сам ставит точки, запятые и вопросы
+            var hint = s.VoiceLanguage == "en"
+                ? "Hello! How are you? I'm fine, thanks. Let's meet tomorrow at nine, okay?"
+                : "Привет! Как дела? У меня всё хорошо, спасибо. Давай встретимся завтра в девять, хорошо?";
+            form.Add(new StringContent(hint), "prompt");
             using var req = new HttpRequestMessage(HttpMethod.Post, s.VoiceBaseUrl.TrimEnd('/') + "/audio/transcriptions") { Content = form };
             req.Headers.Add("Authorization", "Bearer " + key.Trim());
             using var resp = await Http.SendAsync(req);

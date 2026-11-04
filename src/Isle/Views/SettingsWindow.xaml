@@ -424,6 +424,12 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Расставлять знаки препинания"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="После распознавания ИИ из раздела «ИИ» расставит точки, запятые и заглавные буквы. Слова не меняются."/></StackPanel>
+                                <CheckBox x:Name="VoicePunct" HorizontalAlignment="Right" Click="OnToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Сразу вставлять текст"/><TextBlock Style="{StaticResource RowNote}" Text="В окно, где стоял курсор. В буфере текст остаётся в любом случае."/></StackPanel>
                                 <CheckBox x:Name="VoicePaste" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>

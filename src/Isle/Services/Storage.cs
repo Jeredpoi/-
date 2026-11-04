@@ -110,6 +110,8 @@ namespace Isle.Services
         public string VoiceKeyProtected { get; set; } = "";
         public string VoiceLanguage { get; set; } = ""; // "" — сам определит, ru, en
         public bool VoiceAutoPaste { get; set; } = true;
+        /// <summary>После распознавания ИИ расставляет знаки препинания (слова не меняет).</summary>
+        public bool VoicePunctuate { get; set; } = true;
         [System.Text.Json.Serialization.JsonIgnore]
         public string VoiceKey { get => Unprotect(VoiceKeyProtected); set => VoiceKeyProtected = Protect(value); }
 

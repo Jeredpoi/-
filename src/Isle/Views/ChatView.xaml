@@ -14,8 +14,11 @@
             <Button Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Click="OnNew" ToolTip="Новый разговор">
                 <h:Icon Kind="Plus" Width="15" Height="15"/>
             </Button>
-            <Button x:Name="HistoryBtn" Grid.Column="1" Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Margin="8,0,0,0" Click="OnHistory" ToolTip="История разговоров">
-                <h:Icon Kind="Clipboard" Width="15" Height="15"/>
+            <Button x:Name="HistoryBtn" Grid.Column="1" Style="{StaticResource Flat}" Height="40" Padding="12,0" Margin="8,0,0,0" Click="OnHistory" ToolTip="История разговоров">
+                <StackPanel Orientation="Horizontal">
+                    <h:Icon Kind="Clipboard" Width="15" Height="15"/>
+                    <TextBlock Text="История" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                </StackPanel>
             </Button>
             <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Сообщение для ИИ…" AcceptsReturn="True" TextWrapping="Wrap"
                      MaxHeight="90" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey"/>
@@ -35,6 +38,8 @@
                 <TextBlock Text="Спроси что угодно" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,4"/>
                 <TextBlock x:Name="ModelLine" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
                 <StackPanel x:Name="Suggestions" Margin="0,14,0,0"/>
+                <TextBlock x:Name="RecentTitle" Text="НЕДАВНИЕ РАЗГОВОРЫ" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,16,0,6"/>
+                <StackPanel x:Name="RecentChats"/>
             </StackPanel>
             <ScrollViewer x:Name="Scroll" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
                 <ItemsControl x:Name="Messages">

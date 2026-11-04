@@ -35,10 +35,31 @@ namespace Isle.Views
             }
             UpdateModelLine();
             AppHost.Voice.RecordingChanged += rec => Dispatcher.InvokeAsync(() => SetMicState(rec));
+            BuildRecent();
+        }
+
+        /// <summary>Последние 4 разговора прямо на пустом экране чата — продолжить в один клик.</summary>
+        private void BuildRecent()
+        {
+            RecentChats.Children.Clear();
+            var recent = ChatHistory.All().Take(4).ToList();
+            RecentTitle.Visibility = recent.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var c in recent)
+            {
+                var b = new Button
+                {
+                    Style = (Style)FindResource("Ghost"), Margin = new Thickness(0, 0, 0, 2), HorizontalAlignment = HorizontalAlignment.Center,
+                    Content = new TextBlock { Text = c.Title + "  ·  " + c.Updated.ToString("dd.MM HH:mm"), FontSize = 12, Foreground = (System.Windows.Media.Brush)FindResource("Muted") }
+                };
+                var chat = c;
+                b.Click += (_, __) => OpenSession(chat);
+                RecentChats.Children.Add(b);
+            }
         }
 
         public void OnShown()
         {
+            if (_msgs.Count == 0) BuildRecent();
             UpdateModelLine();
             // фокус не забираем сами — только если окно уже активно (иначе пользователь кликнет в поле)
             if (AppHost.Window.IsActive) Dispatcher.InvokeAsync(() => Input.Focus(), DispatcherPriority.Input);
@@ -202,6 +223,7 @@ namespace Isle.Views
             _busy = false;
             SendBtn.IsEnabled = true;
             Welcome.Visibility = Visibility.Visible;
+            BuildRecent();
             Scroll.Visibility = Visibility.Collapsed;
         }
     }

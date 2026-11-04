@@ -174,6 +174,7 @@ namespace Isle.Views
             VlRu.IsChecked = S.VoiceLanguage == "ru";
             VlEn.IsChecked = S.VoiceLanguage == "en";
             VoicePaste.IsChecked = S.VoiceAutoPaste;
+            VoicePunct.IsChecked = S.VoicePunctuate;
 
             ObsPort.Text = S.ObsPort.ToString();
 
@@ -211,6 +212,7 @@ namespace Isle.Views
             S.ExpandOnHover = Hover.IsChecked == true;
             S.Use24h = Clock24.IsChecked == true;
             S.VoiceAutoPaste = VoicePaste.IsChecked == true;
+            S.VoicePunctuate = VoicePunct.IsChecked == true;
             S.VolumeToasts = Volume.IsChecked == true;
             S.LayoutToasts = Layout.IsChecked == true;
             S.CapsToasts = Caps.IsChecked == true;
