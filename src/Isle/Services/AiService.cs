@@ -99,7 +99,7 @@ namespace Isle.Services
                     using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cts.Token));
                     result = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
                 }
-                result = System.Text.RegularExpressions.Regex.Replace(result, @"<think>[\s\S]*?</think>", "").Trim().Trim('"', '«', '»');
+                result = StripThinking(result).Trim('"', '«', '»');
                 // защита: если модель «переписала» текст (сильно другая длина) — берём оригинал
                 return result.Length > 0 && Math.Abs(result.Length - text.Length) < text.Length * 0.35 + 12 ? result : text;
             }
@@ -141,7 +141,7 @@ namespace Isle.Services
             AddAuth(req, preset, key);
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
+            using var doc = ParseOrThrow(json, (int)resp.StatusCode);
             if (!resp.IsSuccessStatusCode) throw new Exception(ErrorText(doc.RootElement, (int)resp.StatusCode));
             var list = new List<string>();
             if (doc.RootElement.TryGetProperty("data", out var data))
@@ -175,7 +175,7 @@ namespace Isle.Services
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             using var resp = await Http.SendAsync(req, ct);
             var json = await resp.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(json);
+            using var doc = ParseOrThrow(json, (int)resp.StatusCode);
             if (!resp.IsSuccessStatusCode) return "Ошибка: " + ErrorText(doc.RootElement, (int)resp.StatusCode);
             var sb = new StringBuilder();
             foreach (var block in doc.RootElement.GetProperty("content").EnumerateArray())
@@ -200,7 +200,7 @@ namespace Isle.Services
                 using var resp = await Http.SendAsync(req, ct);
                 json = await resp.Content.ReadAsStringAsync(ct);
                 if (resp.IsSuccessStatusCode) break;
-                using var err = JsonDocument.Parse(json);
+                using var err = ParseOrThrow(json, (int)resp.StatusCode);
                 var text = ErrorText(err.RootElement, (int)resp.StatusCode);
                 // «Request too large … Limit 1000, Requested 2048» — повторяем с меньшим ответом
                 var lim = System.Text.RegularExpressions.Regex.Match(text, @"Limit\s+(\d+)");
@@ -212,11 +212,33 @@ namespace Isle.Services
                 }
                 return "Ошибка: " + text;
             }
-            using var doc = JsonDocument.Parse(json);
+            using var doc = ParseOrThrow(json, 200);
             var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
-            // некоторые модели (qwen, deepseek-r1) присылают рассуждения в <think>…</think> — пользователю они не нужны
-            content = System.Text.RegularExpressions.Regex.Replace(content, @"<think>[\s\S]*?</think>", "").Trim();
-            return content;
+            return StripThinking(content);
+        }
+
+        /// <summary>
+        /// Некоторые модели (qwen, deepseek-r1) присылают рассуждения в &lt;think&gt;…&lt;/think&gt; — пользователю они не нужны.
+        /// Если ответ обрезан лимитом, закрывающего тега нет — тогда убираем всё от &lt;think&gt; до конца.
+        /// </summary>
+        public static string StripThinking(string content)
+        {
+            content = System.Text.RegularExpressions.Regex.Replace(content ?? "", @"<think>[\s\S]*?</think>", "");
+            int open = content.IndexOf("<think>", StringComparison.Ordinal);
+            if (open >= 0) content = content.Substring(0, open);
+            return content.Trim();
+        }
+
+        /// <summary>Разбор ответа сервиса. Вместо JSON иногда приходит HTML-страница (блокировка, VPN, сбой) — даём понятную ошибку.</summary>
+        private static JsonDocument ParseOrThrow(string json, int code)
+        {
+            try { return JsonDocument.Parse(json); }
+            catch (JsonException)
+            {
+                throw new Exception(code == 403 || code == 451
+                    ? "сервис недоступен из твоей страны — включи VPN или выбери другой (HTTP " + code + ")"
+                    : "сервис ответил не JSON (HTTP " + code + ") — возможно, он перегружен или нужен VPN");
+            }
         }
 
         public static string ErrorText(JsonElement root, int code)

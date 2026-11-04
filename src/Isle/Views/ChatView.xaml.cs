@@ -101,6 +101,30 @@ namespace Isle.Views
             Ask(text);
         }
 
+        /// <summary>Ошибки сервиса и подсказки Isle — не реплики ИИ, в разговор их не отправляем.</summary>
+        public static bool IsServiceError(string text)
+        {
+            var t = text ?? "";
+            return t.StartsWith("Ошибка сети:") || t.StartsWith("Ошибка:") || t.StartsWith("Нужен API-ключ") || t == "(пустой ответ)";
+        }
+
+        /// <summary>
+        /// Реплики должны чередоваться и начинаться с пользователя (Claude иначе отвечает ошибкой 400):
+        /// подряд идущие сообщения одной роли склеиваем, ведущие ответы ИИ отбрасываем.
+        /// </summary>
+        public static System.Collections.Generic.List<ChatMessage> BuildHistory(System.Collections.Generic.IEnumerable<ChatMessage> src)
+        {
+            var list = new System.Collections.Generic.List<ChatMessage>();
+            foreach (var m in src)
+            {
+                if (list.Count == 0 && m.Role != "user") continue;
+                if (list.Count > 0 && list[^1].Role == m.Role)
+                    list[^1] = new ChatMessage { Role = m.Role, Text = list[^1].Text + "\n\n" + m.Text };
+                else list.Add(new ChatMessage { Role = m.Role, Text = m.Text });
+            }
+            return list;
+        }
+
         public async void Ask(string text)
         {
             if (_busy) return;
@@ -116,8 +140,8 @@ namespace Isle.Views
             string answer;
             try
             {
-                var history = _msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")
-                                               && !(m.Text ?? "").StartsWith("Ошибка сети:")).ToList(); // свои ошибки ИИ не показываем как его ответы
+                var history = BuildHistory(_msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")
+                                               && !IsServiceError(m.Text))); // свои ошибки ИИ не показываем как его ответы
                 answer = await AiService.AskAsync(history, _cts.Token);
             }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
