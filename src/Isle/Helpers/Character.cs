@@ -316,8 +316,8 @@ namespace Isle.Helpers
             if (mood == Mood.Idle && (_activity == Phone || _activity == Game || _activity == Paint))
             {
                 // уткнулся в телефон / приставку / холст: смотрит вниз-вперёд, иногда косится по сторонам
-                double tx = _activity == Paint ? 0.6 : Math.Sin(_time * 0.7) * 0.3;
-                _lookX += (tx - _lookX) * 0.25; _lookY += (0.75 - _lookY) * 0.25;
+                double gx = _activity == Paint ? 0.6 : Math.Sin(_time * 0.7) * 0.3;
+                _lookX += (gx - _lookX) * 0.25; _lookY += (0.75 - _lookY) * 0.25;
             }
             if (mood == Mood.Idle && _activity == Ball)
             {
