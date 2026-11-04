@@ -22,6 +22,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Resource Include="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageReference Include="ZXing.Net" Version="0.16.9" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />

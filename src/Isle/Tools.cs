@@ -110,20 +110,49 @@ namespace Isle
         public static void CleanText()
         {
             string text = null;
-            try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }
+            bool image = false;
+            try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); else image = Clipboard.ContainsImage(); } catch { }
             if (string.IsNullOrEmpty(text))
             {
-                ToastBus.Show(new Toast { Title = "В буфере нет текста", Icon = Icons.Eraser, Important = true });
+                ToastBus.Show(new Toast
+                {
+                    Title = image ? "В буфере картинка" : "В буфере нет текста",
+                    Subtitle = "«Чистый текст» убирает шрифты и цвета у скопированного текста — скопируй текст и нажми снова",
+                    Icon = Icons.Eraser, Important = true, Duration = TimeSpan.FromSeconds(4)
+                });
                 return;
             }
             ClipboardService.SetText(text);
             ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Форматирование убрано", Subtitle = text.Length + " симв. — вставляй", Icon = Icons.Eraser, Accent = Green, Important = true });
         }
 
-        /// <summary>Запись экрана через встроенные «Ножницы» Windows 11 (Win+Shift+R).</summary>
-        public static void Record()
+        /// <summary>Запись экрана: если запущен OBS — старт/стоп записи в нём, иначе «Ножницы» Windows 11.</summary>
+        public static async void Record()
         {
             AppHost.Window.Collapse();
+            if (ObsService.IsObsRunning())
+            {
+                try
+                {
+                    bool on = await ObsService.ToggleRecordAsync();
+                    ToastBus.Show(new Toast
+                    {
+                        Title = on ? "OBS: запись идёт" : "OBS: запись сохранена", Subtitle = on ? "Нажми «Запись экрана» ещё раз, чтобы остановить" : "Файл в папке записей OBS",
+                        Icon = Icons.Record, Accent = on ? Color.FromRgb(0xF8, 0x71, 0x71) : Green, Important = true, Duration = TimeSpan.FromSeconds(3)
+                    });
+                }
+                catch (Exception ex)
+                {
+                    ToastBus.Show(new Toast
+                    {
+                        Title = "OBS не отвечает", Subtitle = "Включи в OBS: Инструменты → Настройки сервера WebSocket. " + ex.Message,
+                        Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(6)
+                    });
+                }
+                return;
+            }
+            ToastBus.Show(new Toast { Title = "OBS не запущен — открываю «Ножницы»", Subtitle = "Запусти OBS, и кнопка будет писать через него", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
+            await Task.Delay(300);
             Win32.SendKeyCombo(Win32.VK_LWIN, 0x10 /*Shift*/, 0x52 /*R*/);
         }
     }

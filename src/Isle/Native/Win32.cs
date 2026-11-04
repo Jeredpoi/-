@@ -46,6 +46,47 @@ namespace Isle.Native
         /// <summary>0x11 = WDA_EXCLUDEFROMCAPTURE: окно не видно на скриншотах и в записи экрана (Win10 2004+).</summary>
         [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
+        [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+        [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+        [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
+        [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT { public int X, Y; }
+
+        /// <summary>
+        /// Надёжно делает окно активным (Windows часто запрещает это фоновым программам):
+        /// подключаемся к потоку активного окна, ставим своё окно на передний план и отключаемся.
+        /// </summary>
+        public static void ForceForeground(IntPtr hwnd)
+        {
+            var fg = GetForegroundWindow();
+            if (fg == hwnd) return;
+            uint fgThread = GetWindowThreadProcessId(fg, out _);
+            uint me = GetCurrentThreadId();
+            bool attached = fgThread != 0 && fgThread != me && AttachThreadInput(me, fgThread, true);
+            try
+            {
+                // «Нажатие» Alt снимает с процесса запрет на смену переднего окна
+                keybd_event(0x12, 0, 0, IntPtr.Zero);
+                keybd_event(0x12, 0, 2, IntPtr.Zero);
+                BringWindowToTop(hwnd);
+                SetForegroundWindow(hwnd);
+                SetFocus(hwnd);
+            }
+            finally { if (attached) AttachThreadInput(me, fgThread, false); }
+        }
+
+        /// <summary>Переключить раскладку в активном окне на следующую.</summary>
+        public static void NextKeyboardLayout(IntPtr target)
+        {
+            // WM_INPUTLANGCHANGEREQUEST, HKL_NEXT
+            PostMessage(target == IntPtr.Zero ? GetForegroundWindow() : target, 0x0050, IntPtr.Zero, new IntPtr(1));
+        }
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         public static extern IntPtr SHGetFileInfo(string path, uint attrs, ref SHFILEINFO info, uint size, uint flags);
 

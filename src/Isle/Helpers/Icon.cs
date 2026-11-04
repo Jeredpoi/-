@@ -76,3 +76,17 @@ namespace Isle.Helpers
         }
     }
 }
+
+namespace Isle.Helpers
+{
+    /// <summary>{h:IconFor Home} — иконка для подстановки в Tag/Content прямо в XAML.</summary>
+    [System.Windows.Markup.MarkupExtensionReturnType(typeof(Icon))]
+    public class IconFor : System.Windows.Markup.MarkupExtension
+    {
+        public string Kind { get; set; }
+        public double Size { get; set; } = 16;
+        public IconFor() { }
+        public IconFor(string kind) { Kind = kind; }
+        public override object ProvideValue(System.IServiceProvider serviceProvider) => new Icon { Kind = Kind, Width = Size, Height = Size };
+    }
+}

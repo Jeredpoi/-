@@ -70,7 +70,12 @@ namespace Isle.Services
         public double Longitude { get; set; } = 37.6173;
 
         // ИИ
-        public string AiProvider { get; set; } = "anthropic"; // anthropic | openai
+        /// <summary>Сервис ИИ: groq | gemini | openrouter | deepseek | openai | anthropic | ollama | custom.</summary>
+        public string AiPreset { get; set; } = "groq";
+        /// <summary>Базовый адрес OpenAI-совместимого API (…/v1). Для Anthropic не используется.</summary>
+        public string AiBaseUrl { get; set; } = "https://api.groq.com/openai/v1";
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string AiProvider => AiPreset == "anthropic" ? "anthropic" : "openai";
         /// <summary>Ключ хранится зашифрованным через Windows DPAPI (расшифровать может только этот пользователь Windows).</summary>
         public string AiKeyProtected { get; set; } = "";
 
@@ -96,8 +101,48 @@ namespace Isle.Services
                 AiKeyProtected = Convert.ToBase64String(enc);
             }
         }
-        public string AiModel { get; set; } = "claude-haiku-5-5";
-        public string AiEndpoint { get; set; } = "https://api.openai.com/v1/chat/completions";
+        public string AiModel { get; set; } = "llama-3.3-70b-versatile";
+
+        // Голос в текст (Whisper)
+        public string VoicePreset { get; set; } = "groq"; // groq | openai | custom
+        public string VoiceBaseUrl { get; set; } = "https://api.groq.com/openai/v1";
+        public string VoiceModel { get; set; } = "whisper-large-v3-turbo";
+        public string VoiceKeyProtected { get; set; } = "";
+        public string VoiceLanguage { get; set; } = ""; // "" — сам определит, ru, en
+        public bool VoiceAutoPaste { get; set; } = false;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string VoiceKey { get => Unprotect(VoiceKeyProtected); set => VoiceKeyProtected = Protect(value); }
+
+        // OBS (запись экрана через obs-websocket)
+        public int ObsPort { get; set; } = 4455;
+        public string ObsPasswordProtected { get; set; } = "";
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ObsPassword { get => Unprotect(ObsPasswordProtected); set => ObsPasswordProtected = Protect(value); }
+
+        // Внешний вид
+        public string AccentHex { get; set; } = "#ECECF1";
+        public double IslandOpacity { get; set; } = 1.0;
+        public string Character { get; set; } = "pixel"; // eyes | pixel | none
+        public bool FirstRunDone { get; set; } = false;
+
+        public static string Protect(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            var enc = System.Security.Cryptography.ProtectedData.Protect(
+                System.Text.Encoding.UTF8.GetBytes(value), null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            return Convert.ToBase64String(enc);
+        }
+
+        public static string Unprotect(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            try
+            {
+                return System.Text.Encoding.UTF8.GetString(System.Security.Cryptography.ProtectedData.Unprotect(
+                    Convert.FromBase64String(value), null, System.Security.Cryptography.DataProtectionScope.CurrentUser));
+            }
+            catch { return ""; }
+        }
 
         // Прочее
         public string Hotkey { get; set; } = "Ctrl+Alt+Space";

@@ -163,11 +163,11 @@
         <Grid Grid.Row="4" Grid.ColumnSpan="3">
             <Border x:Name="LauncherBox" Style="{StaticResource CardBox}" Padding="8" AllowDrop="True" Drop="OnLauncherDrop" Height="56">
                 <DockPanel>
-                    <Border DockPanel.Dock="Left" Width="38" Height="38" CornerRadius="10" BorderBrush="#26262B" BorderThickness="1" Margin="0,0,10,0">
+                    <Button DockPanel.Dock="Left" Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Margin="0,0,10,0" Click="OnLauncherAdd" ToolTip="Добавить программу или файл">
                         <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
-                    </Border>
+                    </Button>
                     <Grid>
-                        <TextBlock x:Name="LauncherHint" Text="Перетащи сюда ярлыки программ, папки или файлы" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LauncherHint" Text="Нажми + или перетащи сюда ярлыки программ, папки и файлы · правый клик по значку — убрать" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
                         <ItemsControl x:Name="Launcher">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>

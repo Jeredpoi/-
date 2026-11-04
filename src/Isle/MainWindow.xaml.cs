@@ -18,7 +18,7 @@ namespace Isle
 
     public partial class MainWindow : Window
     {
-        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4;
+        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5;
         private static readonly Size ExpandedSize = new(900, 470);
 
         private HwndSource _src;
@@ -66,12 +66,22 @@ namespace Isle
             AppHost.Media = new MediaService(Dispatcher);
             AppHost.Audio = new AudioService(Dispatcher);
             AppHost.Notifications = new NotificationService();
+            AppHost.Voice = new VoiceService();
+            AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) Buddy.Cheer(); });
+            if (!s.FirstRunDone)
+            {
+                // 4K без масштабирования Windows — всё мелкое, сразу делаем остров крупнее
+                if (SystemParameters.PrimaryScreenWidth >= 3000) s.Scale = 1.3;
+                s.FirstRunDone = true;
+                s.Save();
+                ScaleT.ScaleX = ScaleT.ScaleY = s.Scale;
+            }
             AppHost.Vpn = new VpnService();
             AppHost.Vpn.Changed += () =>
             {
                 VpnChip.Visibility = AppHost.Vpn.Active ? Visibility.Visible : Visibility.Collapsed;
                 VpnText.Text = string.IsNullOrEmpty(AppHost.Vpn.Country) ? "VPN" : AppHost.Vpn.Country;
-                VpnChip.ToolTip = "VPN: " + AppHost.Vpn.Name;
+                VpnChip.ToolTip = AppHost.Vpn.Tooltip;
             };
 
             ToastBus.Raised += t => Dispatcher.InvokeAsync(() => EnqueueToast(t));
@@ -107,13 +117,15 @@ namespace Isle
             {
                 _leaveClose.Stop();
                 _oledHide.Stop();
+                if (State == IslandState.Collapsed) AnimateSize(Island.Width + 16, 38, 260); // остров «тянется» к курсору
                 if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover) _hoverOpen.Start();
             };
             Island.MouseLeave += (_, __) =>
             {
                 _hoverOpen.Stop();
                 if (State == IslandState.Expanded && !_pinned && !IsActive && !SuppressAutoCollapse) _leaveClose.Start();
-                if (State != IslandState.Expanded) ScheduleOledHide();
+                if (State == IslandState.Collapsed) ShowCollapsedContent(false);
+                if (State != IslandState.Expanded) ScheduleOledHide(TimeSpan.FromSeconds(1.2));
             };
             Island.PreviewMouseLeftButtonDown += OnIslandMouseDown;
             Island.MouseRightButtonUp += OnIslandRightClick;
@@ -138,7 +150,9 @@ namespace Isle
             };
             KeyDown += (_, e) => { if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; } };
 
-            Island.DragEnter += (_, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) { DropHint.Visibility = Visibility.Visible; e.Effects = DragDropEffects.Link; } };
+            Island.SizeChanged += (_, __) => UpdateClip();
+            // Подсказку «положу на полку» показываем только у свёрнутой чёлки: в открытой файл можно бросить на нужное место (ярлыки, полка)
+            Island.DragEnter += (_, e) => { if (State != IslandState.Expanded && e.Data.GetDataPresent(DataFormats.FileDrop)) { DropHint.Visibility = Visibility.Visible; e.Effects = DragDropEffects.Link; } };
             Island.DragLeave += (_, __) => DropHint.Visibility = Visibility.Collapsed;
             Island.Drop += OnDrop;
 
@@ -153,6 +167,7 @@ namespace Isle
                 _topmost.Start();
                 KeepOnTop();
                 _anim.Start();
+                ApplyAppearance();
                 AppHost.Watchers.Start();
                 AppHost.Vpn.Start();
                 await AppHost.Media.InitAsync();
@@ -181,11 +196,12 @@ namespace Isle
             Win32.RegisterHotKey(_hwnd, HkCommand, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x4B);  // Ctrl+Alt+K
             Win32.RegisterHotKey(_hwnd, HkClipboard, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x56); // Ctrl+Alt+V
             Win32.RegisterHotKey(_hwnd, HkShot, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x53);     // Ctrl+Alt+S
+            Win32.RegisterHotKey(_hwnd, HkVoice, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x44);    // Ctrl+Alt+D
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot }) Win32.UnregisterHotKey(_hwnd, id);
+            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice }) Win32.UnregisterHotKey(_hwnd, id);
             AppHost.Audio?.Dispose();
             base.OnClosed(e);
         }
@@ -207,6 +223,9 @@ namespace Isle
                     case HkClipboard:
                         Expand("clip"); FocusIsland();
                         (GetView("clip") as Views.ClipboardView)?.FocusSearch();
+                        break;
+                    case HkVoice:
+                        AppHost.Voice.Toggle();
                         break;
                     case HkShot:
                         _ = Tools.RegionShot();
@@ -231,6 +250,7 @@ namespace Isle
             if (fg != _hwnd && fg != IntPtr.Zero) PreviousForeground = fg;
             MakeNoActivate(false);
             Activate();
+            Win32.ForceForeground(_hwnd); // без этого Windows часто не даёт печатать в остров
         }
 
         private void PlaceWindow()
@@ -267,7 +287,7 @@ namespace Isle
             var open = new MenuItem { Header = "Открыть" };
             open.Click += (_, __) => Expand(null);
             var settings = new MenuItem { Header = "Настройки" };
-            settings.Click += (_, __) => Expand("settings");
+            settings.Click += (_, __) => OpenSettings();
             var exit = new MenuItem { Header = "Выйти из Isle" };
             exit.Click += (_, __) => Application.Current.Shutdown();
             menu.Items.Add(open);
@@ -292,6 +312,7 @@ namespace Isle
 
         public void Expand(string tab)
         {
+            if (tab == "settings") { OpenSettings(); return; }
             _hoverOpen.Stop();
             _leaveClose.Stop();
             _oledHide.Stop();
@@ -325,9 +346,10 @@ namespace Isle
             ExpandedView.Visibility = Visibility.Collapsed;
             Island.CornerRadius = new CornerRadius(0, 0, 18, 18);
             DropHint.CornerRadius = Island.CornerRadius;
+            (_views.TryGetValue("home", out var hv) ? hv as Views.HomeView : null)?.HideCommand();
             if (_toasts.Count > 0) { NextToast(); return; }
             ShowCollapsedContent(false);
-            ScheduleOledHide();
+            ScheduleOledHide(TimeSpan.FromSeconds(1.2));
         }
 
         private void ShowCollapsedContent(bool onlyIfChanged)
@@ -380,7 +402,6 @@ namespace Isle
             else if (sender == TabNotes) SelectTab("notes");
             else if (sender == TabWeather) SelectTab("weather");
             else if (sender == TabControls) SelectTab("controls");
-            else if (sender == TabSettings) SelectTab("settings");
         }
 
         public FrameworkElement GetView(string tab)
@@ -395,7 +416,6 @@ namespace Isle
                 "notes" => new Views.NotesView(),
                 "weather" => new Views.WeatherView(),
                 "controls" => new Views.ControlsView(),
-                "settings" => new Views.SettingsView(),
                 _ => new Views.HomeView()
             };
             _views[tab] = v;
@@ -408,7 +428,7 @@ namespace Isle
             var rb = tab switch
             {
                 "clip" => TabClip, "shelf" => TabShelf, "text" => TabText, "chat" => TabChat, "notes" => TabNotes,
-                "weather" => TabWeather, "controls" => TabControls, "settings" => TabSettings, _ => TabHome
+                "weather" => TabWeather, "controls" => TabControls, _ => TabHome
             };
             if (rb.IsChecked != true) rb.IsChecked = true; // вызовет OnTab ещё раз — это безопасно
             var view = GetView(tab);
@@ -416,12 +436,138 @@ namespace Isle
             {
                 TabHost.Content = view;
                 view.Opacity = 0;
-                Fade(view, 1, 180);
+                Fade(view, 1, 200);
+                TabSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
                 if (State == IslandState.Expanded) (view as Views.IIslandView)?.OnShown();
             }
         }
 
         private void OnPin(object sender, RoutedEventArgs e) => _pinned = PinChip.IsChecked == true;
+
+        private Views.SettingsWindow _settings;
+
+        public void OpenSettings(string section = null)
+        {
+            Collapse();
+            if (_settings == null || !_settings.IsLoaded)
+            {
+                _settings = new Views.SettingsWindow();
+                _settings.Closed += (_, __) => _settings = null;
+                _settings.Show();
+            }
+            if (section != null) _settings.ShowSection(section);
+            if (_settings.WindowState == WindowState.Minimized) _settings.WindowState = WindowState.Normal;
+            _settings.Activate();
+            Win32.ForceForeground(new WindowInteropHelper(_settings).Handle);
+        }
+
+        private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
+
+        private void OnLangClick(object sender, RoutedEventArgs e)
+        {
+            Win32.NextKeyboardLayout(PreviousForeground);
+        }
+
+        private async void OnVpnClick(object sender, RoutedEventArgs e)
+        {
+            VpnText.Text = "…";
+            var msg = await AppHost.Vpn.DisconnectAsync();
+            ToastBus.Show(new Toast { Title = msg, Icon = Icons.Shield, Important = true, Duration = TimeSpan.FromSeconds(3) });
+        }
+
+        private void OnVpnRightClick(object sender, MouseButtonEventArgs e)
+        {
+            AppHost.Vpn.Recheck();
+            e.Handled = true;
+        }
+
+        /// <summary>Обрезка по настоящей форме острова (скруглённые нижние углы).</summary>
+        private void UpdateClip()
+        {
+            double w = Island.ActualWidth, h = Island.ActualHeight, r = Math.Min(Island.CornerRadius.BottomLeft, Math.Min(w, h) / 2);
+            if (w <= 0 || h <= 0) return;
+            var g = new StreamGeometry();
+            using (var c = g.Open())
+            {
+                c.BeginFigure(new Point(0, 0), true, true);
+                c.LineTo(new Point(w, 0), false, false);
+                c.LineTo(new Point(w, h - r), false, false);
+                c.ArcTo(new Point(w - r, h), new Size(r, r), 0, false, SweepDirection.Clockwise, false, false);
+                c.LineTo(new Point(r, h), false, false);
+                c.ArcTo(new Point(0, h - r), new Size(r, r), 0, false, SweepDirection.Clockwise, false, false);
+            }
+            g.Freeze();
+            Island.Clip = g;
+        }
+
+        /// <summary>Акцент, прозрачность и персонаж из настроек.</summary>
+        public void ApplyAppearance()
+        {
+            var s = AppSettings.Current;
+            try
+            {
+                var c = (Color)ColorConverter.ConvertFromString(s.AccentHex);
+                if (Application.Current.Resources["Accent"] is SolidColorBrush b && !b.IsFrozen) b.Color = c;
+                else Application.Current.Resources["Accent"] = new SolidColorBrush(c);
+                foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3 }) bar.Background = new SolidColorBrush(c);
+            }
+            catch { }
+            byte a = (byte)Math.Round(255 * Math.Clamp(s.IslandOpacity, 0.5, 1.0));
+            Island.Background = new SolidColorBrush(Color.FromArgb(a, 0, 0, 0));
+            IslandShadow.Opacity = s.IslandOpacity;
+            Buddy.Visibility = s.Character == "pixel" ? Visibility.Visible : Visibility.Collapsed;
+            Eyes.Visibility = s.Character == "eyes" ? Visibility.Visible : Visibility.Collapsed;
+            ApplyScale();
+            if (State == IslandState.Collapsed) ShowCollapsedContent(false);
+        }
+
+        private bool _aiBusy;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(Win32.POINT p);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+        private static TimeSpan IdleTime()
+        {
+            var li = new LASTINPUTINFO { cbSize = 8 };
+            if (!GetLastInputInfo(ref li)) return TimeSpan.Zero;
+            return TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - li.dwTime));
+        }
+
+        /// <summary>Курсор над островом или над его всплывающими окнами (списки, меню)?</summary>
+        private bool CursorOverIsland()
+        {
+            if (!Win32.GetCursorPos(out var p)) return true;
+            try
+            {
+                var tl = Island.PointToScreen(new Point(0, 0));
+                var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
+                if (p.X >= tl.X && p.X <= br.X && p.Y >= tl.Y - 2 && p.Y <= br.Y) return true;
+            }
+            catch { return true; }
+            var h = WindowFromPoint(p);
+            if (h != IntPtr.Zero && h != _hwnd)
+            {
+                Win32.GetWindowThreadProcessId(h, out uint pid);
+                if (pid == (uint)Environment.ProcessId) return true; // наш выпадающий список или меню
+            }
+            return false;
+        }
+
+        private bool _mouseWasDown;
+
+        /// <summary>Клик мимо открытого острова — сворачиваем (и прячем в OLED-режиме).</summary>
+        private void CheckOutsideClick()
+        {
+            bool down = (Win32.GetAsyncKeyState(0x01) & 0x8000) != 0 || (Win32.GetAsyncKeyState(0x02) & 0x8000) != 0;
+            if (down && !_mouseWasDown && State == IslandState.Expanded && !_pinned && !SuppressAutoCollapse && !CursorOverIsland())
+                Collapse();
+            _mouseWasDown = down;
+        }
 
         private void OnDnd(object sender, RoutedEventArgs e)
         {
@@ -477,6 +623,7 @@ namespace Isle
         private void RenderToast(Toast t)
         {
             _currentToast = t;
+            if (t.Kind == ToastKind.Success) Buddy.Cheer();
             ToastTitle.Text = t.Title;
             ToastSub.Text = t.Subtitle ?? "";
             ToastSub.Visibility = string.IsNullOrEmpty(t.Subtitle) ? Visibility.Collapsed : Visibility.Visible;
@@ -591,7 +738,19 @@ namespace Isle
 
         private void Animate()
         {
+            CheckOutsideClick();
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
+            if (Buddy.Visibility == Visibility.Visible)
+            {
+                var m = AppHost.Media?.Current;
+                bool playing = m != null && m.HasSession && m.IsPlaying;
+                Buddy.Beat = playing ? (AppHost.Audio?.Peak ?? 0) : 0;
+                Buddy.Mood = _aiBusy ? Helpers.Mood.Thinking
+                    : State == IslandState.Toast && _currentToast?.Kind == ToastKind.Notification ? Helpers.Mood.Attention
+                    : playing ? Helpers.Mood.Music
+                    : IdleTime() > TimeSpan.FromMinutes(5) ? Helpers.Mood.Sleep
+                    : Helpers.Mood.Idle;
+            }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {
                 float peak = AppHost.Audio?.Peak ?? 0;

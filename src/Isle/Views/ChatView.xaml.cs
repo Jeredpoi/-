@@ -34,6 +34,7 @@ namespace Isle.Views
                 Suggestions.Children.Add(b);
             }
             UpdateModelLine();
+            AppHost.Voice.RecordingChanged += rec => Dispatcher.InvokeAsync(() => MicBtn.IsChecked = rec);
         }
 
         public void OnShown()
@@ -46,9 +47,10 @@ namespace Isle.Views
         private void UpdateModelLine()
         {
             var s = AppSettings.Current;
-            ModelLine.Text = (string.IsNullOrWhiteSpace(s.AiKey) && s.AiProvider == "anthropic")
-                ? "Нужен API-ключ: Настройки → ИИ"
-                : s.AiModel + " помнит весь разговор · Shift+Enter — новая строка";
+            var preset = AiService.Preset(s.AiPreset);
+            ModelLine.Text = (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama")
+                ? "Нужен API-ключ: шестерёнка → ИИ (бесплатно — Groq)"
+                : (preset?.Title ?? "ИИ") + " · " + s.AiModel + " · помнит весь разговор · Shift+Enter — новая строка";
         }
 
         private void OnKey(object s, KeyEventArgs e)
@@ -92,6 +94,16 @@ namespace Isle.Views
             Scroll.ScrollToEnd();
             _busy = false;
             SendBtn.IsEnabled = true;
+        }
+
+        private void OnMic(object s, RoutedEventArgs e)
+        {
+            AppHost.Voice.Toggle(text =>
+            {
+                Input.Text = (Input.Text.Length > 0 ? Input.Text.TrimEnd() + " " : "") + text;
+                Input.CaretIndex = Input.Text.Length;
+            });
+            MicBtn.IsChecked = AppHost.Voice.Recording;
         }
 
         private void OnNew(object s, RoutedEventArgs e)

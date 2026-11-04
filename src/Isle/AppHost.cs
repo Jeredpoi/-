@@ -15,6 +15,7 @@ namespace Isle
         public static SystemWatchers Watchers;
         public static NotificationService Notifications;
         public static VpnService Vpn;
+        public static VoiceService Voice;
         public static WeatherNow Weather;
         public static event Action WeatherChanged;
         public static MainWindow Window;

@@ -65,6 +65,29 @@ namespace Isle.Views
             var target = AppHost.Window.PreviousForeground;
             AppHost.Window.Collapse();
             AppHost.Clipboard.Paste(item, target, !copyOnly);
+            ToastBus.Show(new Toast
+            {
+                Kind = ToastKind.Success, Title = copyOnly ? "Скопировано" : "Вставлено",
+                Subtitle = item.IsImage ? item.Text : item.Preview, Image = item.IsImage ? item.Thumb : null,
+                Icon = Icons.Copy, Duration = TimeSpan.FromSeconds(1.6)
+            });
+        }
+
+        private void OnLauncherAdd(object s, RoutedEventArgs e)
+        {
+            AppHost.Window.SuppressAutoCollapse = true;
+            try
+            {
+                var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Добавить ярлык в остров", Multiselect = true, Filter = "Программы и ярлыки|*.exe;*.lnk;*.url;*.bat;*.cmd|Все файлы|*.*" };
+                if (dlg.ShowDialog() == true)
+                {
+                    foreach (var f in dlg.FileNames)
+                        if (_launch.All(l => !string.Equals(l.Path, f, StringComparison.OrdinalIgnoreCase)) && _launch.Count < 16)
+                            _launch.Add(new LauncherItem { Path = f });
+                    SaveLauncher();
+                }
+            }
+            finally { AppHost.Window.SuppressAutoCollapse = false; }
         }
 
         private void OnOpenClipboard(object s, RoutedEventArgs e) => AppHost.Window.SelectTab("clip");
@@ -119,7 +142,7 @@ namespace Isle.Views
             Dispatcher.InvokeAsync(() => { Command.Focus(); Command.SelectAll(); }, DispatcherPriority.Input);
         }
 
-        private void HideCommand()
+        public void HideCommand()
         {
             Command.Text = "";
             CommandBox.Visibility = Visibility.Collapsed;
@@ -288,12 +311,12 @@ namespace Isle.Views
                 return;
             }
 
-            var timer = Regex.Match(line, @"^(таймер|timer)\s+(\d+(?:[.,]\d+)?)\s*(с|сек|s|м|мин|m|ч|h)?$", RegexOptions.IgnoreCase);
+            var timer = Regex.Match(line, @"^(таймер|timer)\s+(?:на\s+)?(\d+(?:[.,]\d+)?)\s*(с|сек\w*|s|sec\w*|м|мин\w*|m|min\w*|ч|час\w*|h|hour\w*)?$", RegexOptions.IgnoreCase);
             if (timer.Success)
             {
                 double n = double.Parse(timer.Groups[2].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
                 var u = timer.Groups[3].Value.ToLowerInvariant();
-                var span = u.StartsWith("с") || u == "s" ? TimeSpan.FromSeconds(n) : u.StartsWith("ч") || u == "h" ? TimeSpan.FromHours(n) : TimeSpan.FromMinutes(n);
+                var span = u.StartsWith("с") || u.StartsWith("s") ? TimeSpan.FromSeconds(n) : u.StartsWith("ч") || u.StartsWith("h") ? TimeSpan.FromHours(n) : TimeSpan.FromMinutes(n);
                 AppHost.Timer.StartNew(span);
                 HideCommand();
                 AppHost.Window.Collapse();

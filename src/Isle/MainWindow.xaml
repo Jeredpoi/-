@@ -20,18 +20,25 @@
                 <TranslateTransform x:Name="SlideT" Y="0"/>
             </Grid.RenderTransform>
 
-            <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
-                    Width="210" Height="34" ClipToBounds="True" Margin="24,0,24,24"
-                    BorderBrush="#17171C" BorderThickness="1,0,1,1">
+            <!-- Тень отдельно от острова: иначе обрезка по прямоугольнику давала серые квадратные углы -->
+            <Border x:Name="IslandShadow" Background="{StaticResource Bg}" CornerRadius="0,0,18,18" Margin="24,0,24,24"
+                    Width="{Binding ActualWidth, ElementName=Island}" Height="{Binding ActualHeight, ElementName=Island}"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
                 <Border.Effect>
-                    <DropShadowEffect BlurRadius="22" ShadowDepth="4" Direction="270" Opacity="0.4" Color="Black"/>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="6" Direction="270" Opacity="0.35" Color="Black" RenderingBias="Quality"/>
                 </Border.Effect>
+            </Border>
+
+            <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
+                    Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
+                    BorderBrush="#17171C" BorderThickness="1,0,1,1" SnapsToDevicePixels="True">
                 <Grid>
                     <!-- ===== Свёрнутая чёлка ===== -->
                     <Grid x:Name="CollapsedView" Margin="16,0">
                         <!-- покой: «глаза», время, погода -->
                         <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <h:Character x:Name="Buddy" Width="22" Height="19" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                            <StackPanel x:Name="Eyes" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border x:Name="EyeL" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" VerticalAlignment="Center"/>
                                 <Border x:Name="EyeR" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
@@ -122,28 +129,40 @@
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                                <Border x:Name="VpnChip" Background="#141417" CornerRadius="13" Height="26" Padding="9,0" Margin="0,0,6,0" Visibility="Collapsed" ToolTip="VPN включён">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <h:Icon Kind="Shield" Width="12" Height="12" Foreground="{StaticResource Green}"/>
-                                        <TextBlock x:Name="VpnText" Text="VPN" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Green}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-                                <ToggleButton x:Name="DndChip" Style="{StaticResource Chip}" Click="OnDnd" ToolTip="Не беспокоить: прятать всплывашки">
-                                    <StackPanel Orientation="Horizontal">
-                                        <h:Icon Kind="Moon" Width="12" Height="12"/>
-                                        <TextBlock x:Name="LangChip" Text="EN" Margin="6,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
-                                    </StackPanel>
+                                <!-- VPN: клик — отключить, правый клик — проверить заново -->
+                                <Button x:Name="VpnChip" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Visibility="Collapsed"
+                                        Click="OnVpnClick" MouseRightButtonUp="OnVpnRightClick" ToolTipService.InitialShowDelay="200">
+                                    <Border x:Name="VpnBox" Background="#1C1C20" CornerRadius="13" Height="26" Padding="9,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <h:Icon Kind="Shield" Width="12" Height="12" StrokeWidth="2"/>
+                                            <TextBlock x:Name="VpnText" Text="VPN" Margin="5,0,0,0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                                <!-- Раскладка: показывает текущую, клик — переключить -->
+                                <Button x:Name="LangBtn" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Click="OnLangClick" ToolTip="Раскладка клавиатуры · клик — переключить">
+                                    <Border Background="#141417" CornerRadius="13" Height="26" Padding="9,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <h:Icon Kind="Keyboard" Width="13" Height="13" Foreground="#A1A1AB"/>
+                                            <TextBlock x:Name="LangChip" Text="EN" Margin="5,0,0,0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                                <ToggleButton x:Name="DndChip" Style="{StaticResource Chip}" Click="OnDnd" ToolTip="Не беспокоить: всплывашки не показываются">
+                                    <h:Icon Kind="Moon" Width="13" Height="13"/>
                                 </ToggleButton>
-                                <ToggleButton x:Name="PinChip" Style="{StaticResource Chip}" Margin="6,0,0,0" Click="OnPin" ToolTip="Закрепить открытой">
+                                <ToggleButton x:Name="PinChip" Style="{StaticResource Chip}" Margin="6,0,0,0" Click="OnPin" ToolTip="Закрепить: остров не сворачивается">
                                     <h:Icon Kind="Pin" Width="13" Height="13"/>
                                 </ToggleButton>
-                                <RadioButton Style="{StaticResource Tab}" x:Name="TabSettings" Margin="6,0,0,0" Checked="OnTab" ToolTip="Настройки">
-                                    <RadioButton.Tag><h:Icon Kind="Gear" Width="15" Height="15"/></RadioButton.Tag>
-                                </RadioButton>
+                                <Button x:Name="SettingsBtn" Style="{StaticResource Ghost}" Margin="6,0,0,0" Width="32" Height="32" Click="OnSettingsClick" ToolTip="Настройки">
+                                    <h:Icon Kind="Gear" Width="16" Height="16"/>
+                                </Button>
                             </StackPanel>
                         </DockPanel>
 
-                        <ContentControl x:Name="TabHost" Focusable="False"/>
+                        <ContentControl x:Name="TabHost" Focusable="False">
+                            <ContentControl.RenderTransform><TranslateTransform x:Name="TabSlide"/></ContentControl.RenderTransform>
+                        </ContentControl>
                     </DockPanel>
 
                     <!-- Подсветка при перетаскивании файлов -->

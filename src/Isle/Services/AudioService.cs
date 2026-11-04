@@ -75,6 +75,21 @@ namespace Isle.Services
             set { try { if (_device != null) _device.AudioEndpointVolume.Mute = value; } catch { } }
         }
 
+        /// <summary>Микрофон по умолчанию: выключен ли.</summary>
+        public bool MicMuted
+        {
+            get
+            {
+                try { using var d = _enum.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications); return d.AudioEndpointVolume.Mute; }
+                catch { return false; }
+            }
+            set
+            {
+                try { using var d = _enum.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications); d.AudioEndpointVolume.Mute = value; }
+                catch { }
+            }
+        }
+
         public float Peak
         {
             get { try { return _device?.AudioMeterInformation.MasterPeakValue ?? 0; } catch { return 0; } }

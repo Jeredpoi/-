@@ -4,9 +4,13 @@
              xmlns:h="clr-namespace:Isle.Helpers">
     <UserControl.Resources>
         <Style x:Key="Tile" TargetType="Button" BasedOn="{StaticResource Flat}">
-            <Setter Property="Padding" Value="14"/>
+            <Setter Property="Padding" Value="14,12"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        </Style>
+        <Style x:Key="Power" TargetType="Button" BasedOn="{StaticResource Flat}">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         </Style>
     </UserControl.Resources>
     <Grid>
@@ -15,14 +19,14 @@
             <RowDefinition Height="10"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="10"/>
-            <RowDefinition Height="68"/>
+            <RowDefinition Height="64"/>
         </Grid.RowDefinitions>
 
-        <UniformGrid Columns="3">
-            <Button Style="{StaticResource Tile}" Margin="0,0,6,0" Click="OnNetwork">
+        <UniformGrid Columns="4">
+            <Button Style="{StaticResource Tile}" Margin="0,0,5,0" Click="OnNetwork" ToolTip="Параметры сети">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="NetDot" Width="38" Height="38" CornerRadius="19" Background="{StaticResource Blue}" HorizontalAlignment="Left">
-                        <h:Icon Kind="Wifi" Width="17" Height="17"/>
+                    <Border DockPanel.Dock="Top" x:Name="NetDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
+                        <h:Icon Kind="Wifi" Width="16" Height="16"/>
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock x:Name="NetName" Text="Сеть" FontSize="14" FontWeight="SemiBold"/>
@@ -30,10 +34,10 @@
                     </StackPanel>
                 </DockPanel>
             </Button>
-            <Button Style="{StaticResource Tile}" Margin="3,0" Click="OnBluetooth">
+            <Button Style="{StaticResource Tile}" Margin="5,0" Click="OnBluetooth" ToolTip="Включить / выключить Bluetooth">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="BtDot" Width="38" Height="38" CornerRadius="19" Background="#1C1C20" HorizontalAlignment="Left">
-                        <h:Icon Kind="Bluetooth" Width="17" Height="17"/>
+                    <Border DockPanel.Dock="Top" x:Name="BtDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
+                        <h:Icon x:Name="BtIcon" Kind="Bluetooth" Width="16" Height="16"/>
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Bluetooth" FontSize="14" FontWeight="SemiBold"/>
@@ -41,10 +45,10 @@
                     </StackPanel>
                 </DockPanel>
             </Button>
-            <Button Style="{StaticResource Tile}" Margin="6,0,0,0" Click="OnTheme">
+            <Button Style="{StaticResource Tile}" Margin="5,0" Click="OnTheme" ToolTip="Тёмная / светлая тема Windows">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="ThemeDot" Width="38" Height="38" CornerRadius="19" Background="#1C1C20" HorizontalAlignment="Left">
-                        <h:Icon Kind="Contrast" Width="17" Height="17"/>
+                    <Border DockPanel.Dock="Top" x:Name="ThemeDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
+                        <h:Icon x:Name="ThemeIcon" Kind="Contrast" Width="16" Height="16"/>
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Тёмная тема" FontSize="14" FontWeight="SemiBold"/>
@@ -52,27 +56,86 @@
                     </StackPanel>
                 </DockPanel>
             </Button>
+            <Button Style="{StaticResource Tile}" Margin="5,0,0,0" Click="OnTaskMgr" ToolTip="Диспетчер задач">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
+                        <h:Icon Kind="Wave" Width="16" Height="16"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Bottom">
+                        <TextBlock Text="Диспетчер" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="задач" Style="{StaticResource MutedText}" FontSize="11"/>
+                    </StackPanel>
+                </DockPanel>
+            </Button>
         </UniformGrid>
 
-        <UniformGrid Grid.Row="2" Columns="4">
-            <Button Style="{StaticResource Flat}" Height="36" Margin="0,0,4,0" Click="OnTaskMgr" Content="Диспетчер задач"/>
-            <Button Style="{StaticResource Flat}" Height="36" Margin="4,0" Click="OnSettings" Content="Параметры Windows"/>
-            <Button Style="{StaticResource Flat}" Height="36" Margin="4,0" Click="OnSound" Content="Звук"/>
-            <Button Style="{StaticResource Flat}" Height="36" Margin="4,0,0,0" Click="OnShots" Content="Папка скриншотов"/>
-        </UniformGrid>
+        <!-- Звук прямо в острове -->
+        <Border Grid.Row="2" Style="{StaticResource CardBox}" Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource Ghost}" Click="OnMute" ToolTip="Выключить / включить звук">
+                    <h:Icon x:Name="VolIcon" Kind="Volume" Width="16" Height="16"/>
+                </Button>
+                <Slider x:Name="Volume" Grid.Column="1" Minimum="0" Maximum="100" Margin="8,0" VerticalAlignment="Center" ValueChanged="OnVolume"/>
+                <TextBlock x:Name="VolText" Grid.Column="2" Text="0" Width="26" FontSize="12" Foreground="#B9B9C3" VerticalAlignment="Center" TextAlignment="Right"/>
+                <ComboBox x:Name="Devices" Grid.Column="3" Width="220" Margin="10,0,0,0" SelectionChanged="OnDevice" DropDownOpened="OnDevicesOpen" DropDownClosed="OnDevicesClosed"/>
+                <ToggleButton x:Name="MicBtn" Grid.Column="4" Style="{StaticResource Chip}" Margin="8,0,0,0" Height="34" Click="OnMic" ToolTip="Микрофон: выключить / включить">
+                    <h:Icon Kind="Mic" Width="14" Height="14"/>
+                </ToggleButton>
+            </Grid>
+        </Border>
 
+        <!-- Питание: первое нажатие краснеет и запускает полоску, второе — выполняет -->
         <UniformGrid Grid.Row="4" Columns="4">
-            <Button Style="{StaticResource Flat}" Margin="0,0,5,0" Click="OnLock">
-                <StackPanel><h:Icon Kind="Lock" Width="16" Height="16"/><TextBlock Text="Блокировка" Margin="0,6,0,0" HorizontalAlignment="Center"/></StackPanel>
+            <Button x:Name="LockBtn" Style="{StaticResource Power}" Margin="0,0,5,0" Click="OnPower" Tag="lock">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Lock" Width="16" Height="16" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="LockText" Text="Блокировка" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <Border x:Name="LockBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                        <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
+                    </Border>
+                </Grid>
             </Button>
-            <Button Style="{StaticResource Flat}" Margin="5,0" Click="OnSleep" x:Name="SleepBtn">
-                <StackPanel><h:Icon Kind="Moon" Width="16" Height="16"/><TextBlock x:Name="SleepText" Text="Сон" Margin="0,6,0,0" HorizontalAlignment="Center"/></StackPanel>
+            <Button x:Name="SleepBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="sleep">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Moon" Width="16" Height="16" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="SleepText" Text="Сон" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <Border x:Name="SleepBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                        <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
+                    </Border>
+                </Grid>
             </Button>
-            <Button Style="{StaticResource Flat}" Margin="5,0" Click="OnRestart">
-                <StackPanel><h:Icon Kind="Restart" Width="16" Height="16"/><TextBlock x:Name="RestartText" Text="Перезагрузка" Margin="0,6,0,0" HorizontalAlignment="Center"/></StackPanel>
+            <Button x:Name="RestartBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="restart">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Restart" Width="16" Height="16" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="RestartText" Text="Перезагрузка" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <Border x:Name="RestartBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                        <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
+                    </Border>
+                </Grid>
             </Button>
-            <Button Style="{StaticResource Flat}" Margin="5,0,0,0" Click="OnShutdown">
-                <StackPanel><h:Icon Kind="Power" Width="16" Height="16"/><TextBlock x:Name="ShutdownText" Text="Выключение" Margin="0,6,0,0" HorizontalAlignment="Center"/></StackPanel>
+            <Button x:Name="ShutdownBtn" Style="{StaticResource Power}" Margin="5,0,0,0" Click="OnPower" Tag="shutdown">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Power" Width="16" Height="16" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="ShutdownText" Text="Выключение" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <Border x:Name="ShutdownBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                        <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
+                    </Border>
+                </Grid>
             </Button>
         </UniformGrid>
     </Grid>

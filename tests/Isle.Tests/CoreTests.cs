@@ -167,7 +167,7 @@ namespace Isle.Tests
                     }
                     var w = new MainWindow();
                     AppHost.Window = w;
-                    foreach (var tab in new[] { "home", "clip", "shelf", "text", "chat", "notes", "weather", "controls", "settings" })
+                    foreach (var tab in new[] { "home", "clip", "shelf", "text", "chat", "notes", "weather", "controls" })
                     {
                         w.SelectTab(tab);
                         Assert.NotNull(w.GetView(tab));
@@ -180,6 +180,9 @@ namespace Isle.Tests
                     stop.Start();
                     System.Windows.Threading.Dispatcher.PushFrame(frame);
                     Assert.True(w.IsVisible, "окно острова не видно после Show()");
+                    var sw = new Views.SettingsWindow();
+                    foreach (var sec in new[] { "general", "look", "ai", "voice", "record", "weather", "modules", "keys" }) sw.ShowSection(sec);
+                    sw.Close();
                     w.Close();
                 }
                 catch (Exception ex) { error = ex; }
