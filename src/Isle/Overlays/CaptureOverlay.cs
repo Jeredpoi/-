@@ -87,7 +87,15 @@ namespace Isle.Overlays
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
             MouseRightButtonDown += (_, __) => Finish(null);
-            if (mode == CaptureMode.Pipette) _px = ScreenTools.Bgra(shot, out _pw, out _ph);
+            if (mode == CaptureMode.Pipette)
+            {
+                // пиксели готовим в фоне — слой появляется сразу, без подвисания
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    var px = ScreenTools.Bgra(shot, out int w, out int h);
+                    Dispatcher.InvokeAsync(() => { _pw = w; _ph = h; _px = px; });
+                });
+            }
         }
 
         public static Task<object> Run(CaptureMode mode)

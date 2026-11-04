@@ -66,6 +66,14 @@ namespace Isle.Services
 
         public static byte[] Bgra(BitmapSource bmp, out int w, out int h)
         {
+            // снимок экрана уже в Bgr32/Bgra32 — копируем напрямую, без медленного преобразования (важно на 4K)
+            if (bmp.Format == PixelFormats.Bgr32 || bmp.Format == PixelFormats.Bgra32 || bmp.Format == PixelFormats.Pbgra32)
+            {
+                w = bmp.PixelWidth; h = bmp.PixelHeight;
+                var raw = new byte[w * h * 4];
+                bmp.CopyPixels(raw, w * 4, 0);
+                return raw;
+            }
             var conv = new FormatConvertedBitmap(bmp, PixelFormats.Bgra32, null, 0);
             w = conv.PixelWidth; h = conv.PixelHeight;
             var px = new byte[w * h * 4];

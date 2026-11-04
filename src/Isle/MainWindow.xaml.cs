@@ -30,7 +30,7 @@ namespace Isle
         private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
         private readonly DispatcherTimer _anim = new() { Interval = TimeSpan.FromMilliseconds(45) };
         private readonly DispatcherTimer _hoverOpen = new() { Interval = TimeSpan.FromMilliseconds(220) };
-        private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(380) };
+        private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
         private readonly Random _rnd = new();
@@ -137,7 +137,12 @@ namespace Isle
                 if (State == IslandState.Collapsed) ShowCollapsedContent(false);
             };
             _hoverOpen.Tick += (_, __) => { _hoverOpen.Stop(); if (State != IslandState.Expanded && Island.IsMouseOver) Expand(null); };
-            _leaveClose.Tick += (_, __) => { _leaveClose.Stop(); if (!Island.IsMouseOver && !IsActive) Collapse(); };
+            _leaveClose.Tick += (_, __) =>
+            {
+                if (CursorNearIsland(14) || SuppressAutoCollapse || CursorOverOurPopup()) return; // ещё рядом или в нашем меню — ждём
+                _leaveClose.Stop();
+                if (!IsActive) Collapse();
+            };
             _oledHide.Tick += (_, __) => { _oledHide.Stop(); TryOledHide(); };
             _weatherTimer.Tick += async (_, __) => await RefreshWeather();
 
@@ -177,7 +182,7 @@ namespace Isle
             Deactivated += (_, __) =>
             {
                 MakeNoActivate(true);
-                if (State == IslandState.Expanded && !_pinned && !SuppressAutoCollapse && !Island.IsMouseOver) Collapse();
+                if (State == IslandState.Expanded && !_pinned && !SuppressAutoCollapse && !CursorNearIsland(14) && !CursorOverOurPopup()) Collapse();
             };
             KeyDown += (_, e) => { if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; } };
 
@@ -752,6 +757,16 @@ namespace Isle
         /// <summary>Остров был спрятан (OLED) до всплывашки — после неё прячемся снова, не показывая музыку и Клоди.</summary>
         private bool _hideAfterToast;
 
+        /// <summary>Курсор над нашим выпадающим списком, меню или окном настроек.</summary>
+        private bool CursorOverOurPopup()
+        {
+            if (!Win32.GetCursorPos(out var p)) return false;
+            var h = WindowFromPoint(p);
+            if (h == IntPtr.Zero || h == _hwnd) return false;
+            Win32.GetWindowThreadProcessId(h, out uint pid);
+            return pid == (uint)Environment.ProcessId;
+        }
+
         /// <summary>Курсор у острова с запасом в несколько пикселей (чтобы край не «дрожал»).</summary>
         private bool CursorNearIsland(double margin)
         {
@@ -1107,7 +1122,7 @@ namespace Isle
             {
                 var tl = Island.PointToScreen(new Point(0, 0));
                 var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
-                atTop = p.Y <= tl.Y + 1 && p.X >= tl.X - 30 && p.X <= br.X + 30;
+                atTop = p.Y <= tl.Y + 1 && p.X >= tl.X && p.X <= br.X; // строго над островом
             }
             catch { }
             if (!atTop) { _pushTicks = 0; return; }

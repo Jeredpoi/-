@@ -232,17 +232,24 @@ namespace Isle.Views
             switch (st.HomePlayer)
             {
                 case "fill":
+                    Grid.SetColumnSpan(CoverGlow, 2);
+                    Grid.SetColumnSpan(FillShade, 2);
+                    LyricsBorder.Background = System.Windows.Media.Brushes.Transparent;
                     CoverGlow.Margin = new Thickness(-60);
                     CoverGlow.Opacity = 0.85;
                     CoverGlow.OpacityMask = null;
                     FillShade.Visibility = Visibility.Visible;
                     break;
                 case "compact":
+                    LyricsBorder.Background = System.Windows.Media.Brushes.Transparent;
                     CoverGlow.Opacity = 0;
                     FillShade.Visibility = Visibility.Collapsed;
                     break;
                 default:
-                    CoverGlow.Margin = new Thickness(-30, -40, lyricsCol ? 180 : -30, -40);
+                    Grid.SetColumnSpan(CoverGlow, 1);
+                    Grid.SetColumnSpan(FillShade, 1);
+                    LyricsBorder.Background = (System.Windows.Media.Brush)FindResource("Card"); // ровный фон под текстом
+                    CoverGlow.Margin = new Thickness(-30, -40, -10, -40);
                     CoverGlow.Opacity = 0.55;
                     CoverGlow.ClearValue(UIElement.OpacityMaskProperty);
                     CoverGlow.OpacityMask = new System.Windows.Media.RadialGradientBrush(
