@@ -28,7 +28,6 @@ namespace Isle
         private Toast _currentToast;
         private readonly DispatcherTimer _toastTimer = new();
         private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
-        private readonly DispatcherTimer _anim = new() { Interval = TimeSpan.FromMilliseconds(45) };
         private readonly DispatcherTimer _hoverOpen = new() { Interval = TimeSpan.FromMilliseconds(220) };
         private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
@@ -128,7 +127,6 @@ namespace Isle
 
             _toastTimer.Tick += (_, __) => { _toastTimer.Stop(); NextToast(); };
             _clock.Tick += (_, __) => Clock();
-            _anim.Tick += (_, __) => Animate();
             _ungrow.Tick += (_, __) =>
             {
                 if (CursorNearIsland(10)) return; // ещё рядом — ждём
@@ -226,7 +224,8 @@ namespace Isle
                 _clock.Start();
                 _topmost.Start();
                 KeepOnTop();
-                _anim.Start();
+                Helpers.FrameClock.Tick += _ => Animate(); // общий кадр с Клоди и краем — окно перерисовывается один раз
+
                 ApplyAppearance();
                 AppHost.Watchers.Start();
                 AppHost.Vpn.Start();
@@ -1243,6 +1242,23 @@ namespace Isle
         }
 
         private int _specIdle;
+        private const double BarMax = 18;
+        private Border[] _bars;
+        private ScaleTransform[] _barScale;
+
+        private Border[] InitBars()
+        {
+            var bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 };
+            _barScale = new ScaleTransform[bars.Length];
+            for (int i = 0; i < bars.Length; i++)
+            {
+                double h = bars[i].Height;
+                bars[i].Height = BarMax;
+                bars[i].RenderTransformOrigin = new Point(0.5, 1);
+                bars[i].RenderTransform = _barScale[i] = new ScaleTransform(1, h / BarMax);
+            }
+            return bars;
+        }
 
         private int _pushTicks;
 
@@ -1274,6 +1290,7 @@ namespace Isle
             if (wantSpectrum) { _specIdle = 0; if (!AppHost.Spectrum.Running) AppHost.Spectrum.Start(); }
             else if (AppHost.Spectrum.Running && ++_specIdle > 60) AppHost.Spectrum.Stop();
             Edge.Active = State != IslandState.Expanded && !_oledHidden;
+            Helpers.FrameClock.Hidden = _oledHidden; // спрятанный остров не рисуем — экономим процессор
             Edge.Away = IdleTime() > TimeSpan.FromMinutes(2);
             Edge.Raining = AppHost.Weather != null && (AppHost.Weather.Code >= 51 && AppHost.Weather.Code <= 67 || AppHost.Weather.Code >= 80);
 
@@ -1302,7 +1319,7 @@ namespace Isle
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {
-                var bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 };
+                var bars = _bars ??= InitBars();
                 var spec = AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
                 float peak = AppHost.Audio?.Peak ?? 0;
                 for (int i = 0; i < bars.Length; i++)
@@ -1318,9 +1335,13 @@ namespace Isle
                     }
                     else level = peak * (0.55 + _rnd.NextDouble() * 0.6);
                     double target = 3 + Math.Min(15, level * 15);
-                    // вверх быстро, вниз плавно — как у настоящего эквалайзера
-                    double k = target > bars[i].Height ? 0.75 : 0.28;
-                    bars[i].Height = bars[i].Height + (target - bars[i].Height) * k;
+                    // вверх быстро, вниз плавно — как у настоящего эквалайзера.
+                    // Меняем масштаб, а не высоту: без пересчёта раскладки 30 раз в секунду
+                    var st = _barScale[i];
+                    double cur = st.ScaleY * BarMax;
+                    double k = target > cur ? 0.75 : 0.28;
+                    double next = cur + (target - cur) * k;
+                    if (Math.Abs(next - cur) > 0.05) st.ScaleY = next / BarMax;
                 }
             }
             else if (IdleRow.Visibility == Visibility.Visible && DateTime.Now >= _nextBlink)

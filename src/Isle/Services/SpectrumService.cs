@@ -22,6 +22,8 @@ namespace Isle.Services
         private readonly Complex[] _fft = new Complex[FftSize];
         private readonly float[] _bands = new float[BandCount];
         private readonly float[] _norm = new float[BandCount];
+        private readonly float[] _fresh = new float[BandCount];
+        private readonly float[] _raw = new float[BandCount];
         private int _sampleRate = 48000;
         private readonly object _lock = new();
 
@@ -56,6 +58,7 @@ namespace Isle.Services
             if (c == null) return;
             try { c.DataAvailable -= OnData; c.StopRecording(); c.Dispose(); } catch { }
             lock (_lock) Array.Clear(_bands, 0, BandCount);
+            Array.Clear(_norm, 0, BandCount);
         }
 
         private void OnData(object s, WaveInEventArgs e)
@@ -73,11 +76,14 @@ namespace Isle.Services
                 for (int c = 0; c < ch; c++)
                 {
                     int o = i * frame + c * bps;
-                    sum += isFloat ? BitConverter.ToSingle(e.Buffer, o) : bps == 2 ? BitConverter.ToInt16(e.Buffer, o) / 32768f : 0;
+                    sum += isFloat ? BitConverter.ToSingle(e.Buffer, o)
+                         : bps == 2 ? BitConverter.ToInt16(e.Buffer, o) / 32768f
+                         : bps == 3 ? (e.Buffer[o] | e.Buffer[o + 1] << 8 | (sbyte)e.Buffer[o + 2] << 16) / 8388608f
+                         : bps == 4 ? BitConverter.ToInt32(e.Buffer, o) / 2147483648f : 0;
                 }
                 _ring[_ringPos] = sum / ch;
                 _ringPos = (_ringPos + 1) % FftSize;
-                if (++_samplesSinceFft >= FftSize / 4) // ~4 раза за окно → плавно
+                if (++_samplesSinceFft >= FftSize / 2) // ~45 раз в секунду: чаще экран всё равно не обновляется
                 {
                     _samplesSinceFft = 0;
                     Analyze();
@@ -98,7 +104,7 @@ namespace Isle.Services
             // логарифмические полосы 40 Гц … 16 кГц
             double fMin = 40, fMax = Math.Min(16000, _sampleRate / 2.0);
             double binHz = _sampleRate / (double)FftSize;
-            var fresh = new float[BandCount];
+            var fresh = _fresh;
             for (int b = 0; b < BandCount; b++)
             {
                 double lo = fMin * Math.Pow(fMax / fMin, b / (double)BandCount);
@@ -110,16 +116,23 @@ namespace Isle.Services
                 // в децибелы и в 0..1; высоким частотам чуть помогаем — их энергия меньше
                 double db = 20 * Math.Log10(acc + 1e-9) + b * 0.55;
                 fresh[b] = (float)Math.Clamp((db + 62) / 52.0, 0, 1);
+                _raw[b] = fresh[b];
             }
             // Своя «громкость» для каждой полосы: запоминаем недавний максимум и делим на него.
             // Иначе высокие частоты всегда почти нулевые, а басы — всегда в потолок.
             for (int b = 0; b < BandCount; b++)
             {
-                _norm[b] = Math.Max(fresh[b], _norm[b] * 0.996f);
-                float floor = _norm[b] * 0.35f;                       // «тишина» для этой полосы
-                float v = _norm[b] > 0.05f ? (fresh[b] - floor) / Math.Max(0.08f, _norm[b] - floor) : 0;
+                // недавний максимум забывается медленно и не опускается ниже 0,35 —
+                // иначе на тихих местах и паузах усиливался шум и полоски дёргались до потолка
+                _norm[b] = Math.Max(0.35f, Math.Max(fresh[b], _norm[b] * 0.998f));
+                float floor = _norm[b] * 0.4f;                        // «тишина» для этой полосы
+                float v = (fresh[b] - floor) / Math.Max(0.12f, _norm[b] - floor);
                 fresh[b] = Math.Clamp(v, 0, 1);
             }
+            // совсем тихо (пауза, конец трека) — полоски плавно опускаются, а не пляшут от шума
+            float loud = 0;
+            for (int b = 0; b < BandCount; b++) loud = Math.Max(loud, _raw[b]);
+            if (loud < 0.12f) Array.Clear(fresh, 0, BandCount);
             lock (_lock)
             {
                 for (int b = 0; b < BandCount; b++)
