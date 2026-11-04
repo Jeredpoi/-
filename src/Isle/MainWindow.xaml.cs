@@ -412,7 +412,7 @@ namespace Isle
             CollapsedView.Visibility = Visibility.Collapsed;
             ExpandedView.Visibility = Visibility.Visible;
             Island.CornerRadius = new CornerRadius(0, 0, 30, 30);
-            DropHint.CornerRadius = Island.CornerRadius;
+            DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
             _collapseVersion++;
             MoveTabIndicator(TabButton(_currentTab), false);
             AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 620, spring: true);
@@ -451,7 +451,7 @@ namespace Isle
                 ExpandedView.Visibility = Visibility.Collapsed;
                 ExpandedView.Effect = null;
                 Island.CornerRadius = new CornerRadius(0, 0, 18, 18);
-                DropHint.CornerRadius = Island.CornerRadius;
+                DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
                 if (_toasts.Count > 0) { NextToast(); return; }
                 ShowCollapsedContent(false);
                 ScheduleOledHide(TimeSpan.FromSeconds(1.2));
@@ -719,6 +719,21 @@ namespace Isle
             }
             g.Freeze();
             Island.Clip = g;
+
+            // контур по краю — на полпикселя внутрь, чтобы линия не резалась обрезкой и шла гладко
+            const double i = 0.5;
+            var o = new StreamGeometry();
+            using (var c = o.Open())
+            {
+                c.BeginFigure(new Point(i, 0), false, false);
+                c.LineTo(new Point(i, h - r), true, true);
+                c.ArcTo(new Point(r, h - i), new Size(Math.Max(0, r - i), Math.Max(0, r - i)), 0, false, SweepDirection.Counterclockwise, true, true);
+                c.LineTo(new Point(w - r, h - i), true, true);
+                c.ArcTo(new Point(w - i, h - r), new Size(Math.Max(0, r - i), Math.Max(0, r - i)), 0, false, SweepDirection.Counterclockwise, true, true);
+                c.LineTo(new Point(w - i, 0), true, true);
+            }
+            o.Freeze();
+            IslandOutline.Data = o;
         }
 
         /// <summary>Настройки музыки поменялись — перестроить пилюлю и плеер.</summary>
@@ -1154,14 +1169,18 @@ namespace Isle
                 float beat = playing ? (AppHost.Audio?.Peak ?? 0) : 0;
                 var idle = IdleTime();
                 UpdateWorking(idle);
+                // ночью (23:00–6:00) Клоди хочет спать: засыпает уже через минуту без тебя, а пока ты здесь — зевает
+                int hour = DateTime.Now.Hour;
+                bool night = hour >= 23 || hour < 6;
                 var mood = _aiBusy ? Helpers.Mood.Thinking
                     : State == IslandState.Toast && _currentToast?.Kind == ToastKind.Notification ? Helpers.Mood.Attention
                     : playing ? Helpers.Mood.Music
-                    : idle > TimeSpan.FromMinutes(5) ? Helpers.Mood.Sleep
+                    : idle > TimeSpan.FromMinutes(night ? 1 : 5) ? Helpers.Mood.Sleep
                     : DateTime.Now < _workingUntil ? Helpers.Mood.Working
+                    : night ? Helpers.Mood.Drowsy
                     : Helpers.Mood.Idle;
                 var outfit = OutfitForWeather();
-                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; b.Outfit = outfit; }
+                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; b.Outfit = outfit; b.Night = night; }
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {
