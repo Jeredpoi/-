@@ -113,8 +113,32 @@ namespace Isle.Helpers
         // ---- танцы под музыку: меняются сами каждые 7–12 секунд
         private int _dance;
         private DateTime _nextDance = DateTime.Now;
-        public const int DanceCount = 8;
-        private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка" };
+        public const int DanceCount = 9;
+        private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка", "брейк-данс" };
+
+        /// <summary>
+        /// Брейк-данс, цикл ~6 с: падает на спину → крутится на спине, болтая ножками → вскакивает в «фриз» с руками вверх.
+        /// Возвращает угол поворота вокруг центра тела, сдвиг вниз (в пикселях спрайта) и фазу.
+        /// </summary>
+        private (double angle, double down, double phase) Breakdance()
+        {
+            double ph = (_time * 0.17) % 1;
+            if (ph < 0.15)
+            {
+                double k = ph / 0.15;                       // падает назад
+                return (k * k * 90, k * 2.2, ph);
+            }
+            if (ph < 0.8)
+            {
+                double k = (ph - 0.15) / 0.65;              // три оборота на спине, в начале быстрее
+                double ease = 1 - Math.Pow(1 - k, 1.6);
+                return (90 + ease * 1080, 2.2 + Math.Sin(k * Math.PI * 6) * 0.25, ph);
+            }
+            {
+                double k = (ph - 0.8) / 0.2;                // вскакивает и замирает
+                return (90 * (1 - k) * (1 - k), 2.2 * (1 - k) - Math.Sin(k * Math.PI) * 2.4, ph);
+            }
+        }
         public string DanceName => DanceNames[_dance];
 
         /// <summary>Сдвиг ручки по вертикали в пикселях спрайта для текущего танца (минус — выше).</summary>
@@ -130,6 +154,13 @@ namespace Isle.Helpers
                 case 5: return -1 - (Math.Sin(_time * 6 + side) > 0 ? 1 : 0);                         // кружится, руки в стороны и вверх
                 case 6: return (Math.Sin(_time * 1.6) > 0) == left ? -3 : 0.5;                        // диско: одна рука указывает в небо
                 case 7: return Math.Sin(_time * 9 + side) > 0 ? -0.5 : 0.5;                           // лунная походка — руки покачиваются
+                case 8:
+                {
+                    var ph = Breakdance().phase;
+                    if (ph >= 0.8) return -3;                                                            // фриз — руки в небо
+                    if (ph >= 0.15) return Math.Sin(_time * 16 + side) > 0 ? -1 : 0.5;                 // на спине — машет ручками
+                    return -1;                                                                           // падает — руки в стороны
+                }
                 default: return Math.Sin(_time * 10 + side) > 0 ? -1 : 0;
             }
         }
@@ -400,6 +431,12 @@ namespace Isle.Helpers
                             tilt = -4;
                             break;
                         }
+                        case 8: // брейк-данс: угол и сдвиг считаются в Breakdance(), здесь — ножки
+                        {
+                            double bph = Breakdance().phase;
+                            step = bph >= 0.15 && bph < 0.8 && Math.Sin(_time * 16) > 0; // на спине болтает ножками
+                        }
+                            break;
                         default: // прыжки (как раньше)
                             dy = -(Math.Abs(Math.Sin(_time * 7.5)) * 1.1 + _bob * 1.4) * px;
                             tilt = Math.Sin(_time * 3.75) * 9;
@@ -441,7 +478,14 @@ namespace Isle.Helpers
             if (Math.Abs(spin) < 0.18) spin = spin < 0 ? -0.18 : 0.18;
             var tf = new TransformGroup();
             tf.Children.Add(new ScaleTransform(spin, 1, ActualWidth / 2, ActualHeight / 2));
-            tf.Children.Add(new RotateTransform(tilt, ActualWidth / 2, ActualHeight));
+            if (mood == Mood.Music && _dance == 8 && _cheer <= 0)
+            {
+                // брейк-данс: падает и крутится на спине вокруг центра тела
+                var (ang, down, _) = Breakdance();
+                oy += down * px;
+                tf.Children.Add(new RotateTransform(-ang, ox + 6.5 * px, oy + 4.5 * px));
+            }
+            else tf.Children.Add(new RotateTransform(tilt, ActualWidth / 2, ActualHeight));
             dc.PushTransform(tf);
             for (int y = 0; y < H; y++)
             {
