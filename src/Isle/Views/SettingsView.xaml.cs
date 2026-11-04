@@ -42,6 +42,9 @@ namespace Isle.Views
             Notif.IsChecked = S.NotificationToasts;
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
             Clip.IsChecked = S.ClipboardHistory;
+            ClipImg.IsChecked = S.ClipboardImages;
+            Vpn.IsChecked = S.VpnStatus;
+            Captures.IsChecked = S.ShowInCaptures;
             CityBox.Text = S.City;
             Provider.SelectedItem = Provider.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == S.AiProvider) ?? Provider.Items[0];
             Key.Password = S.AiKey;
@@ -67,7 +70,17 @@ namespace Isle.Views
             S.BatteryToasts = Battery.IsChecked == true;
             S.NotificationToasts = Notif.IsChecked == true;
             S.ClipboardHistory = Clip.IsChecked == true;
+            S.ClipboardImages = ClipImg.IsChecked == true;
+            S.VpnStatus = Vpn.IsChecked == true;
             S.Save();
+        }
+
+        private void OnCaptures(object s, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            S.ShowInCaptures = Captures.IsChecked == true;
+            S.Save();
+            AppHost.Window.ApplyCaptureVisibility();
         }
 
         private void OnOled(object s, RoutedEventArgs e)

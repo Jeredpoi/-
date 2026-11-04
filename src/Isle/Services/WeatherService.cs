@@ -27,7 +27,9 @@ namespace Isle.Services
     public class WeatherNow
     {
         public string City = "";
-        public double Temp, Feels, Wind, Precip, TodayMin, TodayMax;
+        public double Temp, Feels, Wind, WindDeg, Precip, TodayMin, TodayMax;
+        /// <summary>Откуда дует ветер: С, СВ, В, ЮВ, Ю, ЮЗ, З, СЗ.</summary>
+        public string WindFrom => new[] { "С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ" }[(int)Math.Round(((WindDeg % 360) + 360) % 360 / 45.0) % 8];
         public int Humidity, Code;
         public bool IsDay = true;
         public DateTime Sunrise, Sunset;
@@ -55,7 +57,7 @@ namespace Isle.Services
         {
             var inv = CultureInfo.InvariantCulture;
             var url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat.ToString(inv) + "&longitude=" + lon.ToString(inv) +
-                      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,precipitation,is_day" +
+                      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation,is_day" +
                       "&hourly=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset" +
                       "&wind_speed_unit=ms&timezone=auto&forecast_days=7";
             using var doc = JsonDocument.Parse(await Http.GetStringAsync(url));
@@ -69,6 +71,7 @@ namespace Isle.Services
                 Humidity = (int)cur.GetProperty("relative_humidity_2m").GetDouble(),
                 Code = cur.GetProperty("weather_code").GetInt32(),
                 Wind = cur.GetProperty("wind_speed_10m").GetDouble(),
+                WindDeg = cur.TryGetProperty("wind_direction_10m", out var wd) && wd.ValueKind == JsonValueKind.Number ? wd.GetDouble() : 0,
                 Precip = cur.GetProperty("precipitation").GetDouble(),
                 IsDay = cur.GetProperty("is_day").GetInt32() == 1,
             };

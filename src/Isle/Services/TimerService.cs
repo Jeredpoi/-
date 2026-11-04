@@ -82,6 +82,8 @@ namespace Isle.Services
         public string Path { get; set; }
         public string Name => System.IO.Path.GetFileName(Path.TrimEnd('\\'));
         public bool IsFolder => Directory.Exists(Path);
+        public System.Windows.Media.ImageSource Icon => Isle.Native.Win32.ShellIcon(Path);
+        public bool HasIcon => Icon != null;
         public string Ext => IsFolder ? "ПАПКА" : (System.IO.Path.GetExtension(Path).TrimStart('.').ToUpperInvariant() is var e && e.Length > 0 ? e : "ФАЙЛ");
     }
 

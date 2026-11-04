@@ -39,6 +39,8 @@
                 <CheckBox x:Name="Hover" Content="Открывать при наведении" Click="OnToggle"/>
                 <CheckBox x:Name="Fullscreen" Content="Прятать в полноэкранных играх и видео" Click="OnToggle"/>
                 <CheckBox x:Name="Clock24" Content="24-часовой формат" Click="OnToggle"/>
+                <CheckBox x:Name="Captures" Content="Показывать остров на скриншотах и в записи" Click="OnCaptures"/>
+                <TextBlock Style="{StaticResource Note}" Text="Обычно его там не видно: ни скриншоты, ни запись, ни трансляция остров не захватывают."/>
                 <CheckBox x:Name="Autostart" Content="Запускать вместе с Windows" Click="OnAutostart"/>
 
                 <TextBlock Style="{StaticResource H}" Text="ВСПЛЫВАШКИ"/>
@@ -51,6 +53,8 @@
                 <CheckBox x:Name="Notif" Content="Уведомления других приложений" Click="OnToggle"/>
                 <TextBlock x:Name="NotifStatus" Style="{StaticResource Note}"/>
                 <CheckBox x:Name="Clip" Content="История буфера обмена" Click="OnToggle"/>
+                <CheckBox x:Name="ClipImg" Content="Сохранять в истории картинки" Click="OnToggle"/>
+                <CheckBox x:Name="Vpn" Content="Статус VPN и страна" Click="OnToggle"/>
             </StackPanel>
 
             <StackPanel Grid.Column="2">

@@ -61,6 +61,13 @@ namespace Isle
             AppHost.Media = new MediaService(Dispatcher);
             AppHost.Audio = new AudioService(Dispatcher);
             AppHost.Notifications = new NotificationService();
+            AppHost.Vpn = new VpnService();
+            AppHost.Vpn.Changed += () =>
+            {
+                VpnChip.Visibility = AppHost.Vpn.Active ? Visibility.Visible : Visibility.Collapsed;
+                VpnText.Text = string.IsNullOrEmpty(AppHost.Vpn.Country) ? "VPN" : AppHost.Vpn.Country;
+                VpnChip.ToolTip = "VPN: " + AppHost.Vpn.Name;
+            };
 
             ToastBus.Raised += t => Dispatcher.InvokeAsync(() => EnqueueToast(t));
             AppHost.Media.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); UpdateMini(); };
@@ -124,6 +131,7 @@ namespace Isle
                 _clock.Start();
                 _anim.Start();
                 AppHost.Watchers.Start();
+                AppHost.Vpn.Start();
                 await AppHost.Media.InitAsync();
                 _ = AppHost.Notifications.StartAsync();
                 _weatherTimer.Start();
@@ -142,6 +150,7 @@ namespace Isle
             var ex = Win32.GetWindowLong(_hwnd, Win32.GWL_EXSTYLE);
             Win32.SetWindowLong(_hwnd, Win32.GWL_EXSTYLE, ex | Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE);
             _src.AddHook(WndProc);
+            ApplyCaptureVisibility();
             AppHost.Clipboard.Attach(_src);
 
             Win32.RegisterHotKey(_hwnd, HkToggle, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x20);   // Ctrl+Alt+Space
@@ -218,7 +227,7 @@ namespace Isle
             {
                 // Фокус берём только если кликнули в поле ввода — иначе кнопки работают без перехвата фокуса.
                 var d = e.OriginalSource as DependencyObject;
-                Control input = (Control)FindParent<TextBox>(d) ?? FindParent<PasswordBox>(d);
+                Control input = (Control)FindParent<System.Windows.Controls.Primitives.TextBoxBase>(d) ?? FindParent<PasswordBox>(d);
                 if (input != null)
                 {
                     FocusIsland();
@@ -310,7 +319,7 @@ namespace Isle
             MediaRow.Visibility = media ? Visibility.Visible : Visibility.Collapsed;
             IdleRow.Visibility = !timer && !media ? Visibility.Visible : Visibility.Collapsed;
 
-            double w = timer ? 240 : media ? 320 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210);
+            double w = timer ? 240 : media ? 320 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0);
             if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - 34) < 1) return;
             AnimateSize(w, 34, 380);
         }
@@ -516,6 +525,10 @@ namespace Isle
         {
             ClockText.Text = DateTime.Now.ToString(AppSettings.Current.Use24h ? "HH:mm" : "h:mm");
             if (AppHost.Timer != null) MiniTimer.Text = TimerService.Format(AppHost.Timer.Left);
+            var w = AppHost.Watchers;
+            bool showBattery = w != null && w.HasBattery && w.BatteryPercent >= 0;
+            BatteryMini.Visibility = showBattery ? Visibility.Visible : Visibility.Collapsed;
+            if (showBattery) BatteryMini.Text = (w.Charging ? "⚡" : "") + w.BatteryPercent + "%";
         }
 
         private void Animate()
@@ -558,6 +571,13 @@ namespace Isle
             var w = AppHost.Weather;
             WeatherMini.Text = w == null ? "" : w.Glyph + " " + Math.Round(w.Temp) + "°";
             if (State == IslandState.Collapsed) ShowCollapsedContent(true);
+        }
+
+        /// <summary>Скрывает остров от скриншотов, записи экрана и трансляций (если не включено обратное).</summary>
+        public void ApplyCaptureVisibility()
+        {
+            if (_hwnd == IntPtr.Zero) return;
+            Win32.SetWindowDisplayAffinity(_hwnd, AppSettings.Current.ShowInCaptures ? 0u : 0x11u);
         }
 
         public void ApplyScale() => ScaleT.ScaleX = ScaleT.ScaleY = Math.Clamp(AppSettings.Current.Scale, 0.7, 1.6);

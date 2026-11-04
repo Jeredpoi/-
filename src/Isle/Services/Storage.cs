@@ -58,6 +58,11 @@ namespace Isle.Services
         public bool OledMode { get; set; } = false;
         public int OledRevealSeconds { get; set; } = 10;
         public double Scale { get; set; } = 1.0;
+        /// <summary>По умолчанию остров не попадает на скриншоты, запись и трансляции.</summary>
+        public bool ShowInCaptures { get; set; } = false;
+        public bool VpnStatus { get; set; } = true;
+        public bool ClipboardImages { get; set; } = true;
+        public List<string> Launcher { get; set; } = new();
 
         // Погода
         public string City { get; set; } = "Москва";
@@ -108,6 +113,8 @@ namespace Isle.Services
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Title { get; set; } = "Заметка";
         public string Text { get; set; } = "";
+        /// <summary>Форматированный текст (XAML FlowDocument). Text — его простая копия для заголовков и поиска.</summary>
+        public string Xaml { get; set; } = "";
         public DateTime Updated { get; set; } = DateTime.Now;
     }
 

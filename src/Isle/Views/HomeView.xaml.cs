@@ -12,8 +12,16 @@ using Isle.Services;
 
 namespace Isle.Views
 {
+    public class LauncherItem
+    {
+        public string Path { get; set; }
+        public string Name => System.IO.Path.GetFileNameWithoutExtension(Path.TrimEnd('\\')) is { Length: > 0 } n ? n : Path;
+        public System.Windows.Media.ImageSource Icon => Isle.Native.Win32.ShellIcon(Path);
+    }
+
     public partial class HomeView : UserControl, IIslandView
     {
+        private readonly System.Collections.ObjectModel.ObservableCollection<LauncherItem> _launch = new();
         private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(250) };
         private List<LyricLine> _lyrics;
         private string _lyricsKey = "";
@@ -30,9 +38,72 @@ namespace Isle.Views
             _tick.Tick += (_, __) => TickPosition();
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
             IsVisibleChanged += (_, __) => { if (IsVisible) _tick.Start(); else _tick.Stop(); };
+            foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
+            Launcher.ItemsSource = _launch;
+            _launch.CollectionChanged += (_, __) => UpdateLauncherHint();
+            UpdateLauncherHint();
+            AppHost.Clipboard.Items.CollectionChanged += (_, __) => RefreshRecent();
+            RefreshRecent();
             Refresh();
             SyncVolume();
             FillDevices();
+        }
+
+        // ---------- Недавно скопировано ----------
+
+        private void RefreshRecent()
+        {
+            var top = AppHost.Clipboard.Items.Take(4).ToList();
+            Recent.ItemsSource = top;
+            RecentEmpty.Visibility = top.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnRecentClick(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is not ClipItem item) return;
+            bool copyOnly = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            var target = AppHost.Window.PreviousForeground;
+            AppHost.Window.Collapse();
+            AppHost.Clipboard.Paste(item, target, !copyOnly);
+        }
+
+        private void OnOpenClipboard(object s, RoutedEventArgs e) => AppHost.Window.SelectTab("clip");
+
+        // ---------- Ярлыки ----------
+
+        private void UpdateLauncherHint() => LauncherHint.Visibility = _launch.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        private void SaveLauncher()
+        {
+            AppSettings.Current.Launcher = _launch.Select(l => l.Path).ToList();
+            AppSettings.Current.Save();
+        }
+
+        private void OnLauncherDrop(object s, DragEventArgs e)
+        {
+            e.Handled = true;
+            if (e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
+            foreach (var f in files)
+                if (_launch.All(l => !string.Equals(l.Path, f, StringComparison.OrdinalIgnoreCase)) && _launch.Count < 16)
+                    _launch.Add(new LauncherItem { Path = f });
+            SaveLauncher();
+        }
+
+        private void OnLaunch(object s, RoutedEventArgs e)
+        {
+            if ((s as FrameworkElement)?.Tag is string path)
+            {
+                AppHost.Window.Collapse();
+                SystemControls.Shell(path);
+            }
+        }
+
+        private void OnLaunchRemove(object s, MouseButtonEventArgs e)
+        {
+            if ((s as FrameworkElement)?.Tag is not string path) return;
+            var item = _launch.FirstOrDefault(l => l.Path == path);
+            if (item != null) { _launch.Remove(item); SaveLauncher(); }
+            e.Handled = true;
         }
 
         public void OnShown()
@@ -43,7 +114,21 @@ namespace Isle.Views
 
         public void FocusCommand()
         {
+            CommandBox.Visibility = Visibility.Visible;
+            LauncherBox.Visibility = Visibility.Collapsed;
             Dispatcher.InvokeAsync(() => { Command.Focus(); Command.SelectAll(); }, DispatcherPriority.Input);
+        }
+
+        private void HideCommand()
+        {
+            Command.Text = "";
+            CommandBox.Visibility = Visibility.Collapsed;
+            LauncherBox.Visibility = Visibility.Visible;
+        }
+
+        private void OnCommandLostFocus(object s, KeyboardFocusChangedEventArgs e)
+        {
+            if (Command.Text.Trim().Length == 0) HideCommand();
         }
 
         // ---------- Медиа ----------
@@ -51,7 +136,10 @@ namespace Isle.Views
         private void Refresh()
         {
             var m = AppHost.Media.Current;
-            if (!m.HasSession || string.IsNullOrEmpty(m.Title))
+            bool nothing = !m.HasSession || string.IsNullOrEmpty(m.Title);
+            RecentPanel.Visibility = nothing ? Visibility.Visible : Visibility.Collapsed;
+            PlayerPanel.Visibility = nothing ? Visibility.Collapsed : Visibility.Visible;
+            if (nothing)
             {
                 Source.Text = "НИЧЕГО НЕ ИГРАЕТ";
                 Title.Text = "Включи музыку в любом плеере";
@@ -185,6 +273,7 @@ namespace Isle.Views
 
         private void OnCommandKey(object s, KeyEventArgs e)
         {
+            if (e.Key == Key.Escape) { HideCommand(); e.Handled = true; return; }
             if (e.Key != Key.Enter) return;
             e.Handled = true;
             var line = Command.Text.Trim();
@@ -194,7 +283,7 @@ namespace Isle.Views
             {
                 ClipboardService.SetText(result);
                 ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = line + " = " + result, Subtitle = "Результат скопирован", Icon = Icons.Check, Important = true });
-                Command.Text = "";
+                HideCommand();
                 AppHost.Window.Collapse();
                 return;
             }
@@ -206,7 +295,7 @@ namespace Isle.Views
                 var u = timer.Groups[3].Value.ToLowerInvariant();
                 var span = u.StartsWith("с") || u == "s" ? TimeSpan.FromSeconds(n) : u.StartsWith("ч") || u == "h" ? TimeSpan.FromHours(n) : TimeSpan.FromMinutes(n);
                 AppHost.Timer.StartNew(span);
-                Command.Text = "";
+                HideCommand();
                 AppHost.Window.Collapse();
                 return;
             }
@@ -218,14 +307,14 @@ namespace Isle.Views
                 ToastBus.Show(r == null
                     ? new Toast { Title = "Не понял, когда напомнить", Subtitle = "Например: «напомни позвонить маме завтра в 9»", Icon = Icons.Bell, Important = true, Duration = TimeSpan.FromSeconds(4) }
                     : new Toast { Kind = ToastKind.Success, Title = "Напомню " + r.WhenText, Subtitle = r.Text, Icon = Icons.Bell, Accent = System.Windows.Media.Color.FromRgb(0xFF, 0xB5, 0x47), Important = true });
-                Command.Text = "";
+                HideCommand();
                 AppHost.Window.Collapse();
                 return;
             }
 
             if (SystemControls.RunCommand(line))
             {
-                Command.Text = "";
+                HideCommand();
                 AppHost.Window.Collapse();
             }
         }

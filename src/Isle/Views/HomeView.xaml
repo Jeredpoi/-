@@ -19,6 +19,51 @@
         <!-- Плеер -->
         <Border Style="{StaticResource CardBox}" Padding="14">
             <Grid>
+            <!-- Пока ничего не играет: последние скопированные -->
+            <DockPanel x:Name="RecentPanel" Visibility="Collapsed">
+                <DockPanel DockPanel.Dock="Top" Margin="2,0,0,8">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="2" Click="OnOpenClipboard" ToolTip="Вся история">
+                        <h:Icon Kind="Next" Width="11" Height="11" Foreground="{StaticResource Muted}"/>
+                    </Button>
+                    <TextBlock Text="НЕДАВНО СКОПИРОВАНО" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                </DockPanel>
+                <TextBlock x:Name="RecentEmpty" DockPanel.Dock="Top" Style="{StaticResource MutedText}" Text="Включи музыку или скопируй что-нибудь — появится здесь" Margin="2,20,0,0"/>
+                <ItemsControl x:Name="Recent">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border x:Name="r" CornerRadius="10" Padding="8,6" Background="Transparent" Cursor="Hand" Tag="{Binding}" MouseLeftButtonUp="OnRecentClick">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Width="40" Height="28">
+                                        <Border x:Name="t" Width="28" Height="28" CornerRadius="7" Background="#222228" HorizontalAlignment="Left">
+                                            <TextBlock Text="T" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <Border x:Name="i" CornerRadius="6" ClipToBounds="True" Visibility="Collapsed">
+                                            <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Grid.Column="1" Text="{Binding Preview}" FontSize="13" Margin="10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding AgoText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsImage}" Value="True">
+                                    <Setter TargetName="t" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="i" Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <Trigger SourceName="r" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="r" Property="Background" Value="{StaticResource CardHover}"/>
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+            <Grid x:Name="PlayerPanel">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -64,6 +109,7 @@
                         <TextBlock x:Name="LyrSource" Text="LRCLIB" FontSize="9" Foreground="#4A4A52" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                     </Grid>
                 </Border>
+            </Grid>
             </Grid>
         </Border>
 
@@ -113,12 +159,37 @@
             </Button>
         </UniformGrid>
 
-        <!-- Командная строка -->
+        <!-- Ярлыки (перетащи программы, папки, файлы) и командная строка -->
         <Grid Grid.Row="4" Grid.ColumnSpan="3">
-            <TextBox x:Name="Command" Tag="Команда: приложение, сайт, 2+2*3, «таймер 10», «напомни … через 20 минут», &gt;cmd, ?поиск — Enter"
-                     KeyDown="OnCommandKey" Padding="38,10,10,10"/>
-            <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
-            <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}" IsHitTestVisible="False"/>
+            <Border x:Name="LauncherBox" Style="{StaticResource CardBox}" Padding="8" AllowDrop="True" Drop="OnLauncherDrop" Height="56">
+                <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="38" Height="38" CornerRadius="10" BorderBrush="#34343C" BorderThickness="1" Margin="0,0,10,0">
+                        <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
+                    </Border>
+                    <Grid>
+                        <TextBlock x:Name="LauncherHint" Text="Перетащи сюда ярлыки программ, папки или файлы" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                        <ItemsControl x:Name="Launcher">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource Ghost}" Width="40" Height="40" Margin="0,0,4,0" Padding="4" Tag="{Binding Path}"
+                                            ToolTip="{Binding Name}" Click="OnLaunch" MouseRightButtonUp="OnLaunchRemove">
+                                        <Image Source="{Binding Icon}" Width="28" Height="28"/>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </DockPanel>
+            </Border>
+            <Grid x:Name="CommandBox" Visibility="Collapsed">
+                <TextBox x:Name="Command" Tag="Команда: приложение, сайт, 2+2*3, «таймер 10», «напомни … через 20 минут», &gt;cmd, ?поиск — Enter · Esc — назад"
+                         KeyDown="OnCommandKey" Padding="38,17,10,17" LostKeyboardFocus="OnCommandLostFocus"/>
+                <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
+                <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}" IsHitTestVisible="False"/>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

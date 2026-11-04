@@ -29,9 +29,14 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <Border Width="28" Height="28" CornerRadius="8" Background="#222228" VerticalAlignment="Top">
-                                    <TextBlock Text="T" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <Grid VerticalAlignment="Top">
+                                    <Border x:Name="textIcon" Width="28" Height="28" CornerRadius="8" Background="#222228">
+                                        <TextBlock Text="T" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#222228" ClipToBounds="True" Visibility="Collapsed">
+                                        <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
+                                    </Border>
+                                </Grid>
                                 <StackPanel Grid.Column="1" Margin="12,0,8,0">
                                     <TextBlock Text="{Binding Preview}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding Meta}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2,0,0"/>
@@ -47,6 +52,10 @@
                             </Grid>
                         </Border>
                         <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsImage}" Value="True">
+                                <Setter TargetName="textIcon" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="imgIcon" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
                             <Trigger SourceName="row" Property="IsMouseOver" Value="True">
                                 <Setter TargetName="row" Property="Background" Value="{StaticResource CardHover}"/>
                                 <Setter TargetName="actions" Property="Visibility" Value="Visible"/>

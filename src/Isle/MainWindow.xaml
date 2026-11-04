@@ -35,6 +35,7 @@
                                 <Border x:Name="EyeR" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock x:Name="ClockText" Text="00:00" FontSize="13" FontWeight="SemiBold" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="BatteryMini" Text="" FontSize="13" Foreground="#B9B9C3" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <TextBlock x:Name="WeatherMini" Text="" FontSize="13" Foreground="#B9B9C3" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
 
@@ -120,6 +121,12 @@
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                                <Border x:Name="VpnChip" Background="#123A26" CornerRadius="13" Height="26" Padding="9,0" Margin="0,0,6,0" Visibility="Collapsed" ToolTip="VPN включён">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <h:Icon Kind="Shield" Width="12" Height="12" Foreground="{StaticResource Green}"/>
+                                        <TextBlock x:Name="VpnText" Text="VPN" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Green}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
                                 <ToggleButton x:Name="DndChip" Style="{StaticResource Chip}" Click="OnDnd" ToolTip="Не беспокоить: прятать всплывашки">
                                     <StackPanel Orientation="Horizontal">
                                         <h:Icon Kind="Moon" Width="12" Height="12"/>

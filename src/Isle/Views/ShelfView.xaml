@@ -33,10 +33,13 @@
                                     PreviewMouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove">
                                 <Grid>
                                     <StackPanel VerticalAlignment="Center" Margin="10">
-                                        <Border Width="44" Height="44" CornerRadius="10" Background="#222228" HorizontalAlignment="Center">
+                                        <Grid Width="44" Height="44" HorizontalAlignment="Center">
+                                        <Image x:Name="ico" Source="{Binding Icon}" Width="36" Height="36" Visibility="Collapsed"/>
+                                        <Border x:Name="extBox" Width="44" Height="44" CornerRadius="10" Background="#222228" HorizontalAlignment="Center">
                                             <TextBlock Text="{Binding Ext}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Accent}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="40"/>
                                         </Border>
+                                        </Grid>
                                         <TextBlock Text="{Binding Name}" FontSize="12" Margin="0,8,0,0" TextAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button x:Name="del" Style="{StaticResource Ghost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
@@ -46,6 +49,10 @@
                                 </Grid>
                             </Border>
                             <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding HasIcon}" Value="True">
+                                    <Setter TargetName="ico" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="extBox" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
                                 <Trigger SourceName="tile" Property="IsMouseOver" Value="True">
                                     <Setter TargetName="tile" Property="Background" Value="{StaticResource CardHover}"/>
                                     <Setter TargetName="del" Property="Visibility" Value="Visible"/>

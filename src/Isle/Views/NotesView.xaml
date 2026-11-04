@@ -29,10 +29,31 @@
                     <Button Style="{StaticResource Ghost}" Click="OnCopy" ToolTip="Скопировать заметку"><h:Icon Kind="Copy" Width="14" Height="14"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnDeleteNote" ToolTip="Удалить заметку"><h:Icon Kind="Trash" Width="14" Height="14"/></Button>
                 </StackPanel>
-                <TextBlock x:Name="Saved" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Text="Сохраняется само"/>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button Style="{StaticResource Ghost}" Click="OnBold" ToolTip="Жирный (Ctrl+B)"><h:Icon Kind="Bold" Width="13" Height="13"/></Button>
+                    <Button Style="{StaticResource Ghost}" Click="OnItalic" ToolTip="Курсив (Ctrl+I)"><h:Icon Kind="Italic" Width="13" Height="13"/></Button>
+                    <Button Style="{StaticResource Ghost}" Click="OnStrike" ToolTip="Зачеркнуть"><h:Icon Kind="Strike" Width="13" Height="13"/></Button>
+                    <Border Width="1" Height="14" Background="#2C2C33" Margin="6,0"/>
+                    <Button Style="{StaticResource Ghost}" Click="OnBullets" ToolTip="Список"><h:Icon Kind="ListBullet" Width="13" Height="13"/></Button>
+                    <Button Style="{StaticResource Ghost}" Click="OnNumbers" ToolTip="Нумерованный список"><h:Icon Kind="ListNumber" Width="13" Height="13"/></Button>
+                    <Button Style="{StaticResource Ghost}" Click="OnCheck" ToolTip="Чек-лист: ☐ / ☑"><h:Icon Kind="ListCheck" Width="13" Height="13"/></Button>
+                </StackPanel>
+                <TextBlock x:Name="Saved" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" Text="Сохраняется само"/>
             </DockPanel>
-            <TextBox x:Name="Editor" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
-                     Tag="Пиши сюда что угодно: номер заказа, список дел, кусок кода. Сохраняется само." TextChanged="OnEdit"/>
+            <Border Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="12">
+                <Grid>
+                    <TextBlock x:Name="EditorHint" Text="Пиши сюда что угодно: номер заказа, список дел, кусок кода. Сохраняется само."
+                               Foreground="#6F6F79" FontSize="13" Margin="14,10" TextWrapping="Wrap" IsHitTestVisible="False"/>
+                    <RichTextBox x:Name="Editor" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Fg}" CaretBrush="{StaticResource Fg}"
+                                 SelectionBrush="{StaticResource Blue}" FontSize="13" Padding="8,6" AcceptsTab="True"
+                                 VerticalScrollBarVisibility="Auto" TextChanged="OnEdit" PreviewMouseLeftButtonUp="OnEditorClick">
+                        <RichTextBox.Resources>
+                            <Style TargetType="Paragraph"><Setter Property="Margin" Value="0,0,0,4"/></Style>
+                            <Style TargetType="List"><Setter Property="Margin" Value="0,0,0,4"/><Setter Property="Padding" Value="22,0,0,0"/></Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </Grid>
+            </Border>
         </DockPanel>
 
         <!-- Таймер и напоминания -->

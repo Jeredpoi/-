@@ -68,8 +68,7 @@ namespace Isle.Views
         private void OnDelete(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.Tag is not ClipItem item) return;
-            AppHost.Clipboard.Items.Remove(item);
-            AppHost.Clipboard.Save();
+            AppHost.Clipboard.Remove(item);
         }
 
         private void OnClear(object sender, RoutedEventArgs e) => AppHost.Clipboard.Clear();

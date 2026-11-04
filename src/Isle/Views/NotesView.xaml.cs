@@ -3,6 +3,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
+using System.IO;
+using System.Text;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -61,15 +64,38 @@ namespace Isle.Views
         {
             _current = n;
             _loading = true;
-            Editor.Text = n.Text;
+            var doc = new FlowDocument { PagePadding = new Thickness(0), FontFamily = (FontFamily)FindResource("UiFont"), FontSize = 13 };
+            Editor.Document = doc;
+            var range = new TextRange(doc.ContentStart, doc.ContentEnd);
+            bool loaded = false;
+            if (!string.IsNullOrEmpty(n.Xaml))
+            {
+                try { range.Load(new MemoryStream(Encoding.UTF8.GetBytes(n.Xaml)), DataFormats.Xaml); loaded = true; }
+                catch { }
+            }
+            if (!loaded) range.Text = n.Text ?? "";
             _loading = false;
+            EditorHint.Visibility = PlainText().Length == 0 ? Visibility.Visible : Visibility.Collapsed;
             BuildTabs();
+        }
+
+        private string PlainText() => new TextRange(Editor.Document.ContentStart, Editor.Document.ContentEnd).Text.TrimEnd('\r', '\n');
+
+        private string DocXaml()
+        {
+            var range = new TextRange(Editor.Document.ContentStart, Editor.Document.ContentEnd);
+            using var ms = new MemoryStream();
+            range.Save(ms, DataFormats.Xaml);
+            return Encoding.UTF8.GetString(ms.ToArray());
         }
 
         private void OnEdit(object s, TextChangedEventArgs e)
         {
             if (_loading || _current == null) return;
-            _current.Text = Editor.Text;
+            var plain = PlainText();
+            EditorHint.Visibility = plain.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _current.Text = plain;
+            _current.Xaml = DocXaml();
             _current.Updated = DateTime.Now;
             Saved.Text = "Сохраняю…";
             _save.Stop(); _save.Start();
@@ -110,16 +136,60 @@ namespace Isle.Views
 
         private void OnCopy(object s, RoutedEventArgs e)
         {
-            if (Editor.Text.Length > 0) ClipboardService.SetText(Editor.Text);
+            var t = PlainText();
+            if (t.Length > 0) ClipboardService.SetText(t);
         }
 
         private void OnRemindLine(object s, RoutedEventArgs e)
         {
-            int line = Editor.GetLineIndexFromCharacterIndex(Editor.CaretIndex);
-            var text = line >= 0 ? Editor.GetLineText(line).Trim() : "";
+            var p = Editor.CaretPosition.Paragraph;
+            var text = p == null ? "" : new TextRange(p.ContentStart, p.ContentEnd).Text.Trim().TrimStart('☐', '☑').Trim();
             if (text.Length == 0) return;
             RemInput.Text = text;
             AddReminder();
+        }
+
+        // ---------- Форматирование ----------
+
+        private void OnBold(object s, RoutedEventArgs e) { EditingCommands.ToggleBold.Execute(null, Editor); Editor.Focus(); }
+        private void OnItalic(object s, RoutedEventArgs e) { EditingCommands.ToggleItalic.Execute(null, Editor); Editor.Focus(); }
+        private void OnBullets(object s, RoutedEventArgs e) { EditingCommands.ToggleBullets.Execute(null, Editor); Editor.Focus(); }
+        private void OnNumbers(object s, RoutedEventArgs e) { EditingCommands.ToggleNumbering.Execute(null, Editor); Editor.Focus(); }
+
+        private void OnStrike(object s, RoutedEventArgs e)
+        {
+            var sel = Editor.Selection;
+            var cur = sel.GetPropertyValue(Inline.TextDecorationsProperty);
+            bool has = cur is TextDecorationCollection c && c.Count > 0;
+            sel.ApplyPropertyValue(Inline.TextDecorationsProperty, has ? new TextDecorationCollection() : TextDecorations.Strikethrough);
+            Editor.Focus();
+        }
+
+        /// <summary>Ставит или убирает «☐ » в начале текущей строки.</summary>
+        private void OnCheck(object s, RoutedEventArgs e)
+        {
+            var p = Editor.CaretPosition.Paragraph;
+            if (p == null) { Editor.CaretPosition.InsertTextInRun("☐ "); return; }
+            var start = p.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+            var two = start.GetPositionAtOffset(2);
+            var head = two == null ? "" : new TextRange(start, two).Text;
+            if (head == "☐ " || head == "☑ ") new TextRange(start, two).Text = "";
+            else start.InsertTextInRun("☐ ");
+            Editor.Focus();
+        }
+
+        /// <summary>Клик по ☐ / ☑ в начале строки переключает галочку.</summary>
+        private void OnEditorClick(object s, MouseButtonEventArgs e)
+        {
+            var pos = Editor.GetPositionFromPoint(e.GetPosition(Editor), false);
+            var p = pos?.Paragraph;
+            if (p == null) return;
+            var start = p.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+            var one = start.GetPositionAtOffset(1);
+            if (one == null || pos.CompareTo(start.GetPositionAtOffset(2) ?? one) > 0) return;
+            var r = new TextRange(start, one);
+            if (r.Text == "☐") r.Text = "☑";
+            else if (r.Text == "☑") r.Text = "☐";
         }
 
         // ---------- Таймер ----------

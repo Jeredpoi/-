@@ -81,6 +81,15 @@ namespace Isle.Services
         public const string Close = "M18 6L6 18M6 6l12 12";
         public const string Terminal = "M4 17l6-6-6-6M12 19h8";
         public const string Folder = "M3 6h6l2 2h10v11H3z";
+        public const string Shield = "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10";
+        public const string Bold = "M6 4h8a4 4 0 0 1 0 8H6zM6 12h9a4 4 0 0 1 0 8H6z";
+        public const string Italic = "M19 4h-9M14 20H5M15 4L9 20";
+        public const string Strike = "M16 4H9a3 3 0 0 0-2.8 4M14 12a4 4 0 0 1 0 8H6M4 12h16";
+        public const string ListBullet = "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01";
+        public const string ListNumber = "M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1";
+        public const string ListCheck = "M3 6l2 2 3-3M3 13l2 2 3-3M11 7h10M11 14h10M11 20h10";
+        public const string Battery2 = "M2 7h16v10H2zM22 11v2";
+        public const string MapPin = "M12 22s7-6.3 7-12a7 7 0 1 0-14 0c0 5.7 7 12 7 12M12 7a3 3 0 1 0 0 6a3 3 0 1 0 0-6";
         public const string Mic = "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3M19 10v2a7 7 0 0 1-14 0v-2M12 19v3";
     }
 }

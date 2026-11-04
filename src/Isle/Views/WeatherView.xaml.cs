@@ -31,7 +31,7 @@ namespace Isle.Views
             Temp.Text = Math.Round(w.Temp) + "°";
             Desc.Text = w.Description;
             Feels.Text = "Ощущается как " + Math.Round(w.Feels) + "° · " + Math.Round(w.TodayMin) + "°…" + Math.Round(w.TodayMax) + "°";
-            Wind.Text = w.Wind.ToString("0.#", CultureInfo.CurrentCulture) + " м/с";
+            Wind.Text = w.Wind.ToString("0.#", CultureInfo.CurrentCulture) + " м/с " + w.WindFrom;
             Hum.Text = w.Humidity + "%";
             Prec.Text = w.Precip.ToString("0.#", CultureInfo.CurrentCulture) + " мм";
             Sun.Text = "Восход " + w.Sunrise.ToString("HH:mm") + " · закат " + w.Sunset.ToString("HH:mm");
