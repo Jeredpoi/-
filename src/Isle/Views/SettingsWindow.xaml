@@ -40,8 +40,8 @@
                                 <Setter TargetName="b" Property="Background" Value="#232328"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#ECECF1"/>
-                                <Setter TargetName="b" Property="BorderBrush" Value="#ECECF1"/>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource Accent}"/>
+                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Accent}"/>
                                 <Setter Property="Foreground" Value="#000000"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -222,7 +222,8 @@
                     <Border Background="#0E0E10" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="16" Height="150" Margin="0,0,0,14">
                         <Grid>
                             <Border x:Name="Preview" Background="Black" CornerRadius="0,0,16,16" HorizontalAlignment="Center" VerticalAlignment="Top"
-                                    Height="34" Padding="16,0" BorderBrush="#26262B" BorderThickness="1,0,1,1">
+                                    Height="34" Padding="16,0" BorderBrush="#26262B" BorderThickness="1,0,1,1" MouseEnter="OnPreviewEnter" MouseLeave="OnPreviewLeave">
+                                <Border.LayoutTransform><ScaleTransform x:Name="PreviewScale" ScaleX="1" ScaleY="1"/></Border.LayoutTransform>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <h:Character x:Name="PreviewBuddy" Width="30" Height="22" Margin="0,0,10,0"/>
                                     <StackPanel x:Name="PreviewEyes" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
@@ -231,6 +232,14 @@
                                     </StackPanel>
                                     <TextBlock x:Name="PreviewTime" Text="12:19" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                     <TextBlock Text=" · 18°" Foreground="#A1A1AB" VerticalAlignment="Center"/>
+                                    <!-- полоски музыки цвета акцента — видно, как меняется акцент -->
+                                    <StackPanel x:Name="PreviewBars" Orientation="Horizontal" VerticalAlignment="Center" Height="16" Margin="12,0,0,0">
+                                        <Border Width="3" Height="6" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom"/>
+                                        <Border Width="3" Height="12" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                        <Border Width="3" Height="9" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                        <Border Width="3" Height="14" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                        <Border Width="3" Height="8" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                             <TextBlock Text="Свёрнутый остров" FontSize="11" Foreground="#6F6F79" VerticalAlignment="Bottom" Margin="14,0,0,10"/>
@@ -536,7 +545,7 @@
                             </Grid>
                             <Grid x:Name="UpdProgress" Height="6" Margin="0,14,0,0" Visibility="Collapsed">
                                 <Border CornerRadius="3" Background="#26262B"/>
-                                <Border x:Name="UpdBar" CornerRadius="3" Background="{StaticResource Accent}" HorizontalAlignment="Left" Width="0"/>
+                                <Border x:Name="UpdBar" CornerRadius="3" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
                             </Grid>
                             <TextBlock x:Name="UpdNotes" Style="{StaticResource RowNote}" Margin="0,14,0,0" Visibility="Collapsed" FontFamily="Consolas, Segoe UI"/>
                         </StackPanel>

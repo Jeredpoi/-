@@ -488,7 +488,7 @@ namespace Isle
             UpdateMini();
             return mode switch
             {
-                "bars" => (150, 34),
+                "bars" => (170, 34),
                 "mini" => (440, 64),
                 "lyrics" => (hasLyrics ? 440 : 340, 36),
                 _ => (340, 42)
@@ -721,9 +721,8 @@ namespace Isle
             try
             {
                 var c = (Color)ColorConverter.ConvertFromString(s.AccentHex);
-                if (Application.Current.Resources["Accent"] is SolidColorBrush b && !b.IsFrozen) b.Color = c;
-                else Application.Current.Resources["Accent"] = new SolidColorBrush(c);
-                foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3 }) bar.Background = new SolidColorBrush(c);
+                Application.Current.Resources["Accent"] = new SolidColorBrush(c); // все {DynamicResource Accent} обновятся сразу
+                foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Background = new SolidColorBrush(c);
             }
             catch { }
             byte a = (byte)Math.Round(255 * Math.Clamp(s.IslandOpacity, 0.5, 1.0));
@@ -738,6 +737,18 @@ namespace Isle
         }
 
         private bool _aiBusy;
+
+        /// <summary>Клоди одевается по погоде за окном.</summary>
+        public static Helpers.Outfit OutfitForWeather()
+        {
+            var w = AppHost.Weather;
+            if (w == null) return Helpers.Outfit.None;
+            bool rain = w.Code >= 51 && w.Code <= 67 || w.Code >= 80 && w.Code <= 82 || w.Code >= 95;
+            if (rain) return Helpers.Outfit.Rain;
+            if (w.Temp <= 3 || w.Code >= 71 && w.Code <= 77 || w.Code == 85 || w.Code == 86) return Helpers.Outfit.Winter;
+            if (w.Temp >= 25) return Helpers.Outfit.Summer;
+            return Helpers.Outfit.None;
+        }
         private bool _pulsing;
 
         /// <summary>Будильник: чёлка переливается красным и серым и чуть «дышит».</summary>
@@ -1095,11 +1106,12 @@ namespace Isle
                     : idle > TimeSpan.FromMinutes(5) ? Helpers.Mood.Sleep
                     : DateTime.Now < _workingUntil ? Helpers.Mood.Working
                     : Helpers.Mood.Idle;
-                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; }
+                var outfit = OutfitForWeather();
+                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; b.Outfit = outfit; }
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {
-                var bars = new[] { Bar0, Bar1, Bar2, Bar3 };
+                var bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 };
                 var spec = AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
                 float peak = AppHost.Audio?.Peak ?? 0;
                 for (int i = 0; i < bars.Length; i++)
@@ -1107,15 +1119,17 @@ namespace Isle
                     double level;
                     if (spec != null)
                     {
-                        // 4 полоски = 4 части спектра: басы → высокие
-                        int from = i * spec.Length / 4, to = (i + 1) * spec.Length / 4;
-                        double mx = 0;
-                        for (int b = from; b < to; b++) mx = Math.Max(mx, spec[b]);
-                        level = mx;
+                        // 6 полосок = 6 частей спектра: басы слева → высокие справа (среднее по своей части)
+                        int from = i * spec.Length / bars.Length, to = (i + 1) * spec.Length / bars.Length;
+                        double sum = 0;
+                        for (int b = from; b < to; b++) sum += spec[b];
+                        level = sum / Math.Max(1, to - from);
                     }
                     else level = peak * (0.55 + _rnd.NextDouble() * 0.6);
-                    double target = 3 + Math.Min(13, level * 14);
-                    bars[i].Height = bars[i].Height + (target - bars[i].Height) * 0.55;
+                    double target = 3 + Math.Min(15, level * 15);
+                    // вверх быстро, вниз плавно — как у настоящего эквалайзера
+                    double k = target > bars[i].Height ? 0.75 : 0.28;
+                    bars[i].Height = bars[i].Height + (target - bars[i].Height) * k;
                 }
             }
             else if (IdleRow.Visibility == Visibility.Visible && DateTime.Now >= _nextBlink)

@@ -99,7 +99,7 @@
     </Style>
 
     <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Flat}">
-        <Setter Property="Background" Value="{StaticResource Accent}"/>
+        <Setter Property="Background" Value="{DynamicResource Accent}"/>
         <Setter Property="Foreground" Value="#08080A"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -162,7 +162,7 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="b" Property="Background" Value="#26262B"/>
-                            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -245,7 +245,7 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="track" Property="Background" Value="#ECECF1"/>
+                            <Setter TargetName="track" Property="Background" Value="{DynamicResource Accent}"/>
                             <Setter TargetName="knob" Property="Fill" Value="#000000"/>
                             <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
                         </Trigger>
@@ -263,7 +263,8 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
-                    <Grid Height="16" Background="Transparent">
+                    <!-- высокая прозрачная область: за ползунок легко схватиться, видна только тонкая полоска -->
+                    <Grid Height="30" Background="Transparent">
                         <Border x:Name="track" Height="4" CornerRadius="2" Background="#2A2A30" VerticalAlignment="Center"/>
                         <Track x:Name="PART_Track" VerticalAlignment="Center">
                             <Track.DecreaseRepeatButton>
@@ -289,7 +290,7 @@
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <!-- невидимая «ручка»: за неё можно тянуть, но её не видно -->
-                                            <Border Width="10" Height="16" Background="Transparent">
+                                            <Border Width="24" Height="30" Background="Transparent">
                                                 <Border Width="2" Height="4" CornerRadius="0,2,2,0" Background="{DynamicResource Accent}" HorizontalAlignment="Left"/>
                                             </Border>
                                         </ControlTemplate>

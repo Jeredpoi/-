@@ -8,6 +8,9 @@ namespace Isle.Helpers
 {
     public enum Mood { Idle, Music, Thinking, Done, Attention, Sleep, Working }
 
+    /// <summary>Одежда по погоде: шапка и шарф в холод, очки и зонтик от солнца в жару, зонт в дождь.</summary>
+    public enum Outfit { None, Winter, Summer, Rain }
+
     /// <summary>
     /// Клоди — пиксельный оранжевый дружок в духе маскота Claude Code. Живёт в чёлке.
     /// Глазки следят за курсором и моргают; под музыку пляшет, когда ИИ думает — глаза бегают
@@ -44,6 +47,12 @@ namespace Isle.Helpers
 
         /// <summary>Громкость музыки 0..1 — пляшет в такт.</summary>
         public float Beat { get; set; }
+        public Outfit Outfit { get; set; }
+
+        /// <summary>Своё занятие в покое: стоит, сидит или оглядывается — меняется само раз в полминуты.</summary>
+        private int _activity;
+        private DateTime _nextActivity = DateTime.Now.AddSeconds(20);
+
         /// <summary>Следить глазами за курсором.</summary>
         public bool FollowCursor { get; set; } = true;
 
@@ -131,6 +140,21 @@ namespace Isle.Helpers
             else _blink += (1 - _blink) * 0.2;
 
             if (_cheer > 0) _cheer = Math.Max(0, _cheer - 0.035);
+            if (mood == Mood.Idle && DateTime.Now >= _nextActivity)
+            {
+                _activity = _rnd.Next(3); // 0 — стоит, 1 — сидит, 2 — оглядывается
+                _nextActivity = DateTime.Now.AddSeconds(18 + _rnd.Next(25));
+                if (_activity == 2) _nextWander = DateTime.Now;
+            }
+            if (mood == Mood.Idle && _activity == 2)
+            {
+                if (DateTime.Now >= _nextWander)
+                {
+                    _nextWander = DateTime.Now.AddSeconds(0.8 + _rnd.NextDouble() * 1.5);
+                    _wander = new Point(_rnd.NextDouble() * 2 - 1, _rnd.NextDouble() * 1.2 - 0.5);
+                }
+                _lookX += (_wander.X - _lookX) * 0.2; _lookY += (_wander.Y - _lookY) * 0.2;
+            }
             _bob += ((mood == Mood.Music ? Math.Min(1, Beat * 2.2) : 0) - _bob) * 0.5;
         }
 
@@ -146,11 +170,14 @@ namespace Isle.Helpers
             {
                 case Mood.Idle:
                     dy = Math.Sin(_time * 2.2) * 0.35 * px; // дышит
+                    if (_activity == 1) dy += 1.0 * px;   // сидит — чуть ниже
                     break;
                 case Mood.Music:
-                    dy = -_bob * 1.6 * px + Math.Sin(_time * 9) * 0.3 * px;
-                    tilt = Math.Sin(_time * 6) * 6;
-                    step = Math.Sin(_time * 12) > 0;
+                    // танцует всегда, даже на тихих местах; под громкие доли прыгает выше
+                    dy = -(Math.Abs(Math.Sin(_time * 7.5)) * 1.1 + _bob * 1.4) * px;
+                    tilt = Math.Sin(_time * 3.75) * 9;
+                    dx = Math.Sin(_time * 3.75) * 0.8 * px;
+                    step = Math.Sin(_time * 7.5) > 0;
                     break;
                 case Mood.Thinking:
                     dy = Math.Sin(_time * 1.5) * 0.3 * px;
@@ -184,6 +211,10 @@ namespace Isle.Helpers
                     char c = row[x];
                     if (c == '.') continue;
                     double cy = y;
+                    if (c == 'l' && mood == Mood.Idle && _activity == 1)
+                    {
+                        if (y == 8) continue; // сидит: ножки поджаты
+                    }
                     if (c == 'l')
                     {
                         // шаг: пары ножек по очереди поднимаются
@@ -206,17 +237,61 @@ namespace Isle.Helpers
                 }
             }
 
+            // ---- одежда по погоде
+            bool glasses = false;
+            if (Outfit == Outfit.Winter)
+            {
+                var hat = new SolidColorBrush(Color.FromRgb(0x3B, 0x6F, 0xD9));
+                var band = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
+                for (int x = 2; x <= 10; x++) dc.DrawRectangle(hat, null, new Rect(ox + x * px, oy - 1 * px, px + 0.35, px + 0.35));
+                for (int x = 3; x <= 9; x++) dc.DrawRectangle(hat, null, new Rect(ox + x * px, oy - 2 * px, px + 0.35, px + 0.35));
+                for (int x = 2; x <= 10; x++) dc.DrawRectangle(band, null, new Rect(ox + x * px, oy + 0 * px, px + 0.35, px * 0.6));
+                dc.DrawRectangle(band, null, new Rect(ox + 6 * px, oy - 3 * px, px + 0.35, px + 0.35)); // помпон
+                var scarf = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+                for (int x = 2; x <= 10; x++) dc.DrawRectangle(scarf, null, new Rect(ox + x * px, oy + 4 * px, px + 0.35, px + 0.35));
+                dc.DrawRectangle(scarf, null, new Rect(ox + 9 * px, oy + 5 * px, px + 0.35, 2 * px));          // кончик шарфа
+            }
+            else if (Outfit == Outfit.Summer)
+            {
+                glasses = true;
+                var lens = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0C));
+                dc.DrawRectangle(lens, null, new Rect(ox + 3 * px, oy + 2 * px, 3 * px, 1.6 * px));
+                dc.DrawRectangle(lens, null, new Rect(ox + 7 * px, oy + 2 * px, 3 * px, 1.6 * px));
+                dc.DrawRectangle(lens, null, new Rect(ox + 6 * px, oy + 2.3 * px, px, 0.5 * px));
+                var shine = new SolidColorBrush(Color.FromArgb(160, 255, 255, 255));
+                dc.DrawRectangle(shine, null, new Rect(ox + 3.4 * px, oy + 2.3 * px, 0.6 * px, 0.4 * px));
+                dc.DrawRectangle(shine, null, new Rect(ox + 7.4 * px, oy + 2.3 * px, 0.6 * px, 0.4 * px));
+            }
+            else if (Outfit == Outfit.Rain)
+            {
+                var canopy = new SolidColorBrush(Color.FromRgb(0x5B, 0x6C, 0xF0));
+                for (int x = 1; x <= 11; x++) dc.DrawRectangle(canopy, null, new Rect(ox + x * px, oy - 2 * px, px + 0.35, px + 0.35));
+                for (int x = 3; x <= 9; x++) dc.DrawRectangle(canopy, null, new Rect(ox + x * px, oy - 3 * px, px + 0.35, px + 0.35));
+                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x95)), null, new Rect(ox + 6 * px, oy - 1 * px, px * 0.6, px));
+            }
+
             // ---- глаза: двигаются за взглядом, моргают
             var eye = Brushes.Black;
             double ex = _lookX * 0.85 * px, ey = _lookY * 0.55 * px;
             double eh = 2 * px * (1 - _blink);
-            foreach (var e in new[] { EyeL, EyeR })
+            foreach (var e in glasses ? Array.Empty<Point>() : new[] { EyeL, EyeR })
             {
                 double x = ox + e.X * px + ex, y = oy + e.Y * px + ey;
                 if (eh < 0.45 * px) dc.DrawRectangle(eye, null, new Rect(x - 0.15 * px, y + 1.2 * px, px * 1.3, Math.Max(0.4, 0.35 * px)));
                 else dc.DrawRectangle(eye, null, new Rect(x, y + (2 * px - eh) / 2, px, eh));
             }
             dc.Pop();
+
+            // ---- пляжный зонтик рядом в жару
+            if (Outfit == Outfit.Summer && (mood == Mood.Idle || mood == Mood.Sleep))
+            {
+                var red = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
+                var white = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
+                double ux = ox + 13 * px, uy = oy - 2 * px;
+                for (int i = 0; i < 5; i++) dc.DrawRectangle(i % 2 == 0 ? red : white, null, new Rect(ux + i * px, uy, px + 0.35, px + 0.35));
+                for (int i = 1; i < 4; i++) dc.DrawRectangle(i % 2 == 0 ? red : white, null, new Rect(ux + i * px, uy - px, px + 0.35, px + 0.35));
+                dc.DrawRectangle(white, null, new Rect(ux + 2.2 * px, uy + px, px * 0.5, 8.5 * px));
+            }
 
             // ---- ноутбук перед Клоди
             if (mood == Mood.Working)

@@ -21,6 +21,7 @@ namespace Isle.Services
         private int _samplesSinceFft;
         private readonly Complex[] _fft = new Complex[FftSize];
         private readonly float[] _bands = new float[BandCount];
+        private readonly float[] _norm = new float[BandCount];
         private int _sampleRate = 48000;
         private readonly object _lock = new();
 
@@ -110,13 +111,22 @@ namespace Isle.Services
                 double db = 20 * Math.Log10(acc + 1e-9) + b * 0.55;
                 fresh[b] = (float)Math.Clamp((db + 62) / 52.0, 0, 1);
             }
+            // Своя «громкость» для каждой полосы: запоминаем недавний максимум и делим на него.
+            // Иначе высокие частоты всегда почти нулевые, а басы — всегда в потолок.
+            for (int b = 0; b < BandCount; b++)
+            {
+                _norm[b] = Math.Max(fresh[b], _norm[b] * 0.996f);
+                float floor = _norm[b] * 0.35f;                       // «тишина» для этой полосы
+                float v = _norm[b] > 0.05f ? (fresh[b] - floor) / Math.Max(0.08f, _norm[b] - floor) : 0;
+                fresh[b] = Math.Clamp(v, 0, 1);
+            }
             lock (_lock)
             {
                 for (int b = 0; b < BandCount; b++)
                 {
                     // быстро вверх, медленно вниз
                     float cur = _bands[b];
-                    _bands[b] = fresh[b] > cur ? cur + (fresh[b] - cur) * 0.65f : cur * 0.86f + fresh[b] * 0.14f;
+                    _bands[b] = fresh[b] > cur ? cur + (fresh[b] - cur) * 0.7f : cur * 0.82f + fresh[b] * 0.18f;
                 }
             }
         }

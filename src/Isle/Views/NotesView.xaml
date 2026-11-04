@@ -66,7 +66,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid Width="84" Height="84">
                         <Ellipse Stroke="#26262B" StrokeThickness="5"/>
-                        <Path x:Name="Ring" Stroke="{StaticResource Accent}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        <Path x:Name="Ring" Stroke="{DynamicResource Accent}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <TextBlock x:Name="TimeText" Text="5:00" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
                     <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">

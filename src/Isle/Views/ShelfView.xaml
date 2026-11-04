@@ -36,7 +36,7 @@
                                         <Grid Width="44" Height="44" HorizontalAlignment="Center">
                                         <Image x:Name="ico" Source="{Binding Icon}" Width="36" Height="36" Visibility="Collapsed"/>
                                         <Border x:Name="extBox" Width="44" Height="44" CornerRadius="10" Background="#1C1C20" HorizontalAlignment="Center">
-                                            <TextBlock Text="{Binding Ext}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Accent}"
+                                            <TextBlock Text="{Binding Ext}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="40"/>
                                         </Border>
                                         </Grid>

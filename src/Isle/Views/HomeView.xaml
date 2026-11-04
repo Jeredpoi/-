@@ -228,7 +228,7 @@
                 <TextBox x:Name="Command" Tag="Команда: приложение, сайт, 2+2*3, «таймер 10», «напомни … через 20 минут», &gt;cmd, ?поиск — Enter · Esc — назад"
                          KeyDown="OnCommandKey" Padding="38,17,10,17" LostKeyboardFocus="OnCommandLostFocus"/>
                 <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
-                <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}" IsHitTestVisible="False"/>
+                <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" IsHitTestVisible="False"/>
             </Grid>
         </Grid>
     </Grid>

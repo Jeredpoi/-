@@ -319,6 +319,7 @@ namespace Isle.Views
             S.Scale = e.NewValue / 100.0;
             S.Save();
             AppHost.Window.ApplyScale();
+            UpdatePreview();
         }
 
         private void OnOpacity(object s, RoutedPropertyChangedEventArgs<double> e)
@@ -332,10 +333,25 @@ namespace Isle.Views
             AppHost.Window.ApplyAppearance();
         }
 
+        /// <summary>Превью ведёт себя как настоящий остров: «набухает» при наведении.</summary>
+        private void OnPreviewEnter(object s, System.Windows.Input.MouseEventArgs e) => AnimatePreview(1.08);
+        private void OnPreviewLeave(object s, System.Windows.Input.MouseEventArgs e) => AnimatePreview(1.0);
+
+        private void AnimatePreview(double k)
+        {
+            double sc = (ScaleSlider?.Value ?? 100) / 100.0 * k;
+            var ease = new Helpers.Spring { Damping = 9, Frequency = 9 };
+            var d = TimeSpan.FromMilliseconds(420);
+            PreviewScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, d) { EasingFunction = ease });
+            PreviewScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, d) { EasingFunction = ease });
+        }
+
         private void UpdatePreview()
         {
             if (Preview == null) return;
+            if (PreviewScale != null && ScaleSlider != null) AnimatePreview(1.0); // размер в превью — сразу
             PreviewBuddy.Visibility = S.Character == "pixel" ? Visibility.Visible : Visibility.Collapsed;
+            PreviewBuddy.Outfit = MainWindow.OutfitForWeather();
             PreviewEyes.Visibility = S.Character == "eyes" ? Visibility.Visible : Visibility.Collapsed;
             Preview.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * Math.Clamp(S.IslandOpacity, 0.5, 1)), 0, 0, 0));
             PreviewTime.Text = DateTime.Now.ToString("HH:mm");
