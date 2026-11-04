@@ -23,6 +23,8 @@ namespace Isle.Views
         {
             InitializeComponent();
             SourceInitialized += (_, __) => DarkTitleBar();
+            // после сворачивания/перекрытия перерисовываем окно целиком, без «застрявших» кусков
+            Activated += (_, __) => InvalidateVisual();
             BuildPresets();
             BuildAccents();
             BuildKeys();
@@ -99,8 +101,14 @@ namespace Isle.Views
                 int on = 1;
                 DwmSetWindowAttribute(h, 20, ref on, 4); // DWMWA_USE_IMMERSIVE_DARK_MODE (Win10 20H1+ / Win11)
                 DwmSetWindowAttribute(h, 19, ref on, 4); // то же для старых сборок Windows 10
-                int none = 1;
-                DwmSetWindowAttribute(h, 38, ref none, 4); // без Mica/Acrylic — фон окна ровно наш, без осветления
+                // Окно рисуем программно и с непрозрачным тёмным фоном: на части видеокарт/HDR-мониторов
+                // аппаратная отрисовка WPF давала «молочную» белёсую пелену поверх всего окна,
+                // а чистыми оставались только перерисованные куски.
+                if (HwndSource.FromHwnd(h)?.CompositionTarget is HwndTarget t)
+                {
+                    t.RenderMode = RenderMode.SoftwareOnly;
+                    t.BackgroundColor = Color.FromRgb(0x0A, 0x0A, 0x0C);
+                }
                 int caption = 0x000C0A0A;             // цвет заголовка #0A0A0C (формат 0x00BBGGRR)
                 DwmSetWindowAttribute(h, 35, ref caption, 4);
                 int text = 0x00F1ECEC;
