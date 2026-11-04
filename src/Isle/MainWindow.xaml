@@ -9,7 +9,7 @@
         AllowDrop="True">
     <Grid x:Name="Root">
         <!-- Невидимая полоса у верхнего края: в OLED-режиме при наведении показывает чёлку -->
-        <Border x:Name="EdgeStrip" Height="4" Width="520" VerticalAlignment="Top" HorizontalAlignment="Center"
+        <Border x:Name="EdgeStrip" Height="4" VerticalAlignment="Top" HorizontalAlignment="Stretch"
                 Background="#01000000" Visibility="Collapsed"/>
 
         <Grid x:Name="Scaler" VerticalAlignment="Top" HorizontalAlignment="Center">

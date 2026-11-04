@@ -37,8 +37,13 @@ namespace Isle
         private DateTime _nextBlink = DateTime.Now.AddSeconds(3);
         private bool _oledHidden;
         private bool _fullscreenHidden;
+        private bool _fullscreenPeek;
+        private readonly DispatcherTimer _peekTimer = new();
+        private readonly DispatcherTimer _topmost = new() { Interval = TimeSpan.FromSeconds(2) };
         private bool _pinned;
         private string _currentTab = "home";
+        /// <summary>Вкладки нельзя строить, пока не созданы сервисы (RadioButton шлёт Checked прямо из InitializeComponent).</summary>
+        private bool _ready;
 
         public IslandState State { get; private set; } = IslandState.Collapsed;
         /// <summary>Окно, которое было активным до того, как пользователь кликнул в остров (туда вставляем из буфера).</summary>
@@ -112,7 +117,20 @@ namespace Isle
             };
             Island.PreviewMouseLeftButtonDown += OnIslandMouseDown;
             Island.MouseRightButtonUp += OnIslandRightClick;
-            EdgeStrip.MouseEnter += (_, __) => OledReveal();
+            EdgeStrip.MouseEnter += (_, __) =>
+            {
+                if (_fullscreenHidden) PeekOverFullscreen();
+                else OledReveal();
+            };
+            _peekTimer.Tick += (_, __) =>
+            {
+                if (Island.IsMouseOver || State == IslandState.Expanded) return; // пока пользуются — не прячем
+                _peekTimer.Stop();
+                _fullscreenPeek = false;
+                ApplyVisibility();
+            };
+            // Другие программы (Fences, виджеты, плееры) тоже ставят себя «поверх всех» — возвращаем остров наверх.
+            _topmost.Tick += (_, __) => KeepOnTop();
             Deactivated += (_, __) =>
             {
                 MakeNoActivate(true);
@@ -124,11 +142,15 @@ namespace Isle
             Island.DragLeave += (_, __) => DropHint.Visibility = Visibility.Collapsed;
             Island.Drop += OnDrop;
 
+            _ready = true;
+
             Loaded += async (_, __) =>
             {
                 PlaceWindow();
                 Clock();
                 _clock.Start();
+                _topmost.Start();
+                KeepOnTop();
                 _anim.Start();
                 AppHost.Watchers.Start();
                 AppHost.Vpn.Start();
@@ -347,6 +369,7 @@ namespace Isle
 
         private void OnTab(object sender, RoutedEventArgs e)
         {
+            if (!_ready) return;
             if (sender == TabHome) SelectTab("home");
             else if (sender == TabClip) SelectTab("clip");
             else if (sender == TabShelf) SelectTab("shelf");
@@ -516,7 +539,40 @@ namespace Isle
 
         private void ApplyVisibility()
         {
-            Scaler.Visibility = _fullscreenHidden && State != IslandState.Expanded ? Visibility.Hidden : Visibility.Visible;
+            bool hide = _fullscreenHidden && !_fullscreenPeek && State != IslandState.Expanded;
+            Scaler.Visibility = hide ? Visibility.Hidden : Visibility.Visible;
+            // Полоса у края остаётся: навёл курсор наверх — остров выглянет даже поверх полноэкранного окна.
+            if (hide) EdgeStrip.Visibility = Visibility.Visible;
+            else if (!_oledHidden) EdgeStrip.Visibility = Visibility.Collapsed;
+        }
+
+        private void PeekOverFullscreen()
+        {
+            _fullscreenPeek = true;
+            ApplyVisibility();
+            KeepOnTop();
+            _peekTimer.Stop();
+            _peekTimer.Interval = TimeSpan.FromSeconds(Math.Max(3, AppSettings.Current.OledRevealSeconds));
+            _peekTimer.Start();
+        }
+
+        private void KeepOnTop()
+        {
+            if (_hwnd == IntPtr.Zero || !IsVisible) return;
+            // HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER
+            SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010 | 0x0200);
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+        /// <summary>Показать остров (вызывается при повторном запуске exe и из значка в трее).</summary>
+        public void BringUp(string tab = null)
+        {
+            Visibility = Visibility.Visible;
+            if (_fullscreenHidden) PeekOverFullscreen();
+            KeepOnTop();
+            Expand(tab);
         }
 
         // ===================== Таймеры =====================

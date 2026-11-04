@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Threading;
@@ -122,13 +123,24 @@ namespace Isle.Services
 
         public void CheckFullscreenNow() => Slow();
 
+        /// <summary>
+        /// Процессы рабочего стола, которые растягивают окно на весь экран, но играми/видео не являются
+        /// (Fences, обои, виджеты). Из-за них остров раньше ошибочно прятался.
+        /// </summary>
+        private static readonly string[] DesktopTools =
+        {
+            "explorer", "fences", "fencessrv", "fencesmenu64", "desktopfences", "stardock", "objectdock", "start11",
+            "rainmeter", "wallpaper32", "wallpaper64", "wallpaperengine", "lively", "livelywpf", "deskscapes",
+            "nimi places", "tidytabs", "groupy", "displayfusion", "translucenttb", "roundedtb", "isle"
+        };
+
         private static bool IsForegroundFullscreen()
         {
             try
             {
                 if (Win32.SHQueryUserNotificationState(out int state) == 0)
                 {
-                    // 3 = QUNS_RUNNING_D3D_FULL_SCREEN, 4 = QUNS_PRESENTATION_MODE
+                    // 3 = QUNS_RUNNING_D3D_FULL_SCREEN (игры), 4 = QUNS_PRESENTATION_MODE
                     if (state == 3 || state == 4) return true;
                 }
                 var fg = Win32.GetForegroundWindow();
@@ -136,7 +148,11 @@ namespace Isle.Services
                 var cls = new StringBuilder(64);
                 Win32.GetClassName(fg, cls, cls.Capacity);
                 var c = cls.ToString();
-                if (c == "WorkerW" || c == "Progman" || c == "Shell_TrayWnd") return false;
+                if (c == "WorkerW" || c == "Progman" || c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd") return false;
+
+                var proc = ProcessOf(fg);
+                if (DesktopTools.Any(t => proc.StartsWith(t))) return false;
+
                 if (!Win32.GetWindowRect(fg, out var r)) return false;
                 var mon = Win32.MonitorFromWindow(fg, 2);
                 var mi = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
@@ -145,6 +161,17 @@ namespace Isle.Services
                        r.Right >= mi.rcMonitor.Right && r.Bottom >= mi.rcMonitor.Bottom;
             }
             catch { return false; }
+        }
+
+        private static string ProcessOf(IntPtr hwnd)
+        {
+            try
+            {
+                Win32.GetWindowThreadProcessId(hwnd, out uint pid);
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                return p.ProcessName.ToLowerInvariant();
+            }
+            catch { return ""; }
         }
 
         private static string LangCode(int langId)

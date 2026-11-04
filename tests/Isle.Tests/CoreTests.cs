@@ -146,3 +146,40 @@ namespace Isle.Tests
         }
     }
 }
+
+namespace Isle.Tests
+{
+    /// <summary>Создаёт настоящее окно и все вкладки — ловит падения при запуске (как то, из-за которого остров не появлялся).</summary>
+    public class StartupSmokeTests
+    {
+        [Fact]
+        public void MainWindowAndAllTabsCanBeCreated()
+        {
+            Exception error = null;
+            var t = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    if (System.Windows.Application.Current == null)
+                    {
+                        var app = new App();
+                        app.InitializeComponent();
+                    }
+                    var w = new MainWindow();
+                    AppHost.Window = w;
+                    foreach (var tab in new[] { "home", "clip", "shelf", "text", "chat", "notes", "weather", "controls", "settings" })
+                    {
+                        w.SelectTab(tab);
+                        Assert.NotNull(w.GetView(tab));
+                    }
+                    w.Close();
+                }
+                catch (Exception ex) { error = ex; }
+            });
+            t.SetApartmentState(System.Threading.ApartmentState.STA);
+            t.Start();
+            t.Join();
+            Assert.True(error == null, error?.ToString());
+        }
+    }
+}
