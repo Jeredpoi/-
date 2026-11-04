@@ -144,6 +144,7 @@ namespace Isle.Services
         {
             var info = new MediaInfo();
             var s = _session;
+            Windows.Storage.Streams.IRandomAccessStreamReference thumb = null;
             if (s != null)
             {
                 try
@@ -158,7 +159,7 @@ namespace Isle.Services
                         info.Album = props.AlbumTitle ?? "";
                         var key = info.Title + "|" + info.Artist;
                         if (key == _lastKey && Current.Cover != null) info.Cover = Current.Cover;
-                        else if (props.Thumbnail != null) info.Cover = await LoadThumb(props.Thumbnail);
+                        else thumb = props.Thumbnail;
                     }
                     var pb = s.GetPlaybackInfo();
                     info.IsPlaying = pb?.PlaybackStatus == WinMedia.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
@@ -175,15 +176,44 @@ namespace Isle.Services
                 catch { }
             }
 
-            _ = _ui.InvokeAsync(() =>
+            // 1) сразу показываем новое название и время — не ждём обложку
+            bool changedTrack = false;
+            await _ui.InvokeAsync(() =>
             {
                 var newKey = info.Title + "|" + info.Artist;
-                bool trackChanged = newKey != _lastKey && !string.IsNullOrEmpty(info.Title);
+                changedTrack = newKey != _lastKey && !string.IsNullOrEmpty(info.Title);
+                if (changedTrack && info.Position > TimeSpan.FromSeconds(3) && Current.Title != info.Title)
+                {
+                    // плееры иногда присылают позицию прошлого трека — новый начинается с нуля
+                    info.Position = TimeSpan.Zero;
+                    info.PositionStamp = DateTime.Now;
+                }
                 _lastKey = newKey;
                 Current = info;
                 Changed?.Invoke();
-                if (trackChanged) TrackChanged?.Invoke(info);
+                if (changedTrack) TrackChanged?.Invoke(info);
             });
+
+            // 2) догружаем обложку и показываем ещё раз
+            if (thumb != null)
+            {
+                var cover = await LoadThumb(thumb);
+                if (cover != null)
+                    await _ui.InvokeAsync(() =>
+                    {
+                        if (Current.Title != info.Title || Current.Artist != info.Artist) return;
+                        Current.Cover = cover;
+                        Changed?.Invoke();
+                        TrackChanged?.Invoke(Current);
+                    });
+            }
+
+            // 3) некоторые плееры (Spotify) дописывают обложку и время с задержкой — перепроверяем
+            if (changedTrack)
+            {
+                await Task.Delay(800);
+                if (ReferenceEquals(_session, s) && (Current.Cover == null || Current.Duration == TimeSpan.Zero)) _ = RefreshAsync();
+            }
         }
 
         private static async Task<BitmapImage> LoadThumb(Windows.Storage.Streams.IRandomAccessStreamReference r)

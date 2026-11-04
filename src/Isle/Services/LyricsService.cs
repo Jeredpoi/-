@@ -78,3 +78,53 @@ namespace Isle.Services
         }
     }
 }
+
+namespace Isle.Services
+{
+    /// <summary>Текст текущей песни — один на всё приложение (плеер на «Главной» и пилюля «С текстом»).</summary>
+    public class LyricsState
+    {
+        public List<LyricLine> Lines { get; private set; }
+        public string Key { get; private set; } = "";
+        public bool Loading { get; private set; }
+        public event Action Changed;
+
+        public LyricsState(MediaService media)
+        {
+            media.TrackChanged += m => _ = LoadAsync(m);
+        }
+
+        public async Task LoadAsync(MediaInfo m)
+        {
+            if (!AppSettings.Current.LyricsEnabled || m == null || string.IsNullOrEmpty(m.Title)) { Set(null, ""); return; }
+            var key = m.Artist + "|" + m.Title;
+            if (key == Key && (Lines != null || Loading)) return;
+            Key = key;
+            Lines = null;
+            Loading = true;
+            Changed?.Invoke();
+            var lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
+            if (key != Key) return;
+            Loading = false;
+            Set(lyr, key);
+        }
+
+        private void Set(List<LyricLine> lines, string key)
+        {
+            Lines = lines;
+            Key = key;
+            Loading = false;
+            Changed?.Invoke();
+        }
+
+        public int IndexAt(TimeSpan pos) => Lines == null ? -1 : Lines.FindLastIndex(l => l.At <= pos + TimeSpan.FromMilliseconds(250));
+
+        public string LineAt(TimeSpan pos)
+        {
+            int i = IndexAt(pos);
+            if (i < 0 || Lines == null) return "";
+            var t = Lines[i].Text;
+            return t.Length == 0 ? "♪" : t;
+        }
+    }
+}

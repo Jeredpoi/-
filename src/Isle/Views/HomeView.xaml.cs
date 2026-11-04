@@ -33,6 +33,7 @@ namespace Isle.Views
         {
             InitializeComponent();
             AppHost.Media.Changed += Refresh;
+            AppHost.Lyrics.Changed += OnLyricsChanged;
             AppHost.Audio.VolumeChanged += (_, __) => SyncVolume();
             AppHost.Audio.DeviceChanged += () => { SyncVolume(); FillDevices(); };
             _tick.Tick += (_, __) => TickPosition();
@@ -47,6 +48,7 @@ namespace Isle.Views
             Refresh();
             SyncVolume();
             FillDevices();
+            ApplyPlayerStyle();
         }
 
         // ---------- Недавно скопировано ----------
@@ -131,6 +133,7 @@ namespace Isle.Views
 
         public void OnShown()
         {
+            ApplyPlayerStyle();
             Refresh();
             SyncVolume();
         }
@@ -182,7 +185,7 @@ namespace Isle.Views
             PlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
             DurText.Text = Fmt(m.Duration);
             TickPosition();
-            _ = LoadLyrics(m);
+            if (_shownLyricsKey != AppHost.Lyrics.Key || AppHost.Lyrics.Loading) OnLyricsChanged();
         }
 
         private async void OnSources(object s, RoutedEventArgs e)
@@ -208,19 +211,62 @@ namespace Isle.Views
             menu.IsOpen = true;
         }
 
-        private async System.Threading.Tasks.Task LoadLyrics(MediaInfo m)
+        private string _shownLyricsKey;
+
+        /// <summary>Вид плеера из настроек: мягкое зеркало, заливка или компактный; текст песни справа — по желанию.</summary>
+        public void ApplyPlayerStyle()
         {
-            if (!AppSettings.Current.LyricsEnabled) { SetLyrics(null); return; }
-            var key = m.Artist + "|" + m.Title;
-            if (key == _lyricsKey) return;
-            _lyricsKey = key;
-            _lyrics = null;
-            LyricsStack.Children.Clear();
-            LyrStatus.Text = "Ищу текст песни…";
-            LyrStatus.Visibility = Visibility.Visible;
-            var lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
-            if (key != _lyricsKey) return;
-            SetLyrics(lyr);
+            var st = AppSettings.Current;
+            bool lyricsCol = st.LyricsEnabled && st.LyricsOnHome;
+            LyricsColumn.Width = lyricsCol ? new GridLength(210) : new GridLength(0);
+            LyricsBorder.Visibility = lyricsCol ? Visibility.Visible : Visibility.Collapsed;
+            switch (st.HomePlayer)
+            {
+                case "fill":
+                    CoverGlow.Margin = new Thickness(-60);
+                    CoverGlow.Opacity = 0.85;
+                    CoverGlow.OpacityMask = null;
+                    FillShade.Visibility = Visibility.Visible;
+                    break;
+                case "compact":
+                    CoverGlow.Opacity = 0;
+                    FillShade.Visibility = Visibility.Collapsed;
+                    break;
+                default:
+                    CoverGlow.Margin = new Thickness(-30, -40, lyricsCol ? 180 : -30, -40);
+                    CoverGlow.Opacity = 0.55;
+                    CoverGlow.ClearValue(UIElement.OpacityMaskProperty);
+                    CoverGlow.OpacityMask = new System.Windows.Media.RadialGradientBrush(
+                        System.Windows.Media.Color.FromArgb(255, 0, 0, 0), System.Windows.Media.Color.FromArgb(0, 0, 0, 0))
+                    { RadiusX = 0.55, RadiusY = 0.6, Center = new Point(0.5, 0.45), GradientOrigin = new Point(0.5, 0.45) };
+                    FillShade.Visibility = Visibility.Collapsed;
+                    break;
+            }
+            bool compact = st.HomePlayer == "compact";
+            CoverHeader.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
+            CoverHeader.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+            CoverBox.Width = CoverBox.Height = compact ? 72 : 84;
+            TitleStack.Margin = compact ? new Thickness(14, 0, 0, 0) : new Thickness(0, 10, 0, 0);
+            var align = compact ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+            Title.HorizontalAlignment = Artist.HorizontalAlignment = Source.HorizontalAlignment = align;
+            TitleStack.VerticalAlignment = VerticalAlignment.Center;
+        }
+
+        /// <summary>Текст берётся из общего состояния (его же показывает пилюля «С текстом»).</summary>
+        private void OnLyricsChanged()
+        {
+            var st = AppHost.Lyrics;
+            if (st.Loading)
+            {
+                _lyrics = null; _lines.Clear(); LyricsStack.Children.Clear();
+                LyrStatus.Text = "Ищу текст песни…";
+                LyrStatus.Visibility = Visibility.Visible;
+                _shownLyricsKey = null;
+                return;
+            }
+            if (_shownLyricsKey == st.Key && _lyrics == st.Lines) return;
+            _shownLyricsKey = st.Key;
+            SetLyrics(st.Lines);
         }
 
         private int _curLine = -2;

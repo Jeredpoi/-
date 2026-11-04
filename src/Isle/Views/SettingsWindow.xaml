@@ -95,6 +95,7 @@
             <StackPanel x:Name="NavPanel" Margin="12,0">
                 <RadioButton Style="{StaticResource Nav}" Content="Общее" Tag="{h:IconFor Sliders}" x:Name="NavGeneral" IsChecked="True" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Внешний вид" Tag="{h:IconFor Contrast}" x:Name="NavLook" Checked="OnNav"/>
+                <RadioButton Style="{StaticResource Nav}" Content="Музыка" Tag="{h:IconFor Wave}" x:Name="NavMusic" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="ИИ" Tag="{h:IconFor Chat}" x:Name="NavAi" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Голос в текст" Tag="{h:IconFor Mic}" x:Name="NavVoice" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Запись экрана" Tag="{h:IconFor Record}" x:Name="NavRecord" Checked="OnNav"/>
@@ -224,6 +225,64 @@
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Непрозрачность"/><TextBlock Style="{StaticResource RowNote}" Text="Чуть видно рабочий стол сквозь остров"/></StackPanel>
                                 <Slider x:Name="OpacitySlider" Grid.Column="1" Minimum="50" Maximum="100" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnOpacity"/>
                                 <TextBlock x:Name="OpacityText" Grid.Column="2" TextAlignment="Right" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ МУЗЫКА ============ -->
+                <StackPanel x:Name="SecMusic" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource H1}" Text="Музыка"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <StackPanel Margin="0,14">
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Пилюля во время музыки"/>
+                                <TextBlock Style="{StaticResource RowNote}" Text="«Обычная» — обложка и полоски ритма. «С названием» — трек и полоса времени. «Мини-плеер» — обложка, полоса и кнопки; открывается щелчком, а не наведением. «С текстом» — строка песни, которая звучит."/>
+                                <WrapPanel Margin="0,10,0,0">
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillBars" Content="Обычная" Tag="bars" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillTitle" Content="С названием" Tag="title" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillMini" Content="Мини-плеер" Tag="mini" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillLyrics" Content="С текстом" Tag="lyrics" Click="OnPill"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <StackPanel Margin="0,14">
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Плеер на «Главной»"/>
+                                <TextBlock Style="{StaticResource RowNote}" Text="«Мягкое зеркало» — обложка по центру, вокруг её размытое свечение. «Заливка» — весь плеер в цветах обложки. «Компактный» — обложка слева, без свечения."/>
+                                <WrapPanel Margin="0,10,0,0">
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="hp" x:Name="HpMirror" Content="Мягкое зеркало" Tag="mirror" Click="OnHomePlayer"/>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="hp" x:Name="HpFill" Content="Заливка" Tag="fill" Click="OnHomePlayer"/>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="hp" x:Name="HpCompact" Content="Компактный" Tag="compact" Click="OnHomePlayer"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Текст песни"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Строки в такт музыке — в плеере и в пилюле «С текстом». Текст берётся из открытой базы LRCLIB (lrclib.net) только для песни, которая играет."/></StackPanel>
+                                <CheckBox x:Name="Lyrics" HorizontalAlignment="Right" Click="OnMusicToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Текст в плеере на «Главной»"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Строки песни справа от обложки и кнопок"/></StackPanel>
+                                <CheckBox x:Name="LyricsHome" HorizontalAlignment="Right" Click="OnMusicToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Музыка в свёрнутой чёлке"/></StackPanel>
+                                <CheckBox x:Name="Media" HorizontalAlignment="Right" Click="OnMusicToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Часы в свёрнутом острове"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Пока на острове больше ничего не происходит"/></StackPanel>
+                                <CheckBox x:Name="ShowClock" HorizontalAlignment="Right" Click="OnMusicToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Секунды в часах"/>
+                                    <TextBlock Style="{StaticResource RowNote}" x:Name="SecondsHint" Text="21:05:33 вместо 21:05"/></StackPanel>
+                                <CheckBox x:Name="ClockSeconds" HorizontalAlignment="Right" Click="OnMusicToggle"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -383,10 +442,6 @@
                     <TextBlock Style="{StaticResource H1}" Text="Всплывашки и модули"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Музыка в свёрнутой чёлке"/><CheckBox x:Name="Media" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Текст песен (LRCLIB)"/><CheckBox x:Name="Lyrics" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Громкость"/><CheckBox x:Name="Volume" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Смена раскладки"/><CheckBox x:Name="Layout" HorizontalAlignment="Right" Click="OnToggle"/></Grid>

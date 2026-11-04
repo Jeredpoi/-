@@ -64,11 +64,27 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Border Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True">
+                            <Border x:Name="MiniCoverBox" Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True" VerticalAlignment="Center">
                                 <Image x:Name="MiniCover" Stretch="UniformToFill"/>
                             </Border>
-                            <TextBlock x:Name="MiniTitle" Grid.Column="1" FontSize="12" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <!-- середина: название / строка песни / полоса времени (зависит от вида пилюли) -->
+                            <StackPanel x:Name="MiniCenter" Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="MiniTitle" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="MiniSub" FontSize="11" Foreground="#A1A1AB" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
+                                <Grid x:Name="MiniBar" Height="3" Margin="0,5,0,0" Visibility="Collapsed">
+                                    <Border CornerRadius="1.5" Background="#2A2A30"/>
+                                    <Border x:Name="MiniBarFill" CornerRadius="1.5" Background="{StaticResource Accent}" HorizontalAlignment="Left" Width="0"/>
+                                </Grid>
+                            </StackPanel>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- кнопки мини-плеера -->
+                            <StackPanel x:Name="MiniButtons" Orientation="Horizontal" Margin="0,0,10,0" Visibility="Collapsed">
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay">
+                                    <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Fg}"><h:Icon x:Name="MiniPlayIcon" Kind="Pause" Width="12" Height="12" StrokeWidth="2.4" Foreground="Black"/></Border>
+                                </Button>
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
+                            </StackPanel>
                             <TextBlock x:Name="MediaTimer" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <StackPanel x:Name="Bars" Orientation="Horizontal" VerticalAlignment="Center" Height="16">
                                 <Border x:Name="Bar0" Width="3" Height="6" CornerRadius="1.5" Background="{StaticResource Accent}" VerticalAlignment="Bottom"/>

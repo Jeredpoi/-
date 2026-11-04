@@ -68,6 +68,8 @@ namespace Isle
             AppHost.Notifications = new NotificationService();
             AppHost.Voice = new VoiceService();
             AppHost.Spectrum = new SpectrumService();
+            AppHost.Lyrics = new LyricsState(AppHost.Media);
+            AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
             AppHost.Media.TrackChanged += m => Edge.SpikeColor = DominantColor(m.Cover) ?? AccentColor();
             AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) { Buddy.Cheer(); Edge.DropBead(); } });
@@ -123,7 +125,8 @@ namespace Isle
                 _leaveClose.Stop();
                 _oledHide.Stop();
                 if (State == IslandState.Collapsed) AnimateSize(Island.Width + 16, 38, 260); // остров «тянется» к курсору
-                if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover) _hoverOpen.Start();
+                bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
+                if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer) _hoverOpen.Start();
             };
             Island.MouseLeave += (_, __) =>
             {
@@ -306,6 +309,7 @@ namespace Isle
         {
             if (State != IslandState.Expanded)
             {
+                if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return; // кнопки мини-плеера
                 Expand(null);
                 e.Handled = true;
                 return;
@@ -412,15 +416,66 @@ namespace Isle
             MediaRow.Visibility = media ? Visibility.Visible : Visibility.Collapsed;
             IdleRow.Visibility = !timer && !media ? Visibility.Visible : Visibility.Collapsed;
 
-            double w = timer ? 240 : media ? (MediaTimer.Visibility == Visibility.Visible ? 380 : 320) : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
-            if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - 34) < 1) return;
-            AnimateSize(w, 34, 380);
+            double h = 34;
+            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
+            if (!AppSettings.Current.ShowClock && !timer && !media) w -= 50;
+            else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
+            if (media) (w, h) = ApplyPillMode();
+            if (MediaTimer.Visibility == Visibility.Visible) w += 60;
+            if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - h) < 1) return;
+            AnimateSize(w, h, 380);
         }
+
+        /// <summary>Вид пилюли во время музыки (Настройки → Музыка).</summary>
+        private (double w, double h) ApplyPillMode()
+        {
+            var mode = AppSettings.Current.MusicPill;
+            bool hasLyrics = AppSettings.Current.LyricsEnabled && AppHost.Lyrics?.Lines != null && AppHost.Lyrics.Lines.Count > 0;
+            MiniButtons.Visibility = mode == "mini" ? Visibility.Visible : Visibility.Collapsed;
+            MiniSub.Visibility = mode == "mini" ? Visibility.Visible : Visibility.Collapsed;
+            MiniBar.Visibility = mode == "title" || mode == "mini" ? Visibility.Visible : Visibility.Collapsed;
+            MiniCenter.Visibility = mode == "bars" ? Visibility.Collapsed : Visibility.Visible;
+            MiniCoverBox.Width = MiniCoverBox.Height = mode == "mini" ? 44 : 22;
+            MiniCoverBox.CornerRadius = new CornerRadius(mode == "mini" ? 10 : 6);
+            UpdateMini();
+            return mode switch
+            {
+                "bars" => (150, 34),
+                "mini" => (440, 64),
+                "lyrics" => (hasLyrics ? 440 : 340, 36),
+                _ => (340, 42)
+            };
+        }
+
+        private void UpdateMiniLive()
+        {
+            if (MediaRow.Visibility != Visibility.Visible) return;
+            var m = AppHost.Media.Current;
+            if (MiniBar.Visibility == Visibility.Visible && m.Duration > TimeSpan.Zero)
+                MiniBarFill.Width = Math.Max(0, MiniBar.ActualWidth * Math.Clamp(m.LivePosition.TotalSeconds / m.Duration.TotalSeconds, 0, 1));
+            if (AppSettings.Current.MusicPill == "lyrics")
+            {
+                var line = AppHost.Lyrics?.LineAt(m.LivePosition);
+                var text = string.IsNullOrEmpty(line) ? (string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist) : line;
+                if (MiniTitle.Text != text)
+                {
+                    MiniTitle.Text = text;
+                    MiniTitle.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
+                }
+            }
+            MiniPlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
+        }
+
+        private void OnMiniPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
+        private void OnMiniNext(object s, RoutedEventArgs e) => AppHost.Media.Next();
+        private void OnMiniPlay(object s, RoutedEventArgs e) => AppHost.Media.PlayPause();
 
         private void UpdateMini()
         {
             var m = AppHost.Media.Current;
-            MiniTitle.Text = string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist;
+            var mode = AppSettings.Current.MusicPill;
+            if (mode == "mini") { MiniTitle.Text = m.Title; MiniSub.Text = m.Artist; }
+            else if (mode != "lyrics") MiniTitle.Text = string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist;
             MiniCover.Source = m.Cover;
         }
 
@@ -555,6 +610,14 @@ namespace Isle
             }
             g.Freeze();
             Island.Clip = g;
+        }
+
+        /// <summary>Настройки музыки поменялись — перестроить пилюлю и плеер.</summary>
+        public void ApplyMusicSettings()
+        {
+            if (_views.TryGetValue("home", out var hv)) (hv as Views.HomeView)?.ApplyPlayerStyle();
+            Clock();
+            if (State == IslandState.Collapsed) ShowCollapsedContent(false);
         }
 
         /// <summary>Акцент, прозрачность и персонаж из настроек.</summary>
@@ -786,7 +849,9 @@ namespace Isle
 
         private void Clock()
         {
-            ClockText.Text = DateTime.Now.ToString(AppSettings.Current.Use24h ? "HH:mm" : "h:mm");
+            var cs = AppSettings.Current;
+            ClockText.Text = DateTime.Now.ToString((cs.Use24h ? "HH:mm" : "h:mm") + (cs.ClockSeconds ? ":ss" : ""));
+            ClockText.Visibility = cs.ShowClock ? Visibility.Visible : Visibility.Collapsed;
             if (AppHost.Timer != null)
             {
                 MiniTimer.Text = (AppHost.Timer.Paused ? "пауза · " : "") + TimerService.Format(AppHost.Timer.Left);
@@ -850,6 +915,7 @@ namespace Isle
             Edge.Raining = AppHost.Weather != null && (AppHost.Weather.Code >= 51 && AppHost.Weather.Code <= 67 || AppHost.Weather.Code >= 80);
 
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
+            UpdateMiniLive();
             if (RecChip.Visibility == Visibility.Visible) RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
             if (Buddy.Visibility == Visibility.Visible)
             {

@@ -128,6 +128,15 @@ namespace Isle.Services
         public bool ScaleFixV2 { get; set; } = false;
         public bool ObsStatus { get; set; } = true;
 
+        // Музыка
+        /// <summary>Пилюля во время музыки: bars (обычная) | title (с названием) | mini (мини-плеер) | lyrics (с текстом).</summary>
+        public string MusicPill { get; set; } = "title";
+        /// <summary>Плеер на «Главной»: mirror (мягкое зеркало) | fill (заливка) | compact (компактный).</summary>
+        public string HomePlayer { get; set; } = "mirror";
+        public bool LyricsOnHome { get; set; } = true;
+        public bool ShowClock { get; set; } = true;
+        public bool ClockSeconds { get; set; } = false;
+
         public static string Protect(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";

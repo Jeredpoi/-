@@ -17,6 +17,7 @@ namespace Isle
         public static VpnService Vpn;
         public static VoiceService Voice;
         public static SpectrumService Spectrum;
+        public static LyricsState Lyrics;
         public static WeatherNow Weather;
         public static event Action WeatherChanged;
         public static MainWindow Window;

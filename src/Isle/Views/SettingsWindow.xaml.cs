@@ -110,7 +110,7 @@ namespace Isle.Views
         {
             var rb = key switch
             {
-                "look" => NavLook, "ai" => NavAi, "voice" => NavVoice, "record" => NavRecord, "weather" => NavWeather,
+                "look" => NavLook, "music" => NavMusic, "ai" => NavAi, "voice" => NavVoice, "record" => NavRecord, "weather" => NavWeather,
                 "modules" => NavModules, "keys" => NavKeys, "updates" => NavUpdates, _ => NavGeneral
             };
             rb.IsChecked = true;
@@ -121,7 +121,7 @@ namespace Isle.Views
             if (SecGeneral == null) return;
             var map = new (RadioButton nav, FrameworkElement sec)[]
             {
-                (NavGeneral, SecGeneral), (NavLook, SecLook), (NavAi, SecAi), (NavVoice, SecVoice), (NavRecord, SecRecord),
+                (NavGeneral, SecGeneral), (NavLook, SecLook), (NavMusic, SecMusic), (NavAi, SecAi), (NavVoice, SecVoice), (NavRecord, SecRecord),
                 (NavWeather, SecWeather), (NavModules, SecModules), (NavKeys, SecKeys), (NavUpdates, SecUpdates)
             };
             foreach (var (nav, sec) in map) sec.Visibility = nav.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
@@ -173,6 +173,16 @@ namespace Isle.Views
             CityBox.Text = S.City;
 
             Media.IsChecked = S.MediaEnabled;
+            LyricsHome.IsChecked = S.LyricsOnHome;
+            ShowClock.IsChecked = S.ShowClock;
+            ClockSeconds.IsChecked = S.ClockSeconds;
+            PillBars.IsChecked = S.MusicPill == "bars";
+            PillTitle.IsChecked = S.MusicPill == "title";
+            PillMini.IsChecked = S.MusicPill == "mini";
+            PillLyrics.IsChecked = S.MusicPill == "lyrics";
+            HpMirror.IsChecked = S.HomePlayer == "mirror";
+            HpFill.IsChecked = S.HomePlayer == "fill";
+            HpCompact.IsChecked = S.HomePlayer == "compact";
             Lyrics.IsChecked = S.LyricsEnabled;
             Volume.IsChecked = S.VolumeToasts;
             Layout.IsChecked = S.LayoutToasts;
@@ -194,8 +204,6 @@ namespace Isle.Views
             S.ExpandOnHover = Hover.IsChecked == true;
             S.Use24h = Clock24.IsChecked == true;
             S.VoiceAutoPaste = VoicePaste.IsChecked == true;
-            S.MediaEnabled = Media.IsChecked == true;
-            S.LyricsEnabled = Lyrics.IsChecked == true;
             S.VolumeToasts = Volume.IsChecked == true;
             S.LayoutToasts = Layout.IsChecked == true;
             S.CapsToasts = Caps.IsChecked == true;
@@ -207,6 +215,33 @@ namespace Isle.Views
             S.AutoUpdateCheck = AutoUpdate.IsChecked == true;
             S.ObsStatus = ObsStatus.IsChecked == true;
             S.Save();
+        }
+
+        private void OnMusicToggle(object s, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            S.MediaEnabled = Media.IsChecked == true;
+            S.LyricsEnabled = Lyrics.IsChecked == true;
+            S.LyricsOnHome = LyricsHome.IsChecked == true;
+            S.ShowClock = ShowClock.IsChecked == true;
+            S.ClockSeconds = ClockSeconds.IsChecked == true;
+            S.Save();
+            if (S.LyricsEnabled) _ = AppHost.Lyrics.LoadAsync(AppHost.Media.Current);
+            AppHost.Window.ApplyMusicSettings();
+        }
+
+        private void OnPill(object s, RoutedEventArgs e)
+        {
+            S.MusicPill = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            AppHost.Window.ApplyMusicSettings();
+        }
+
+        private void OnHomePlayer(object s, RoutedEventArgs e)
+        {
+            S.HomePlayer = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            AppHost.Window.ApplyMusicSettings();
         }
 
         private void OnAutostart(object s, RoutedEventArgs e)

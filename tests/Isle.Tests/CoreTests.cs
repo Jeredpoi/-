@@ -182,7 +182,7 @@ namespace Isle.Tests
                     System.Windows.Threading.Dispatcher.PushFrame(frame);
                     Assert.True(w.IsVisible, "окно острова не видно после Show()");
                     var sw = new Views.SettingsWindow();
-                    foreach (var sec in new[] { "general", "look", "ai", "voice", "record", "weather", "modules", "keys" }) sw.ShowSection(sec);
+                    foreach (var sec in new[] { "general", "look", "music", "ai", "voice", "record", "weather", "modules", "keys", "updates" }) sw.ShowSection(sec);
                     sw.Close();
                     w.Close();
                 }
