@@ -36,7 +36,7 @@
 
             <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
                     Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
-                    BorderBrush="#17171C" BorderThickness="1,0,1,1" SnapsToDevicePixels="True">
+                    SnapsToDevicePixels="True">
                 <Grid>
                     <!-- ===== Свёрнутая чёлка ===== -->
                     <Grid x:Name="CollapsedView" Margin="16,0">
@@ -216,6 +216,12 @@
                     </Border>
                 </Grid>
             </Border>
+
+            <!-- Обводка отдельным сглаженным контуром: рамка Border под обрезкой давала «лесенку» на скруглениях -->
+            <Path x:Name="IslandOutline" Stroke="#23232A" StrokeThickness="1" IsHitTestVisible="False"
+                  Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
+                  Width="{Binding ActualWidth, ElementName=Island}" Height="{Binding ActualHeight, ElementName=Island}"
+                  Opacity="{Binding Opacity, ElementName=Island}" SnapsToDevicePixels="False"/>
         </Grid>
     </Grid>
 </Window>

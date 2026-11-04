@@ -719,6 +719,21 @@ namespace Isle
             }
             g.Freeze();
             Island.Clip = g;
+
+            // контур по краю — на полпикселя внутрь, чтобы линия не резалась обрезкой и шла гладко
+            const double i = 0.5;
+            var o = new StreamGeometry();
+            using (var c = o.Open())
+            {
+                c.BeginFigure(new Point(i, 0), false, false);
+                c.LineTo(new Point(i, h - r), true, true);
+                c.ArcTo(new Point(r, h - i), new Size(Math.Max(0, r - i), Math.Max(0, r - i)), 0, false, SweepDirection.Counterclockwise, true, true);
+                c.LineTo(new Point(w - r, h - i), true, true);
+                c.ArcTo(new Point(w - i, h - r), new Size(Math.Max(0, r - i), Math.Max(0, r - i)), 0, false, SweepDirection.Counterclockwise, true, true);
+                c.LineTo(new Point(w - i, 0), true, true);
+            }
+            o.Freeze();
+            IslandOutline.Data = o;
         }
 
         /// <summary>Настройки музыки поменялись — перестроить пилюлю и плеер.</summary>
