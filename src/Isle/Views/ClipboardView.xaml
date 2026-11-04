@@ -1,0 +1,69 @@
+<UserControl x:Class="Isle.Views.ClipboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:h="clr-namespace:Isle.Helpers">
+    <DockPanel>
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="Search" Tag="Поиск по истории" Padding="36,9,10,9" TextChanged="OnSearch"/>
+            <h:Icon Kind="Search" Width="14" Height="14" HorizontalAlignment="Left" Margin="13,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
+            <Button Grid.Column="1" Style="{StaticResource Flat}" Margin="8,0,0,0" Width="40" Click="OnClear" ToolTip="Очистить (закреплённые останутся)">
+                <h:Icon Kind="Trash" Width="15" Height="15"/>
+            </Button>
+        </Grid>
+        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource MutedText}" FontSize="11" Margin="2,8,0,0"
+                   Text="Клик — вставить в прошлое окно · Shift+клик — только скопировать · Ctrl+Alt+V — открыть буфер"/>
+        <Grid>
+            <TextBlock x:Name="Empty" Text="Пока пусто — скопируй что-нибудь (Ctrl+C)" Style="{StaticResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <ListBox x:Name="List">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border x:Name="row" Background="{StaticResource Card}" CornerRadius="12" Padding="12,9" Cursor="Hand"
+                                MouseLeftButtonUp="OnItemClick" Tag="{Binding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid VerticalAlignment="Top">
+                                    <Border x:Name="textIcon" Width="28" Height="28" CornerRadius="8" Background="#1C1C20">
+                                        <TextBlock Text="T" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#1C1C20" ClipToBounds="True" Visibility="Collapsed">
+                                        <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
+                                    </Border>
+                                </Grid>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0">
+                                    <TextBlock Text="{Binding Preview}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Meta}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel x:Name="actions" Grid.Column="2" Orientation="Horizontal" Visibility="Hidden">
+                                    <Button Style="{StaticResource Ghost}" Click="OnPin" Tag="{Binding}" ToolTip="Закрепить">
+                                        <h:Icon Kind="Pin" Width="14" Height="14"/>
+                                    </Button>
+                                    <Button Style="{StaticResource Ghost}" Click="OnDelete" Tag="{Binding}" ToolTip="Удалить">
+                                        <h:Icon Kind="Close" Width="14" Height="14"/>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsImage}" Value="True">
+                                <Setter TargetName="textIcon" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="imgIcon" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <Trigger SourceName="row" Property="IsMouseOver" Value="True">
+                                <Setter TargetName="row" Property="Background" Value="{StaticResource CardHover}"/>
+                                <Setter TargetName="actions" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </DockPanel>
+</UserControl>

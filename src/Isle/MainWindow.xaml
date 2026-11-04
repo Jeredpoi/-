@@ -1,0 +1,221 @@
+<Window x:Class="Isle.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:h="clr-namespace:Isle.Helpers"
+        Title="Isle" Width="1010" Height="660" ShowActivated="False"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
+        FontFamily="{StaticResource UiFont}" Foreground="{StaticResource Fg}" UseLayoutRounding="True"
+        AllowDrop="True">
+    <Grid x:Name="Root">
+        <!-- Невидимая полоса у верхнего края: в OLED-режиме при наведении показывает чёлку -->
+        <Border x:Name="EdgeStrip" Height="4" VerticalAlignment="Top" HorizontalAlignment="Center"
+                Width="{Binding ActualWidth, ElementName=Island}"
+                Background="#01000000" Visibility="Collapsed"/>
+
+        <Grid x:Name="Scaler" VerticalAlignment="Top" HorizontalAlignment="Center">
+            <Grid.LayoutTransform>
+                <ScaleTransform x:Name="ScaleT" ScaleX="1" ScaleY="1"/>
+            </Grid.LayoutTransform>
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="SlideT" Y="0"/>
+            </Grid.RenderTransform>
+
+            <!-- Тень отдельно от острова: иначе обрезка по прямоугольнику давала серые квадратные углы -->
+            <Border x:Name="IslandShadow" Background="{StaticResource Bg}" CornerRadius="0,0,18,18" Margin="24,0,24,24"
+                    Width="{Binding ActualWidth, ElementName=Island}" Height="{Binding ActualHeight, ElementName=Island}"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="6" Direction="270" Opacity="0.35" Color="Black" RenderingBias="Quality"/>
+                </Border.Effect>
+            </Border>
+
+            <!-- «Жидкий» нижний край: спектр музыки, тянется к курсору, капли -->
+            <h:LiquidEdge x:Name="Edge" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,33,24,0"
+                          Width="{Binding ActualWidth, ElementName=Island}"/>
+
+            <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
+                    Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
+                    BorderBrush="#17171C" BorderThickness="1,0,1,1" SnapsToDevicePixels="True">
+                <Grid>
+                    <!-- ===== Свёрнутая чёлка ===== -->
+                    <Grid x:Name="CollapsedView" Margin="16,0">
+                        <!-- покой: «глаза», время, погода -->
+                        <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <h:Character x:Name="Buddy" Width="30" Height="22" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <StackPanel x:Name="Eyes" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="EyeL" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" VerticalAlignment="Center"/>
+                                <Border x:Name="EyeR" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock x:Name="ClockText" Text="00:00" FontSize="13" FontWeight="SemiBold" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="BatteryMini" Text="" FontSize="13" Foreground="#B9B9C3" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <Border x:Name="RecChip" Background="#3A1214" CornerRadius="8" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="RecDot" Width="6" Height="6" Fill="#F87171" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="RecText" Text="REC" Margin="4,0,0,0" FontSize="10" FontWeight="Bold" Foreground="#F87171"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="WeatherMini" Text="" FontSize="13" Foreground="#B9B9C3" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- музыка -->
+                        <Grid x:Name="MediaRow" Visibility="Collapsed" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <h:Character x:Name="BuddyMedia" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
+                            <Border x:Name="MiniCoverBox" Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True" VerticalAlignment="Center">
+                                <Image x:Name="MiniCover" Stretch="UniformToFill"/>
+                            </Border>
+                            </StackPanel>
+                            <!-- середина: название / строка песни / полоса времени (зависит от вида пилюли) -->
+                            <StackPanel x:Name="MiniCenter" Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="MiniTitle" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="MiniSub" FontSize="11" Foreground="#A1A1AB" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
+                                <Grid x:Name="MiniBar" Height="3" Margin="0,5,0,0" Visibility="Collapsed">
+                                    <Border CornerRadius="1.5" Background="#2A2A30"/>
+                                    <Border x:Name="MiniBarFill" CornerRadius="1.5" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- кнопки мини-плеера -->
+                            <StackPanel x:Name="MiniButtons" Orientation="Horizontal" Margin="0,0,10,0" Visibility="Collapsed">
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay">
+                                    <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Fg}"><h:Icon x:Name="MiniPlayIcon" Kind="Pause" Width="12" Height="12" StrokeWidth="2.4" Foreground="Black"/></Border>
+                                </Button>
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
+                            </StackPanel>
+                            <TextBlock x:Name="MediaTimer" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <StackPanel x:Name="Bars" Orientation="Horizontal" VerticalAlignment="Center" Height="18">
+                                <Border x:Name="Bar0" Width="3" Height="6" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom"/>
+                                <Border x:Name="Bar1" Width="3" Height="10" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                <Border x:Name="Bar2" Width="3" Height="8" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                <Border x:Name="Bar3" Width="3" Height="12" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                <Border x:Name="Bar4" Width="3" Height="9" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                                <Border x:Name="Bar5" Width="3" Height="7" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
+                            </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- таймер -->
+                        <Grid x:Name="TimerRow" Visibility="Collapsed" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <h:Character x:Name="BuddyTimer" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
+                                <h:Icon Kind="Timer" Width="15" Height="15" Foreground="{DynamicResource Accent}"/>
+                                <TextBlock Text="Таймер" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock x:Name="MiniTimer" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- всплывашка -->
+                        <Grid x:Name="ToastRow" Visibility="Collapsed" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="ToastIconBox" Width="34" Height="34" CornerRadius="17" Background="#141417" VerticalAlignment="Center">
+                                <Grid>
+                                    <Image x:Name="ToastImage" Stretch="UniformToFill"/>
+                                    <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <TextBlock x:Name="ToastTitle" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="ToastSub" FontSize="12" Foreground="#B9B9C3" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                <Grid x:Name="ToastBar" Height="4" Margin="0,4,0,0" Visibility="Collapsed">
+                                    <Border CornerRadius="2" Background="{StaticResource Track}"/>
+                                    <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <!-- ===== Развёрнутая панель ===== -->
+                    <DockPanel x:Name="ExpandedView" Visibility="Collapsed" Margin="16,10,16,16" Opacity="0">
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12" LastChildFill="False">
+                            <Grid DockPanel.Dock="Left">
+                            <!-- бегущая подсветка выбранной вкладки -->
+                            <Border x:Name="TabIndicator" Height="32" Width="40" CornerRadius="16" Background="#24242B" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <Border.RenderTransform><TranslateTransform x:Name="TabIndicatorT"/></Border.RenderTransform>
+                            </Border>
+                            <StackPanel x:Name="TabBar" Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource Tab}" Content="Главная" x:Name="TabHome" IsChecked="True" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Home" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Буфер" x:Name="TabClip" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Clipboard" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Полка" x:Name="TabShelf" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Tray" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Текст" x:Name="TabText" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Text" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Чат" x:Name="TabChat" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Chat" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Заметка" x:Name="TabNotes" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Note" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Погода" x:Name="TabWeather" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Sun" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Управление" x:Name="TabControls" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Sliders" Width="15" Height="15"/></RadioButton.Tag>
+                                </RadioButton>
+                            </StackPanel>
+
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                                <!-- VPN: клик — отключить, правый клик — проверить заново -->
+                                <Button x:Name="VpnChip" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Visibility="Collapsed"
+                                        Click="OnVpnClick" MouseRightButtonUp="OnVpnRightClick" ToolTipService.InitialShowDelay="200">
+                                    <Border x:Name="VpnBox" Background="#123A26" CornerRadius="13" Height="26" Padding="10,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <h:Icon Kind="Shield" Width="12" Height="12" StrokeWidth="2" Foreground="#4ADE80"/>
+                                            <TextBlock x:Name="VpnText" Text="VPN" Margin="5,0,0,0" FontSize="11" FontWeight="Bold" Foreground="#4ADE80" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                                <!-- Раскладка: показывает текущую, клик — переключить -->
+                                <Button x:Name="LangBtn" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Click="OnLangClick" ToolTip="Раскладка клавиатуры · клик — переключить">
+                                    <Border Background="#141417" CornerRadius="13" Height="26" Padding="9,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <h:Icon Kind="Keyboard" Width="13" Height="13" Foreground="#A1A1AB"/>
+                                            <TextBlock x:Name="LangChip" Text="EN" Margin="5,0,0,0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                                <ToggleButton x:Name="DndChip" Style="{StaticResource Chip}" Click="OnDnd" ToolTip="Не беспокоить: всплывашки не показываются">
+                                    <h:Icon Kind="Moon" Width="13" Height="13"/>
+                                </ToggleButton>
+                                <ToggleButton x:Name="PinChip" Style="{StaticResource Chip}" Margin="6,0,0,0" Click="OnPin" ToolTip="Закрепить: остров не сворачивается">
+                                    <h:Icon Kind="Pin" Width="13" Height="13"/>
+                                </ToggleButton>
+                                <Button x:Name="SettingsBtn" Style="{StaticResource Ghost}" Margin="6,0,0,0" Width="32" Height="32" Click="OnSettingsClick" ToolTip="Настройки">
+                                    <h:Icon Kind="Gear" Width="16" Height="16"/>
+                                </Button>
+                            </StackPanel>
+                        </DockPanel>
+
+                        <ContentControl x:Name="TabHost" Focusable="False">
+                            <ContentControl.RenderTransform><TranslateTransform x:Name="TabSlide"/></ContentControl.RenderTransform>
+                        </ContentControl>
+                    </DockPanel>
+
+                    <!-- Подсветка при перетаскивании файлов -->
+                    <Border x:Name="DropHint" Visibility="Collapsed" Background="#E6000000" CornerRadius="0,0,18,18">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Orientation="Horizontal">
+                            <h:Icon Kind="Tray" Width="18" Height="18" Foreground="{DynamicResource Accent}"/>
+                            <TextBlock Text="Отпусти — положу на полку" Margin="10,0,0,0" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

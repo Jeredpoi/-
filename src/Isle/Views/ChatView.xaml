@@ -1,0 +1,85 @@
+<UserControl x:Class="Isle.Views.ChatView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:h="clr-namespace:Isle.Helpers">
+    <DockPanel>
+        <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Click="OnNew" ToolTip="Новый разговор">
+                <h:Icon Kind="Plus" Width="15" Height="15"/>
+            </Button>
+            <Button x:Name="HistoryBtn" Grid.Column="1" Style="{StaticResource Flat}" Height="40" Padding="12,0" Margin="8,0,0,0" Click="OnHistory" ToolTip="История разговоров">
+                <StackPanel Orientation="Horizontal">
+                    <h:Icon Kind="Clipboard" Width="15" Height="15"/>
+                    <TextBlock Text="История" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                </StackPanel>
+            </Button>
+            <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Сообщение для ИИ…" AcceptsReturn="True" TextWrapping="Wrap"
+                     MaxHeight="90" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey"/>
+            <Button x:Name="MicBtn" Grid.Column="3" Style="{StaticResource Flat}" Height="40" Width="40" Padding="0" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать (Ctrl+Alt+D)">
+                <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
+            </Button>
+            <Button x:Name="SendBtn" Grid.Column="4" Height="40" Style="{StaticResource Primary}" Width="40" Click="OnSend" ToolTip="Отправить (Enter)">
+                <h:Icon Kind="Send" Width="15" Height="15" Foreground="#08080A"/>
+            </Button>
+        </Grid>
+        <Grid>
+            <StackPanel x:Name="Welcome" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Border Width="10" Height="20" CornerRadius="5" Background="{StaticResource Fg}"/>
+                    <Border Width="10" Height="20" CornerRadius="5" Background="{StaticResource Fg}" Margin="8,0,0,0"/>
+                </StackPanel>
+                <TextBlock Text="Спроси что угодно" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,4"/>
+                <TextBlock x:Name="ModelLine" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
+                <StackPanel x:Name="Suggestions" Margin="0,14,0,0"/>
+                <TextBlock x:Name="RecentTitle" Text="НЕДАВНИЕ РАЗГОВОРЫ" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,16,0,6"/>
+                <StackPanel x:Name="RecentChats"/>
+            </StackPanel>
+            <ScrollViewer x:Name="Scroll" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <ItemsControl x:Name="Messages">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border x:Name="bubble" CornerRadius="14" Padding="12,9" Margin="0,0,0,8" MaxWidth="680"
+                                    HorizontalAlignment="Left" Background="{StaticResource Card}">
+                                <StackPanel>
+                                <TextBox x:Name="msgText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Background="Transparent"
+                                         BorderThickness="0" Padding="0" FontSize="13">
+                                    <TextBox.Template>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <ScrollViewer x:Name="PART_ContentHost"/>
+                                        </ControlTemplate>
+                                    </TextBox.Template>
+                                </TextBox>
+                                <StackPanel x:Name="actionRow" Visibility="Collapsed">
+                                    <TextBlock Text="{Binding PendingLabel}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Primary}" Content="Выполнить" Padding="14,6" Click="OnRunPending" Tag="{Binding}"/>
+                                        <Button Style="{StaticResource Flat}" Content="Отмена" Padding="14,6" Margin="8,0,0,0" Click="OnSkipPending" Tag="{Binding}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding HasPending}" Value="True">
+                                    <Setter TargetName="actionRow" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="bubble" Property="BorderBrush" Value="#F87171"/>
+                                    <Setter TargetName="bubble" Property="BorderThickness" Value="1"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                    <Setter TargetName="bubble" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="bubble" Property="Background" Value="#1F1F24"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</UserControl>
