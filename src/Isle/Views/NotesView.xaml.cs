@@ -202,6 +202,7 @@ namespace Isle.Views
             TimeText.Text = TimerService.Format(t.Left);
             StartIcon.Kind = t.Running ? "Pause" : "Play";
             StartText.Text = t.Running ? "Пауза" : (t.Paused ? "Дальше" : "Старт");
+            ResetBtn.Visibility = t.Running || t.Paused ? Visibility.Visible : Visibility.Collapsed;
             DrawRing(t.Fraction);
         }
 
@@ -218,6 +219,8 @@ namespace Isle.Views
             Ring.Data = new PathGeometry(new[] { fig });
         }
 
+        private void OnTimerReset(object s, RoutedEventArgs e) => AppHost.Timer.Reset();
+
         private void OnStart(object s, RoutedEventArgs e)
         {
             var t = AppHost.Timer;
@@ -228,9 +231,10 @@ namespace Isle.Views
         private void OnCustomKey(object s, KeyEventArgs e)
         {
             if (e.Key != Key.Enter) return;
-            if (double.TryParse(Custom.Text.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var m) && m > 0 && m < 24 * 60)
+            var d = TimerService.ParseDuration(Custom.Text);
+            if (d != null)
             {
-                AppHost.Timer.StartNew(TimeSpan.FromMinutes(m));
+                AppHost.Timer.StartNew(d.Value);
                 Custom.Text = "";
             }
             e.Handled = true;

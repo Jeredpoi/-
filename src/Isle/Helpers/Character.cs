@@ -6,7 +6,7 @@ using Isle.Native;
 
 namespace Isle.Helpers
 {
-    public enum Mood { Idle, Music, Thinking, Done, Attention, Sleep }
+    public enum Mood { Idle, Music, Thinking, Done, Attention, Sleep, Working }
 
     /// <summary>
     /// Клоди — пиксельный оранжевый дружок в духе маскота Claude Code. Живёт в чёлке.
@@ -57,6 +57,8 @@ namespace Isle.Helpers
         private double _cheer;               // >0 — прыгает от радости
         private double _bob;
         private Point _wander;
+        private Point _lastCursor;
+        private DateTime _cursorMoved = DateTime.Now;
         private DateTime _nextWander;
 
         public Character()
@@ -83,16 +85,17 @@ namespace Isle.Helpers
                 ty = -0.7;                           // и смотрят вверх
             }
             else if (mood == Mood.Sleep) { tx = 0; ty = 0.6; }
+            else if (mood == Mood.Working) { tx = Math.Sin(_time * 0.9) * 0.5; ty = 0.9; } // смотрит в ноутбук, читает строки
             else if (FollowCursor && Win32.GetCursorPos(out var p))
             {
                 try
                 {
                     var c = PointToScreen(new Point(ActualWidth / 2, ActualHeight / 2));
                     double dx = p.X - c.X, dy = p.Y - c.Y;
-                    double dist = Math.Sqrt(dx * dx + dy * dy);
-                    if (dist > 900)
+                    if (p.X != _lastCursor.X || p.Y != _lastCursor.Y) { _lastCursor = new Point(p.X, p.Y); _cursorMoved = DateTime.Now; }
+                    if (DateTime.Now - _cursorMoved > TimeSpan.FromSeconds(6))
                     {
-                        // курсор далеко — иногда сам оглядывается
+                        // курсор давно стоит — сам оглядывается по сторонам
                         if (DateTime.Now >= _nextWander)
                         {
                             _nextWander = DateTime.Now.AddSeconds(1.5 + _rnd.NextDouble() * 3);
@@ -102,8 +105,10 @@ namespace Isle.Helpers
                     }
                     else
                     {
-                        tx = Math.Clamp(dx / 260.0, -1, 1);
-                        ty = Math.Clamp(dy / 160.0, -1, 1);
+                        // следим всегда, по всему экрану (и на 4K): чем дальше курсор, тем сильнее поворот глаз
+                        double sw = Math.Max(800, Win32.GetSystemMetrics(0)), sh = Math.Max(600, Win32.GetSystemMetrics(1));
+                        tx = Math.Clamp(Math.Sign(dx) * Math.Pow(Math.Min(1, Math.Abs(dx) / (sw * 0.45)), 0.6), -1, 1);
+                        ty = Math.Clamp(Math.Sign(dy) * Math.Pow(Math.Min(1, Math.Abs(dy) / (sh * 0.5)), 0.6), -1, 1);
                     }
                 }
                 catch { }
@@ -156,6 +161,9 @@ namespace Isle.Helpers
                 case Mood.Sleep:
                     dy = 0.6 * px + Math.Sin(_time * 1.2) * 0.4 * px;
                     break;
+                case Mood.Working:
+                    dy = Math.Sin(_time * 1.6) * 0.2 * px;
+                    break;
             }
             if (_cheer > 0)
             {
@@ -183,11 +191,16 @@ namespace Isle.Helpers
                         if (step && pairA && y == 8) continue;
                         if (step && !pairA && y == 8 && mood == Mood.Music) cy = 8;
                     }
-                    // ручки машут под музыку и от радости
+                    // ручки машут под музыку и от радости, а за ноутбуком — «печатают»
                     if ((x == 0 || x == 12) && (mood == Mood.Music || _cheer > 0))
                     {
                         bool up = Math.Sin(_time * 10 + (x == 0 ? 0 : Math.PI)) > 0;
                         cy = up ? y - 1 : y;
+                    }
+                    if ((x == 0 || x == 12) && mood == Mood.Working)
+                    {
+                        bool tap = Math.Sin(_time * 22 + (x == 0 ? 0 : 1.7)) > 0.3;
+                        cy = tap ? y + 1 : y;
                     }
                     dc.DrawRectangle(body, null, new Rect(ox + x * px, oy + cy * px, px + 0.35, px + 0.35));
                 }
@@ -204,6 +217,32 @@ namespace Isle.Helpers
                 else dc.DrawRectangle(eye, null, new Rect(x, y + (2 * px - eh) / 2, px, eh));
             }
             dc.Pop();
+
+            // ---- ноутбук перед Клоди
+            if (mood == Mood.Working)
+            {
+                var lid = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x42));
+                var screen = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x22));
+                var glow = new SolidColorBrush(Color.FromArgb(200, 0x7D, 0xB5, 0xFF));
+                double lx = ox + 2.5 * px, ly = oy + 5.2 * px;
+                dc.DrawRectangle(lid, null, new Rect(lx, ly, 8 * px, 3.6 * px));             // крышка
+                dc.DrawRectangle(screen, null, new Rect(lx + 0.5 * px, ly + 0.5 * px, 7 * px, 2.6 * px));
+                // бегущие строки кода на экране
+                for (int i = 0; i < 3; i++)
+                {
+                    double len = 2 + ((int)(_time * 3 + i * 1.7) % 4);
+                    dc.DrawRectangle(glow, null, new Rect(lx + 1 * px, ly + (0.9 + i * 0.75) * px, len * px * 0.9, 0.35 * px));
+                }
+                dc.DrawRectangle(lid, null, new Rect(lx - 1 * px, ly + 3.6 * px, 10 * px, 0.7 * px)); // клавиатура
+                // «</>» всплывает над головой
+                if ((int)(_time * 0.7) % 3 == 0)
+                {
+                    var tag = new FormattedText("</>", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                        new Typeface("Consolas"), 2.6 * px, new SolidColorBrush(Color.FromArgb(220, 0xFF, 0xE9, 0xD6)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                    double rise = (_time * 2) % 3;
+                    dc.DrawText(tag, new Point(ox + 9.5 * px, oy - 1.5 * px - rise * px));
+                }
+            }
 
             // ---- значки настроения
             var light = new SolidColorBrush(Color.FromRgb(0xFF, 0xE9, 0xD6));

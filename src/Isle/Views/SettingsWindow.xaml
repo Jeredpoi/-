@@ -6,6 +6,49 @@
         Background="#0A0A0C" Foreground="{StaticResource Fg}" FontFamily="{StaticResource UiFont}"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="pack://application:,,,/Isle;component/app.ico">
     <Window.Resources>
+        <!-- В настройках поля и кнопки светлее карточек, а выбранный вариант — белый: всё читается с первого взгляда -->
+        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="BorderBrush" Value="#26262B"/>
+            <Setter Property="Padding" Value="12,9"/>
+        </Style>
+        <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+            <Setter Property="Background" Value="#18181B"/>
+        </Style>
+        <Style x:Key="SFlat" TargetType="Button" BasedOn="{StaticResource Flat}">
+            <Setter Property="Background" Value="#1F1F24"/>
+            <Setter Property="BorderBrush" Value="#2A2A30"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="SSegment" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#D4D4DA"/>
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="b" Background="#1A1A1E" BorderBrush="#2A2A30" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#232328"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#ECECF1"/>
+                                <Setter TargetName="b" Property="BorderBrush" Value="#ECECF1"/>
+                                <Setter Property="Foreground" Value="#000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="Nav" TargetType="RadioButton">
             <Setter Property="Foreground" Value="#B9B9C3"/>
             <Setter Property="FontSize" Value="13"/>
@@ -36,8 +79,8 @@
             </Setter>
         </Style>
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="#0E0E10"/>
-            <Setter Property="BorderBrush" Value="#1C1C20"/>
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="BorderBrush" Value="#1E1E23"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="18,6"/>
@@ -166,7 +209,7 @@
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Данные Isle"/>
                                     <TextBlock Style="{StaticResource RowNote}" x:Name="DataDirText"/></StackPanel>
-                                <Button Style="{StaticResource Flat}" Content="Открыть папку" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnDataDir"/>
+                                <Button Style="{StaticResource SFlat}" Content="Открыть папку" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnDataDir"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -199,9 +242,9 @@
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Персонаж"/>
                                     <TextBlock Style="{StaticResource RowNote}" Text="Клоди живёт в чёлке: пляшет под музыку, думает вместе с ИИ, радуется готовому и засыпает, когда тебя нет."/>
                                     <WrapPanel Margin="0,10,0,0">
-                                        <RadioButton Style="{StaticResource Segment}" GroupName="ch" Content="Клоди" x:Name="ChPixel" Click="OnCharacter" Tag="pixel"/>
-                                        <RadioButton Style="{StaticResource Segment}" GroupName="ch" Content="Глаза" x:Name="ChEyes" Click="OnCharacter" Tag="eyes"/>
-                                        <RadioButton Style="{StaticResource Segment}" GroupName="ch" Content="Без персонажа" x:Name="ChNone" Click="OnCharacter" Tag="none"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Клоди" x:Name="ChPixel" Click="OnCharacter" Tag="pixel"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Глаза" x:Name="ChEyes" Click="OnCharacter" Tag="eyes"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Без персонажа" x:Name="ChNone" Click="OnCharacter" Tag="none"/>
                                     </WrapPanel>
                                 </StackPanel>
                             </Grid>
@@ -239,10 +282,10 @@
                                 <TextBlock Style="{StaticResource RowTitle}" Text="Пилюля во время музыки"/>
                                 <TextBlock Style="{StaticResource RowNote}" Text="«Обычная» — обложка и полоски ритма. «С названием» — трек и полоса времени. «Мини-плеер» — обложка, полоса и кнопки; открывается щелчком, а не наведением. «С текстом» — строка песни, которая звучит."/>
                                 <WrapPanel Margin="0,10,0,0">
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillBars" Content="Обычная" Tag="bars" Click="OnPill"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillTitle" Content="С названием" Tag="title" Click="OnPill"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillMini" Content="Мини-плеер" Tag="mini" Click="OnPill"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="pill" x:Name="PillLyrics" Content="С текстом" Tag="lyrics" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillBars" Content="Обычная" Tag="bars" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillTitle" Content="С названием" Tag="title" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillMini" Content="Мини-плеер" Tag="mini" Click="OnPill"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillLyrics" Content="С текстом" Tag="lyrics" Click="OnPill"/>
                                 </WrapPanel>
                             </StackPanel>
                             <Border Style="{StaticResource Sep}"/>
@@ -250,9 +293,9 @@
                                 <TextBlock Style="{StaticResource RowTitle}" Text="Плеер на «Главной»"/>
                                 <TextBlock Style="{StaticResource RowNote}" Text="«Мягкое зеркало» — обложка по центру, вокруг её размытое свечение. «Заливка» — весь плеер в цветах обложки. «Компактный» — обложка слева, без свечения."/>
                                 <WrapPanel Margin="0,10,0,0">
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="hp" x:Name="HpMirror" Content="Мягкое зеркало" Tag="mirror" Click="OnHomePlayer"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="hp" x:Name="HpFill" Content="Заливка" Tag="fill" Click="OnHomePlayer"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="hp" x:Name="HpCompact" Content="Компактный" Tag="compact" Click="OnHomePlayer"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpMirror" Content="Мягкое зеркало" Tag="mirror" Click="OnHomePlayer"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpFill" Content="Заливка" Tag="fill" Click="OnHomePlayer"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpCompact" Content="Компактный" Tag="compact" Click="OnHomePlayer"/>
                                 </WrapPanel>
                             </StackPanel>
                             <Border Style="{StaticResource Sep}"/>
@@ -309,7 +352,7 @@
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <PasswordBox x:Name="AiKey"/>
-                                <Button Grid.Column="1" Style="{StaticResource Flat}" Content="Сохранить" Margin="8,0,0,0" Click="OnAiSaveKey"/>
+                                <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnAiSaveKey"/>
                                 <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Удалить" Foreground="#F87171" Margin="6,0,0,0" Click="OnAiDeleteKey"/>
                             </Grid>
                             <TextBlock x:Name="AiKeyState" Style="{StaticResource RowNote}"/>
@@ -323,7 +366,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBox x:Name="AiBase" Tag="https://…/v1" LostFocus="OnAiFieldsChanged"/>
                                 <TextBox x:Name="AiModel" Grid.Column="1" Margin="8,0,0,0" Tag="модель" LostFocus="OnAiFieldsChanged"/>
-                                <Button x:Name="ModelsBtn" Grid.Column="2" Style="{StaticResource Flat}" Margin="8,0,0,0" Click="OnModels">
+                                <Button x:Name="ModelsBtn" Grid.Column="2" Style="{StaticResource SFlat}" Margin="8,0,0,0" Click="OnModels">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="Список"/><h:Icon Kind="Next" Width="11" Height="11" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform></h:Icon></StackPanel>
                                 </Button>
                             </Grid>
@@ -342,11 +385,11 @@
                         <StackPanel Margin="0,12">
                             <TextBlock Style="{StaticResource RowNote}" Margin="0" Text="Нажми Ctrl+Alt+D, скажи и нажми ещё раз: текст окажется в буфере. Запись уходит в выбранный сервис распознавания (Whisper)."/>
                             <WrapPanel Margin="0,12,0,0">
-                                <RadioButton Style="{StaticResource Segment}" GroupName="vp" x:Name="VpGroq" Click="OnVoicePreset" Tag="groq">
+                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpGroq" Click="OnVoicePreset" Tag="groq">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="Groq · Whisper"/><Border Background="#1F2A22" CornerRadius="6" Padding="5,1" Margin="8,0,0,0"><TextBlock Text="бесплатно" FontSize="10" Foreground="#8BD49E"/></Border></StackPanel>
                                 </RadioButton>
-                                <RadioButton Style="{StaticResource Segment}" GroupName="vp" x:Name="VpOpenAi" Click="OnVoicePreset" Tag="openai" Content="OpenAI · Whisper"/>
-                                <RadioButton Style="{StaticResource Segment}" GroupName="vp" x:Name="VpCustom" Click="OnVoicePreset" Tag="custom" Content="Свой адрес"/>
+                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpOpenAi" Click="OnVoicePreset" Tag="openai" Content="OpenAI · Whisper"/>
+                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpCustom" Click="OnVoicePreset" Tag="custom" Content="Свой адрес"/>
                             </WrapPanel>
                             <TextBlock Style="{StaticResource RowNote}" Text="Groq: бесплатно, до 8 часов речи в день, отвечает за секунду и хорошо понимает русский. Тот же ключ, что и в разделе «ИИ»."/>
                         </StackPanel>
@@ -364,7 +407,7 @@
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <PasswordBox x:Name="VoiceKey"/>
-                                <Button Grid.Column="1" Style="{StaticResource Flat}" Content="Сохранить" Margin="8,0,0,0" Click="OnVoiceSaveKey"/>
+                                <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnVoiceSaveKey"/>
                             </Grid>
                             <TextBlock x:Name="VoiceKeyState" Style="{StaticResource RowNote}"/>
                         </StackPanel>
@@ -374,9 +417,9 @@
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,260,0"><TextBlock Style="{StaticResource RowTitle}" Text="Язык речи"/><TextBlock Style="{StaticResource RowNote}" Text="Подсказка сервису: с ней он реже путает языки"/></StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="vl" x:Name="VlAuto" Content="Сам определит" Tag="" Click="OnVoiceLang"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="vl" x:Name="VlRu" Content="Русский" Tag="ru" Click="OnVoiceLang"/>
-                                    <RadioButton Style="{StaticResource Segment}" GroupName="vl" x:Name="VlEn" Content="English" Tag="en" Click="OnVoiceLang"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlAuto" Content="Сам определит" Tag="" Click="OnVoiceLang"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlRu" Content="Русский" Tag="ru" Click="OnVoiceLang"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlEn" Content="English" Tag="en" Click="OnVoiceLang"/>
                                 </StackPanel>
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
@@ -404,7 +447,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBox x:Name="ObsPort" Tag="порт" LostFocus="OnObsFields"/>
                                 <PasswordBox x:Name="ObsPass" Grid.Column="1" Margin="8,0,0,0"/>
-                                <Button Grid.Column="2" Style="{StaticResource Flat}" Content="Сохранить пароль" Margin="8,0,0,0" Click="OnObsSave"/>
+                                <Button Grid.Column="2" Style="{StaticResource SFlat}" Content="Сохранить пароль" Margin="8,0,0,0" Click="OnObsSave"/>
                             </Grid>
                             <Grid Margin="0,14,0,4">
                                 <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="OBS: запись и трансляция в чёлке"/>
@@ -481,7 +524,7 @@
                                     <TextBlock x:Name="UpdStatus" Style="{StaticResource RowNote}" Text="Нажми «Проверить»"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <Button x:Name="UpdCheckBtn" Style="{StaticResource Flat}" Content="Проверить" Padding="14,8" Click="OnUpdateCheck"/>
+                                    <Button x:Name="UpdCheckBtn" Style="{StaticResource SFlat}" Content="Проверить" Padding="14,8" Click="OnUpdateCheck"/>
                                     <Button x:Name="UpdInstallBtn" Style="{StaticResource Primary}" Content="Обновить" Padding="16,8" Margin="8,0,0,0" Click="OnUpdateInstall" Visibility="Collapsed"/>
                                 </StackPanel>
                             </Grid>
@@ -503,7 +546,7 @@
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Все версии"/>
                                     <TextBlock Style="{StaticResource RowNote}" Text="Список изменений и установщики на GitHub"/></StackPanel>
-                                <Button Style="{StaticResource Flat}" Content="Открыть" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnReleases"/>
+                                <Button Style="{StaticResource SFlat}" Content="Открыть" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnReleases"/>
                             </Grid>
                         </StackPanel>
                     </Border>

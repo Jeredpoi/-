@@ -136,7 +136,7 @@
                             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#1F1F24"/>
+                            <!-- фон рисует общая бегущая подсветка (TabIndicator) -->
                             <Setter TargetName="label" Property="Visibility" Value="Visible"/>
                             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                         </Trigger>

@@ -215,3 +215,26 @@ namespace Isle.Tests
         public void LeavesUnknownBrackets() => Assert.Contains("[[foo: bar]]", AiActions.Extract("x [[foo: bar]]").text);
     }
 }
+
+namespace Isle.Tests
+{
+    public class TimerParseTests
+    {
+        [Theory]
+        [InlineData("5", 300)]
+        [InlineData("30с", 30)]
+        [InlineData("1 сек", 1)]
+        [InlineData("90 sec", 90)]
+        [InlineData("1:30", 90)]
+        [InlineData("2м", 120)]
+        [InlineData("1ч 20м", 4800)]
+        [InlineData("1.5ч", 5400)]
+        public void Parses(string text, int seconds) => Assert.Equal(TimeSpan.FromSeconds(seconds), TimerService.ParseDuration(text));
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("abc")]
+        [InlineData("0")]
+        public void Rejects(string text) => Assert.Null(TimerService.ParseDuration(text));
+    }
+}

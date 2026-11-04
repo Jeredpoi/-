@@ -68,6 +68,11 @@ namespace Isle
             AppHost.Notifications = new NotificationService();
             AppHost.Voice = new VoiceService();
             AppHost.Spectrum = new SpectrumService();
+            AlarmService.Stopped += () => Dispatcher.InvokeAsync(() =>
+            {
+                StopAlarmPulse();
+                if (_currentToast?.Kind == ToastKind.Alarm) { _toastTimer.Stop(); NextToast(); }
+            });
             // живой индикатор громкости голоса в чёлке, пока идёт диктовка
             AppHost.Voice.Level += lvl => Dispatcher.InvokeAsync(() =>
             {
@@ -214,6 +219,8 @@ namespace Isle
                 };
                 trim.Start();
                 App.Trace("все модули запущены");
+                // заранее создаём вкладки в простое — первое открытие без рывка
+                _ = Dispatcher.InvokeAsync(() => { foreach (var t in TabOrder) GetView(t); }, DispatcherPriority.ApplicationIdle);
             };
         }
 
@@ -316,6 +323,12 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
+            if (AlarmService.Ringing && State == IslandState.Toast)
+            {
+                AlarmService.Stop(); // клик по звенящей чёлке — выключить будильник
+                e.Handled = true;
+                return;
+            }
             if (State != IslandState.Expanded)
             {
                 if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return; // кнопки мини-плеера
@@ -387,6 +400,7 @@ namespace Isle
             Island.CornerRadius = new CornerRadius(0, 0, 30, 30);
             DropHint.CornerRadius = Island.CornerRadius;
             _collapseVersion++;
+            MoveTabIndicator(TabButton(_currentTab), false);
             AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 620, spring: true);
             // содержимое проявляется из лёгкого размытия и чуть «подрастает»
             var st = new ScaleTransform(0.95, 0.95);
@@ -455,6 +469,7 @@ namespace Isle
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
+            if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
@@ -513,6 +528,7 @@ namespace Isle
         }
 
         private int _collapseVersion;
+        private int _slideDir = 1;
         private UIElement _lastRow;
 
         private void AnimateSize(double w, double h, int ms, bool spring = false)
@@ -574,22 +590,50 @@ namespace Isle
             return v;
         }
 
+        private static readonly string[] TabOrder = { "home", "clip", "shelf", "text", "chat", "notes", "weather", "controls" };
+
+        /// <summary>Подсветка плавно переезжает под выбранную вкладку и подстраивается по ширине.</summary>
+        private void MoveTabIndicator(RadioButton rb, bool animate)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    var x = rb.TranslatePoint(new Point(0, 0), TabBar).X;
+                    double w = rb.ActualWidth - 2; // у вкладок справа отступ 2
+                    var dur = TimeSpan.FromMilliseconds(animate ? 380 : 0);
+                    var ease = new Helpers.Spring { Damping = 9, Frequency = 9 };
+                    TabIndicatorT.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(x, dur) { EasingFunction = ease });
+                    TabIndicator.BeginAnimation(WidthProperty, new DoubleAnimation(Math.Max(30, w), dur) { EasingFunction = ease });
+                }
+                catch { }
+            }, DispatcherPriority.Loaded);
+        }
+
+        private RadioButton TabButton(string tab) => tab switch
+        {
+            "clip" => TabClip, "shelf" => TabShelf, "text" => TabText, "chat" => TabChat, "notes" => TabNotes,
+            "weather" => TabWeather, "controls" => TabControls, _ => TabHome
+        };
+
         public void SelectTab(string tab)
         {
+            int from = Array.IndexOf(TabOrder, _currentTab), to = Array.IndexOf(TabOrder, tab);
+            _slideDir = to >= from ? 1 : -1;
             _currentTab = tab;
-            var rb = tab switch
-            {
-                "clip" => TabClip, "shelf" => TabShelf, "text" => TabText, "chat" => TabChat, "notes" => TabNotes,
-                "weather" => TabWeather, "controls" => TabControls, _ => TabHome
-            };
+            var rb = TabButton(tab);
             if (rb.IsChecked != true) rb.IsChecked = true; // вызовет OnTab ещё раз — это безопасно
+            MoveTabIndicator(rb, State == IslandState.Expanded);
             var view = GetView(tab);
             if (!ReferenceEquals(TabHost.Content, view))
             {
                 TabHost.Content = view;
                 view.Opacity = 0;
                 Fade(view, 1, 200);
-                TabSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+                // содержимое въезжает со стороны выбранной вкладки
+                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+                TabSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(26 * _slideDir, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+                TabSlide.BeginAnimation(TranslateTransform.YProperty, null);
                 if (State == IslandState.Expanded) (view as Views.IIslandView)?.OnShown();
             }
         }
@@ -687,12 +731,57 @@ namespace Isle
             Edge.Fill = Island.Background;
             IslandShadow.Opacity = s.IslandOpacity;
             Buddy.Visibility = s.Character == "pixel" ? Visibility.Visible : Visibility.Collapsed;
+            BuddyMedia.Visibility = BuddyTimer.Visibility = Buddy.Visibility; // Клоди и во время музыки, и с таймером
             Eyes.Visibility = s.Character == "eyes" ? Visibility.Visible : Visibility.Collapsed;
             ApplyScale();
             if (State == IslandState.Collapsed) ShowCollapsedContent(false);
         }
 
         private bool _aiBusy;
+        private bool _pulsing;
+
+        /// <summary>Будильник: чёлка переливается красным и серым и чуть «дышит».</summary>
+        private void StartAlarmPulse()
+        {
+            if (_pulsing) return;
+            _pulsing = true;
+            var brush = new SolidColorBrush(Color.FromRgb(0x5A, 0x14, 0x18));
+            Island.Background = brush;
+            Edge.Fill = brush;
+            brush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0x5A, 0x14, 0x18), Color.FromRgb(0x2A, 0x2A, 0x30), TimeSpan.FromMilliseconds(520))
+            { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
+            ToastIcon.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(260)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) b.Mood = Helpers.Mood.Attention;
+        }
+
+        private void StopAlarmPulse()
+        {
+            if (!_pulsing) return;
+            _pulsing = false;
+            ToastIcon.BeginAnimation(OpacityProperty, null);
+            ToastIcon.Opacity = 1;
+            ApplyAppearance(); // вернуть обычный чёрный фон
+        }
+        private DateTime _workingUntil = DateTime.MinValue, _nextWork = DateTime.Now.AddSeconds(40), _nextClaudeCheck;
+        private bool _claudeRunning;
+
+        /// <summary>
+        /// Клоди иногда садится за ноутбук «писать код» — секунд на 25, раз в несколько минут.
+        /// Если запущен Claude Code, работает заметно чаще.
+        /// </summary>
+        private void UpdateWorking(TimeSpan idle)
+        {
+            if (DateTime.Now >= _nextClaudeCheck)
+            {
+                _nextClaudeCheck = DateTime.Now.AddSeconds(15);
+                try { _claudeRunning = System.Diagnostics.Process.GetProcessesByName("claude").Length > 0; } catch { }
+            }
+            if (DateTime.Now >= _nextWork && idle < TimeSpan.FromMinutes(4))
+            {
+                _workingUntil = DateTime.Now.AddSeconds(_claudeRunning ? 45 : 25);
+                _nextWork = _workingUntil.AddSeconds(_claudeRunning ? 30 + _rnd.Next(60) : 120 + _rnd.Next(180));
+            }
+        }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(Win32.POINT p);
@@ -750,6 +839,7 @@ namespace Isle
 
         private void EnqueueToast(Toast t)
         {
+            if (t.Kind == ToastKind.Alarm && State == IslandState.Expanded && !_pinned) Collapse(); // будильник важнее открытой панели
             if (State == IslandState.Expanded && !t.Important) return;
             if (t.ReplaceKey != null && _currentToast?.ReplaceKey == t.ReplaceKey)
             {
@@ -774,6 +864,8 @@ namespace Isle
             if (State == IslandState.Expanded) { _currentToast = null; return; }
             if (_toasts.Count == 0)
             {
+                if (_currentToast?.Kind == ToastKind.Alarm) AlarmService.Stop();
+                StopAlarmPulse();
                 _currentToast = null;
                 State = IslandState.Collapsed;
                 ShowCollapsedContent(false);
@@ -797,6 +889,7 @@ namespace Isle
         {
             _currentToast = t;
             if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
+            if (t.Kind == ToastKind.Alarm) StartAlarmPulse(); else StopAlarmPulse();
             ToastTitle.Text = t.Title;
             ToastSub.Text = t.Subtitle ?? "";
             ToastSub.Visibility = string.IsNullOrEmpty(t.Subtitle) ? Visibility.Collapsed : Visibility.Visible;
@@ -993,12 +1086,16 @@ namespace Isle
             {
                 var m = AppHost.Media?.Current;
                 bool playing = m != null && m.HasSession && m.IsPlaying;
-                Buddy.Beat = playing ? (AppHost.Audio?.Peak ?? 0) : 0;
-                Buddy.Mood = _aiBusy ? Helpers.Mood.Thinking
+                float beat = playing ? (AppHost.Audio?.Peak ?? 0) : 0;
+                var idle = IdleTime();
+                UpdateWorking(idle);
+                var mood = _aiBusy ? Helpers.Mood.Thinking
                     : State == IslandState.Toast && _currentToast?.Kind == ToastKind.Notification ? Helpers.Mood.Attention
                     : playing ? Helpers.Mood.Music
-                    : IdleTime() > TimeSpan.FromMinutes(5) ? Helpers.Mood.Sleep
+                    : idle > TimeSpan.FromMinutes(5) ? Helpers.Mood.Sleep
+                    : DateTime.Now < _workingUntil ? Helpers.Mood.Working
                     : Helpers.Mood.Idle;
+                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; }
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {

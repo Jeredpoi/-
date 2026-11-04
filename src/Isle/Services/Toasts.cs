@@ -3,7 +3,7 @@ using System.Windows.Media;
 
 namespace Isle.Services
 {
-    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Timer, Reminder, Success }
+    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Timer, Reminder, Success, Alarm }
 
     public class Toast
     {

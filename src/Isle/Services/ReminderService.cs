@@ -66,12 +66,7 @@ namespace Isle.Services
             bool changed = false;
             foreach (var r in Items.Where(x => x.When <= now).ToList())
             {
-                ToastBus.Show(new Toast
-                {
-                    Kind = ToastKind.Reminder, Title = "Напоминание", Subtitle = r.Text, Icon = Icons.Bell,
-                    Accent = System.Windows.Media.Color.FromRgb(0xFF, 0xB5, 0x47),
-                    Duration = TimeSpan.FromSeconds(8), Important = true
-                });
+                AlarmService.Ring("Напоминание", r.Text);
                 if (r.Daily) { while (r.When <= now) r.When = r.When.AddDays(1); }
                 else Items.Remove(r);
                 changed = true;

@@ -64,9 +64,12 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <h:Character x:Name="BuddyMedia" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                             <Border x:Name="MiniCoverBox" Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True" VerticalAlignment="Center">
                                 <Image x:Name="MiniCover" Stretch="UniformToFill"/>
                             </Border>
+                            </StackPanel>
                             <!-- середина: название / строка песни / полоса времени (зависит от вида пилюли) -->
                             <StackPanel x:Name="MiniCenter" Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="MiniTitle" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -98,6 +101,7 @@
                         <!-- таймер -->
                         <Grid x:Name="TimerRow" Visibility="Collapsed" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <h:Character x:Name="BuddyTimer" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                                 <h:Icon Kind="Timer" Width="15" Height="15" Foreground="{StaticResource Accent}"/>
                                 <TextBlock Text="Таймер" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="7,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
@@ -130,7 +134,12 @@
                     <!-- ===== Развёрнутая панель ===== -->
                     <DockPanel x:Name="ExpandedView" Visibility="Collapsed" Margin="16,10,16,16" Opacity="0">
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12" LastChildFill="False">
-                            <StackPanel x:Name="TabBar" Orientation="Horizontal" DockPanel.Dock="Left">
+                            <Grid DockPanel.Dock="Left">
+                            <!-- бегущая подсветка выбранной вкладки -->
+                            <Border x:Name="TabIndicator" Height="32" Width="40" CornerRadius="16" Background="#24242B" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <Border.RenderTransform><TranslateTransform x:Name="TabIndicatorT"/></Border.RenderTransform>
+                            </Border>
+                            <StackPanel x:Name="TabBar" Orientation="Horizontal">
                                 <RadioButton Style="{StaticResource Tab}" Content="Главная" x:Name="TabHome" IsChecked="True" Checked="OnTab">
                                     <RadioButton.Tag><h:Icon Kind="Home" Width="15" Height="15"/></RadioButton.Tag>
                                 </RadioButton>
@@ -157,6 +166,7 @@
                                 </RadioButton>
                             </StackPanel>
 
+                            </Grid>
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                                 <!-- VPN: клик — отключить, правый клик — проверить заново -->
                                 <Button x:Name="VpnChip" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Visibility="Collapsed"

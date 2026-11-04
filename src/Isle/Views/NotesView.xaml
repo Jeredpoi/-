@@ -77,7 +77,12 @@
                             </StackPanel>
                         </Button>
                         <Grid Margin="0,6,0,0">
-                            <TextBox x:Name="Custom" Tag="Своё, мин" Padding="10,6" FontSize="12" KeyDown="OnCustomKey"/>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBox x:Name="Custom" Tag="Своё: 3, 30с, 1:30" Padding="10,6" FontSize="12" KeyDown="OnCustomKey"/>
+                            <Button x:Name="ResetBtn" Grid.Column="1" Style="{StaticResource Flat}" Width="32" Height="32" Padding="0" Margin="6,0,0,0"
+                                    Click="OnTimerReset" ToolTip="Отменить таймер" Visibility="Collapsed">
+                                <h:Icon Kind="Close" Width="12" Height="12"/>
+                            </Button>
                         </Grid>
                     </StackPanel>
                 </Grid>

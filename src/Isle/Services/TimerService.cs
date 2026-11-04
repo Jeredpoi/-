@@ -61,15 +61,34 @@ namespace Isle.Services
             if (Running && DateTime.Now >= _end)
             {
                 Running = false; _t.Stop(); _pausedLeft = TimeSpan.Zero;
-                ToastBus.Show(new Toast
-                {
-                    Kind = ToastKind.Timer, Title = "Время вышло", Subtitle = "Таймер на " + Format(Total),
-                    Icon = Icons.Timer, Accent = System.Windows.Media.Color.FromRgb(0xFF, 0xB5, 0x47),
-                    Duration = TimeSpan.FromSeconds(8), Important = true
-                });
-                try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
+                AlarmService.Ring("Время вышло", "Таймер на " + Format(Total));
             }
             Changed?.Invoke();
+        }
+
+        /// <summary>«5» = 5 минут, «30с», «90 сек», «1:30», «2м», «1ч 20м», «1.5ч».</summary>
+        public static TimeSpan? ParseDuration(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var t = text.Trim().ToLowerInvariant().Replace(',', '.');
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var colon = System.Text.RegularExpressions.Regex.Match(t, @"^(\d+):(\d{1,2})(?::(\d{1,2}))?$");
+            if (colon.Success)
+            {
+                int a = int.Parse(colon.Groups[1].Value), b = int.Parse(colon.Groups[2].Value);
+                return colon.Groups[3].Success ? new TimeSpan(a, b, int.Parse(colon.Groups[3].Value)) : new TimeSpan(0, a, b);
+            }
+            var total = TimeSpan.Zero; bool any = false;
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(t, @"(\d+(?:\.\d+)?)\s*([a-zа-яё]*)"))
+            {
+                double n = double.Parse(m.Groups[1].Value, inv);
+                var u = m.Groups[2].Value;
+                total += u.StartsWith("с") || u.StartsWith("s") ? TimeSpan.FromSeconds(n)
+                       : u.StartsWith("ч") || u.StartsWith("h") ? TimeSpan.FromHours(n)
+                       : TimeSpan.FromMinutes(n);
+                any = true;
+            }
+            return any && total > TimeSpan.Zero && total < TimeSpan.FromHours(24) ? total : null;
         }
 
         public static string Format(TimeSpan t) =>

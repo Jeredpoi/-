@@ -280,7 +280,7 @@ namespace Isle.Views
                 var c = (Color)ColorConverter.ConvertFromString(hex);
                 var rb = new RadioButton
                 {
-                    Style = (Style)FindResource("Segment"), GroupName = "accent", Tag = hex, Padding = new Thickness(0),
+                    Style = (Style)FindResource("SSegment"), GroupName = "accent", Tag = hex, Padding = new Thickness(0),
                     Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = new SolidColorBrush(c) },
                     IsChecked = string.Equals(hex, S.AccentHex, StringComparison.OrdinalIgnoreCase), ToolTip = hex
                 };
@@ -347,7 +347,7 @@ namespace Isle.Views
                         Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(8, 0, 0, 0),
                         Child = new TextBlock { Text = "бесплатно", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0xD4, 0x9E)) }
                     });
-                var rb = new RadioButton { Style = (Style)FindResource("Segment"), GroupName = "ai", Tag = p.Id, Content = content };
+                var rb = new RadioButton { Style = (Style)FindResource("SSegment"), GroupName = "ai", Tag = p.Id, Content = content };
                 rb.Click += (_, __) => SelectPreset(p.Id, true);
                 AiPresets.Children.Add(rb);
             }
