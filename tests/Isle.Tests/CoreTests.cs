@@ -234,6 +234,34 @@ namespace Isle.Tests
         public void LeavesUnknownBrackets() => Assert.Contains("[[foo: bar]]", AiActions.Extract("x [[foo: bar]]").text);
 
         [Fact]
+        public void TempoFromBeats()
+        {
+            Assert.Equal(120, SpectrumService.BpmFromIntervals(new[] { 0.5, 0.5, 0.49, 0.51, 0.5 }), 0);
+            Assert.Equal(90, SpectrumService.BpmFromIntervals(new[] { 1.33, 1.34, 1.33, 1.32 }), 0); // 45 → удваиваем до 90
+        }
+
+        [Fact]
+        public void DanceMatchesTempo()
+        {
+            var rnd = new Random(1);
+            for (int i = 0; i < 200; i++)
+            {
+                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0 }); // быстро и плотно
+                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6 }); // медленно
+                Assert.NotEqual(3, Isle.Helpers.Character.PickDance(110, 0.4, 3, rnd));                      // не повторяет текущий
+            }
+        }
+
+        [Fact]
+        public void HolidayHats()
+        {
+            Assert.Equal("ny", Isle.Helpers.Character.Holiday(new DateTime(2026, 12, 31)));
+            Assert.Equal("ny", Isle.Helpers.Character.Holiday(new DateTime(2027, 1, 5)));
+            Assert.Equal("halloween", Isle.Helpers.Character.Holiday(new DateTime(2026, 10, 31)));
+            Assert.Null(Isle.Helpers.Character.Holiday(new DateTime(2026, 11, 4)));
+        }
+
+        [Fact]
         public void ThinkingIsRemovedEvenIfCut()
         {
             Assert.Equal("Ответ", AiService.StripThinking("<think>думаю…</think>Ответ"));
