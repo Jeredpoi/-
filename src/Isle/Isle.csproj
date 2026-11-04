@@ -12,6 +12,7 @@
     <RootNamespace>Isle</RootNamespace>
     <AssemblyName>Isle</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <Version>0.1.0</Version>
     <Product>Isle</Product>
     <Authors>Jeredpoi</Authors>

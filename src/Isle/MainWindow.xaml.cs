@@ -147,6 +147,7 @@ namespace Isle
             Loaded += async (_, __) =>
             {
                 PlaceWindow();
+                App.Trace("остров на экране: " + Left + "," + Top + ", экран " + SystemParameters.PrimaryScreenWidth + "×" + SystemParameters.PrimaryScreenHeight);
                 Clock();
                 _clock.Start();
                 _topmost.Start();
@@ -159,6 +160,7 @@ namespace Isle
                 _weatherTimer.Start();
                 await RefreshWeather();
                 ApplyOledMode();
+                App.Trace("все модули запущены");
             };
         }
 

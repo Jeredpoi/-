@@ -41,7 +41,7 @@ namespace Isle.Views
             Battery.IsChecked = S.BatteryToasts;
             Notif.IsChecked = S.NotificationToasts;
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
-            Clip.IsChecked = S.ClipboardHistory;
+            ClipHist.IsChecked = S.ClipboardHistory;
             ClipImg.IsChecked = S.ClipboardImages;
             Vpn.IsChecked = S.VpnStatus;
             Captures.IsChecked = S.ShowInCaptures;
@@ -69,7 +69,7 @@ namespace Isle.Views
             S.CapsToasts = Caps.IsChecked == true;
             S.BatteryToasts = Battery.IsChecked == true;
             S.NotificationToasts = Notif.IsChecked == true;
-            S.ClipboardHistory = Clip.IsChecked == true;
+            S.ClipboardHistory = ClipHist.IsChecked == true;
             S.ClipboardImages = ClipImg.IsChecked == true;
             S.VpnStatus = Vpn.IsChecked == true;
             S.Save();

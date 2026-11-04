@@ -122,7 +122,7 @@ namespace Isle.Services
                 catch { }
             }
 
-            _ui.InvokeAsync(() =>
+            _ = _ui.InvokeAsync(() =>
             {
                 var newKey = info.Title + "|" + info.Artist;
                 bool trackChanged = newKey != _lastKey && !string.IsNullOrEmpty(info.Title);

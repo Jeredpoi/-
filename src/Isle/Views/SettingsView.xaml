@@ -52,7 +52,7 @@
                 <CheckBox x:Name="Battery" Content="Зарядка и низкий заряд" Click="OnToggle"/>
                 <CheckBox x:Name="Notif" Content="Уведомления других приложений" Click="OnToggle"/>
                 <TextBlock x:Name="NotifStatus" Style="{StaticResource Note}"/>
-                <CheckBox x:Name="Clip" Content="История буфера обмена" Click="OnToggle"/>
+                <CheckBox x:Name="ClipHist" Content="История буфера обмена" Click="OnToggle"/>
                 <CheckBox x:Name="ClipImg" Content="Сохранять в истории картинки" Click="OnToggle"/>
                 <CheckBox x:Name="Vpn" Content="Статус VPN и страна" Click="OnToggle"/>
             </StackPanel>

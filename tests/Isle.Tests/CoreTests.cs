@@ -172,6 +172,14 @@ namespace Isle.Tests
                         w.SelectTab(tab);
                         Assert.NotNull(w.GetView(tab));
                     }
+                    // Показываем окно по-настоящему: проверяем OnSourceInitialized и Loaded (горячие клавиши, буфер, модули).
+                    w.Show();
+                    var frame = new System.Windows.Threading.DispatcherFrame();
+                    var stop = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                    stop.Tick += (_, __) => { stop.Stop(); frame.Continue = false; };
+                    stop.Start();
+                    System.Windows.Threading.Dispatcher.PushFrame(frame);
+                    Assert.True(w.IsVisible, "окно острова не видно после Show()");
                     w.Close();
                 }
                 catch (Exception ex) { error = ex; }

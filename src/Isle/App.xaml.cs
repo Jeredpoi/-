@@ -19,10 +19,17 @@ namespace Isle
         protected override void OnStartup(StartupEventArgs e)
         {
             _single = new Mutex(true, MutexName, out bool first);
+            Trace("запуск " + typeof(App).Assembly.GetName().Version + ", " + Environment.OSVersion + ", " + Environment.ProcessPath, first);
             if (!first)
             {
                 // Isle уже работает — просим его показаться и выходим.
-                try { EventWaitHandle.OpenExisting(ShowEventName).Set(); } catch { }
+                Trace("уже запущен — прошу показаться");
+                bool signalled = false;
+                try { EventWaitHandle.OpenExisting(ShowEventName).Set(); signalled = true; } catch { }
+                if (!signalled)
+                    MessageBox.Show("Isle уже запущен, но не отвечает (скорее всего, это старая версия).\n\n" +
+                                    "Открой Диспетчер задач (Ctrl+Shift+Esc), заверши все процессы Isle.exe и запусти Isle ещё раз.",
+                                    "Isle", MessageBoxButton.OK, MessageBoxImage.Information);
                 Shutdown();
                 return;
             }
@@ -34,8 +41,10 @@ namespace Isle
             try
             {
                 var w = new MainWindow();
+                Trace("окно создано");
                 AppHost.Window = w;
                 w.Show();
+                Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
             }
             catch (Exception ex)
@@ -72,11 +81,25 @@ namespace Isle
         private void Fatal(Exception ex)
         {
             Log("FATAL: " + ex);
+            Trace("ОШИБКА ЗАПУСКА: " + ex.Message);
             MessageBox.Show(
                 "Isle не смог запуститься.\n\n" + ex.GetType().Name + ": " + ex.Message +
                 "\n\nПодробности записаны в " + Path.Combine(Storage.Dir, "errors.log"),
                 "Isle", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
+        }
+
+        /// <summary>Журнал запуска %AppData%\Isle\startup.log — по нему видно, на каком шаге что-то сломалось.</summary>
+        public static void Trace(string text, bool fresh = false)
+        {
+            try
+            {
+                Directory.CreateDirectory(Storage.Dir);
+                var line = DateTime.Now.ToString("HH:mm:ss.fff") + "  " + text + Environment.NewLine;
+                var path = Path.Combine(Storage.Dir, "startup.log");
+                if (fresh) File.WriteAllText(path, line); else File.AppendAllText(path, line);
+            }
+            catch { }
         }
 
         public static void Log(string text)
