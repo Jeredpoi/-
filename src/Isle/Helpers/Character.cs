@@ -58,6 +58,20 @@ namespace Isle.Helpers
         /// <summary>Своё занятие в покое: стоит, сидит или оглядывается — меняется само раз в полминуты.</summary>
         private int _activity;
         private DateTime _nextActivity = DateTime.Now.AddSeconds(20);
+        /// <summary>Короткие занятия (помахать, подпрыгнуть, потянуться, подмигнуть) длятся пару секунд.</summary>
+        private DateTime _activityUntil = DateTime.MaxValue;
+        private DateTime _nextGreet = DateTime.Now.AddSeconds(5);
+        private bool _cursorFar = true;
+
+        // занятия в покое
+        private const int Stand = 0, Sit = 1, Look = 2, Wave = 3, Hop = 4, Walk = 5, Stretch = 6, Ball = 7, Book = 8, Coffee = 9, Wink = 10;
+
+        private void StartActivity(int a, double seconds)
+        {
+            _activity = a;
+            _activityUntil = seconds > 0 ? DateTime.Now.AddSeconds(seconds) : DateTime.MaxValue;
+            if (a == Look) _nextWander = DateTime.Now;
+        }
 
         /// <summary>Следить глазами за курсором.</summary>
         public bool FollowCursor { get; set; } = true;
@@ -109,6 +123,14 @@ namespace Isle.Helpers
                     var c = PointToScreen(new Point(ActualWidth / 2, ActualHeight / 2));
                     double dx = p.X - c.X, dy = p.Y - c.Y;
                     if (p.X != _lastCursor.X || p.Y != _lastCursor.Y) { _lastCursor = new Point(p.X, p.Y); _cursorMoved = DateTime.Now; }
+                    // курсор подлетел к Клоди издалека — он машет «привет»
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+                    if (dist < 160 && _cursorFar && mood == Mood.Idle && DateTime.Now >= _nextGreet)
+                    {
+                        StartActivity(Wave, 1.8);
+                        _nextGreet = DateTime.Now.AddSeconds(25);
+                    }
+                    _cursorFar = dist > 380;
                     if (DateTime.Now - _cursorMoved > TimeSpan.FromSeconds(6))
                     {
                         // курсор давно стоит — сам оглядывается по сторонам
@@ -167,11 +189,31 @@ namespace Isle.Helpers
             else _blink += (1 - _blink) * 0.2;
 
             if (_cheer > 0) _cheer = Math.Max(0, _cheer - 0.035);
+            if (mood == Mood.Idle && DateTime.Now >= _activityUntil) StartActivity(Stand, 0); // короткое занятие закончилось
             if (mood == Mood.Idle && DateTime.Now >= _nextActivity)
             {
-                _activity = _rnd.Next(3); // 0 — стоит, 1 — сидит, 2 — оглядывается
-                _nextActivity = DateTime.Now.AddSeconds(18 + _rnd.Next(25));
-                if (_activity == 2) _nextWander = DateTime.Now;
+                // своё занятие: стоит, сидит, оглядывается, машет, прыгает, гуляет, потягивается,
+                // подкидывает мячик, читает книжку, пьёт кофе (по утрам), подмигивает
+                int h = DateTime.Now.Hour;
+                var pool = new System.Collections.Generic.List<int> { Stand, Sit, Sit, Look, Look, Wave, Hop, Walk, Walk, Stretch, Ball, Ball, Book, Book, Wink };
+                if (h >= 6 && h < 12) { pool.Add(Coffee); pool.Add(Coffee); pool.Add(Coffee); }
+                int a = pool[_rnd.Next(pool.Count)];
+                if (a == _activity) a = Stand;
+                double len = a switch { Wave => 2.2, Hop => 2.0, Stretch => 2.4, Wink => 0.9, Walk => 9 + _rnd.Next(5), _ => 0 };
+                StartActivity(a, len);
+                _nextActivity = DateTime.Now.AddSeconds(a == Walk ? len + 4 : 14 + _rnd.Next(22));
+            }
+            if (mood != Mood.Idle && _activity != Stand && _activity != Sit && _activity != Look) StartActivity(Stand, 0);
+            if (mood == Mood.Idle && _activity == Book)
+            {
+                // читает: глаза бегут по строчкам вниз-вправо и возвращаются
+                double line = (_time * 0.7) % 1;
+                _lookX += ((line * 1.6 - 0.8) - _lookX) * 0.3; _lookY += (0.85 - _lookY) * 0.3;
+            }
+            if (mood == Mood.Idle && _activity == Ball)
+            {
+                // следит за мячиком
+                _lookX += (0 - _lookX) * 0.3; _lookY += (-0.9 + Math.Abs(Math.Sin(_time * 3.2)) * -0.1 - _lookY) * 0.3;
             }
             if (mood == Mood.Idle && _activity == 2)
             {
@@ -183,6 +225,64 @@ namespace Isle.Helpers
                 _lookX += (_wander.X - _lookX) * 0.2; _lookY += (_wander.Y - _lookY) * 0.2;
             }
             _bob += ((mood == Mood.Music ? Math.Min(1, Beat * 2.2) : 0) - _bob) * 0.5;
+        }
+
+        private static readonly Brush BookCover = Freeze(new SolidColorBrush(Color.FromRgb(0x3B, 0x6F, 0xD9)));
+        private static readonly Brush Paper = Freeze(new SolidColorBrush(Color.FromRgb(0xF4, 0xF1, 0xE8)));
+        private static readonly Brush BallRed = Freeze(new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71)));
+        private static readonly Brush Cup = Freeze(new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1)));
+        private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
+
+        /// <summary>Книжка, мячик и чашка кофе для занятий в покое.</summary>
+        private void DrawProps(DrawingContext dc, double ox, double oy, double px)
+        {
+            switch (_activity)
+            {
+                case Book:
+                {
+                    // раскрытая книжка перед Клоди, страница иногда перелистывается
+                    double bx = ox + 3 * px, by = oy + 4.6 * px;
+                    dc.DrawRectangle(BookCover, null, new Rect(bx - 0.3 * px, by, 7.6 * px, 2.6 * px));
+                    dc.DrawRectangle(Paper, null, new Rect(bx, by + 0.3 * px, 3.3 * px, 2 * px));
+                    dc.DrawRectangle(Paper, null, new Rect(bx + 3.7 * px, by + 0.3 * px, 3.3 * px, 2 * px));
+                    double flip = (_time % 5) / 5;
+                    if (flip > 0.85)
+                    {
+                        double k = (flip - 0.85) / 0.15; // страница переворачивается справа налево
+                        dc.DrawRectangle(Paper, null, new Rect(bx + 3.5 * px - 3.3 * px * k, by - 0.4 * px, 3.3 * px * Math.Max(0.15, 1 - Math.Abs(k * 2 - 1)), 2.2 * px));
+                    }
+                    var ink = new SolidColorBrush(Color.FromArgb(120, 0x55, 0x55, 0x60));
+                    for (int i = 0; i < 3; i++)
+                    {
+                        dc.DrawRectangle(ink, null, new Rect(bx + 0.4 * px, by + (0.7 + i * 0.55) * px, 2.4 * px, 0.25 * px));
+                        dc.DrawRectangle(ink, null, new Rect(bx + 4.1 * px, by + (0.7 + i * 0.55) * px, 2.4 * px, 0.25 * px));
+                    }
+                    break;
+                }
+                case Ball:
+                {
+                    // подкидывает мячик над головой
+                    double up = Math.Abs(Math.Sin(_time * 3.2));
+                    dc.DrawEllipse(BallRed, null, new Point(ox + 6.5 * px, oy - (1.2 + up * 4.2) * px), 0.8 * px, 0.8 * px);
+                    break;
+                }
+                case Coffee:
+                {
+                    // чашка в правой ручке, над ней поднимается пар
+                    bool sipping = Math.Sin(_time * 0.8) > 0.85;
+                    double cx = sipping ? ox + 10.2 * px : ox + 12.8 * px, cy = sipping ? oy + 3.2 * px : oy + 3.6 * px;
+                    dc.DrawRectangle(Cup, null, new Rect(cx, cy, 1.8 * px, 1.9 * px));
+                    dc.DrawRectangle(Cup, null, new Rect(cx + 1.8 * px, cy + 0.4 * px, 0.6 * px, 0.9 * px)); // ручка
+                    dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x6B, 0x3E, 0x26)), null, new Rect(cx + 0.2 * px, cy + 0.2 * px, 1.4 * px, 0.4 * px));
+                    for (int i = 0; i < 2; i++)
+                    {
+                        double ph = (_time * 0.9 + i * 0.5) % 1;
+                        var steam = new SolidColorBrush(Color.FromArgb((byte)(170 * (1 - ph)), 0xFF, 0xFF, 0xFF));
+                        dc.DrawRectangle(steam, null, new Rect(cx + (0.4 + i * 0.7 + Math.Sin(_time * 3 + i) * 0.25) * px, cy - (0.6 + ph * 2.2) * px, 0.4 * px, 0.4 * px));
+                    }
+                    break;
+                }
+            }
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -197,7 +297,17 @@ namespace Isle.Helpers
             {
                 case Mood.Idle:
                     dy = Math.Sin(_time * 2.2) * 0.35 * px; // дышит
-                    if (_activity == 1) dy += 1.0 * px;   // сидит — чуть ниже
+                    if (_activity == Sit || _activity == Book) dy += 1.0 * px;   // сидит (и читает сидя) — чуть ниже
+                    if (_activity == Hop) { dy -= Math.Abs(Math.Sin(_time * 5.5)) * 1.8 * px; step = true; }
+                    if (_activity == Walk)
+                    {
+                        // прогуливается туда-сюда, переставляя ножки
+                        dx = Math.Sin(_time * 0.9) * 1.3 * px;
+                        step = Math.Sin(_time * 7) > 0;
+                        tilt = Math.Sin(_time * 7) * 2.5;
+                    }
+                    if (_activity == Stretch) dy -= 0.6 * px;
+                    if (_activity == Wave) tilt = Math.Sin(_time * 7) * 3;
                     break;
                 case Mood.Music:
                     // танцует всегда, даже на тихих местах; под громкие доли прыгает выше
@@ -243,7 +353,7 @@ namespace Isle.Helpers
                     char c = row[x];
                     if (c == '.') continue;
                     double cy = y;
-                    if (c == 'l' && mood == Mood.Idle && _activity == 1)
+                    if (c == 'l' && mood == Mood.Idle && (_activity == Sit || _activity == Book))
                     {
                         if (y == 8) continue; // сидит: ножки поджаты
                     }
@@ -262,6 +372,14 @@ namespace Isle.Helpers
                     }
                     // зевая, потягивается — ручки вверх
                     if ((x == 0 || x == 12) && _yawn > 0.1 && _yawn < 0.9) cy = y - 1 - (Math.Sin(_yawn * Math.PI) > 0.6 ? 1 : 0);
+                    // занятия в покое: машет одной ручкой, потягивается, подкидывает мячик
+                    if ((x == 0 || x == 12) && mood == Mood.Idle && _cheer <= 0)
+                    {
+                        if (_activity == Wave && x == 12) cy = y - 1 - (Math.Sin(_time * 14) > 0 ? 1 : 0);
+                        if (_activity == Stretch) cy = y - 2;
+                        if (_activity == Ball) cy = (Math.Sin(_time * 6.4 + (x == 0 ? 0 : Math.PI)) > 0.3) ? y - 1 : y;
+                        if (_activity == Coffee && x == 12) cy = y - (Math.Sin(_time * 0.8) > 0.85 ? 2 : 0); // отпивает
+                    }
                     if ((x == 0 || x == 12) && mood == Mood.Working)
                     {
                         bool tap = Math.Sin(_time * 22 + (x == 0 ? 0 : 1.7)) > 0.3;
@@ -328,13 +446,19 @@ namespace Isle.Helpers
                 dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x95)), null, new Rect(ox + 6 * px, oy - 1 * px, px * 0.6, px));
             }
 
+            // ---- вещи для занятий
+            if (mood == Mood.Idle && _cheer <= 0) DrawProps(dc, ox, oy, px);
+
             // ---- глаза: двигаются за взглядом, моргают
             var eye = Brushes.Black;
             double ex = _lookX * 0.85 * px, ey = _lookY * 0.55 * px;
             double eh = 2 * px * (1 - _blink);
+            bool wink = mood == Mood.Idle && _activity == Wink;
+            bool sip = mood == Mood.Idle && _activity == Coffee && Math.Sin(_time * 0.8) > 0.85;
             foreach (var e in glasses ? Array.Empty<Point>() : new[] { EyeL, EyeR })
             {
                 double x = ox + e.X * px + ex, y = oy + e.Y * px + ey;
+                if ((wink && e == EyeL) || sip) { dc.DrawRectangle(eye, null, new Rect(x - 0.15 * px, y + 1.2 * px, px * 1.3, Math.Max(0.4, 0.35 * px))); continue; } // подмигивает / жмурится от кофе
                 if (eh < 0.45 * px) dc.DrawRectangle(eye, null, new Rect(x - 0.15 * px, y + 1.2 * px, px * 1.3, Math.Max(0.4, 0.35 * px)));
                 else dc.DrawRectangle(eye, null, new Rect(x, y + (2 * px - eh) / 2, px, eh));
             }
