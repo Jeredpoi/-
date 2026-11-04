@@ -1,0 +1,60 @@
+<UserControl x:Class="Isle.Views.ShelfView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:h="clr-namespace:Isle.Helpers">
+    <Border x:Name="Zone" BorderBrush="#34343C" BorderThickness="1" CornerRadius="16" Background="#0C0C0F" AllowDrop="True"
+            Drop="OnDrop" DragEnter="OnDragEnter" DragLeave="OnDragLeave">
+        <Grid>
+            <StackPanel x:Name="Empty" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <h:Icon Kind="Tray" Width="22" Height="22" Foreground="{StaticResource Muted}"/>
+                <TextBlock Text="Полка пуста" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,4"/>
+                <TextBlock Text="Перетащи файлы на остров — они полежат здесь, пока не вытащишь их в нужное окно"
+                           Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
+            </StackPanel>
+            <DockPanel x:Name="Filled" Margin="12">
+                <DockPanel DockPanel.Dock="Bottom" Margin="2,8,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Flat}" Content="Очистить полку" Click="OnClear"/>
+                    <TextBlock Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center"
+                               Text="Тяни файл из полки в любое окно · двойной клик — открыть · файлы не копируются, хранится только ссылка"/>
+                </DockPanel>
+                <ItemsControl x:Name="List">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.Template>
+                        <ControlTemplate TargetType="ItemsControl">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter/></ScrollViewer>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border x:Name="tile" Width="128" Height="112" Margin="0,0,8,8" CornerRadius="14" Background="{StaticResource Card}"
+                                    BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Cursor="Hand" Tag="{Binding}"
+                                    PreviewMouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove">
+                                <Grid>
+                                    <StackPanel VerticalAlignment="Center" Margin="10">
+                                        <Border Width="44" Height="44" CornerRadius="10" Background="#222228" HorizontalAlignment="Center">
+                                            <TextBlock Text="{Binding Ext}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Accent}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="40"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}" FontSize="12" Margin="0,8,0,0" TextAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button x:Name="del" Style="{StaticResource Ghost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
+                                            Click="OnRemove" Tag="{Binding}" Visibility="Hidden" ToolTip="Убрать с полки">
+                                        <h:Icon Kind="Close" Width="12" Height="12"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="tile" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="tile" Property="Background" Value="{StaticResource CardHover}"/>
+                                    <Setter TargetName="del" Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Grid>
+    </Border>
+</UserControl>

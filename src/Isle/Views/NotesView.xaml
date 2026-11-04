@@ -1,0 +1,97 @@
+<UserControl x:Class="Isle.Views.NotesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:h="clr-namespace:Isle.Helpers">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="12"/>
+            <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Заметки -->
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                <ItemsControl x:Name="NoteTabs">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <Button Style="{StaticResource Flat}" Width="28" Height="26" Padding="0" Click="OnAddNote" ToolTip="Новая заметка">
+                    <h:Icon Kind="Plus" Width="12" Height="12"/>
+                </Button>
+            </StackPanel>
+            <DockPanel DockPanel.Dock="Bottom" Margin="2,8,0,0">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Style="{StaticResource Ghost}" Click="OnRemindLine" ToolTip="Сделать напоминание из текущей строки">
+                        <StackPanel Orientation="Horizontal"><h:Icon Kind="Bell" Width="14" Height="14"/><TextBlock Text="Напомнить" FontSize="11" Margin="6,0,0,0"/></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Click="OnCopy" ToolTip="Скопировать заметку"><h:Icon Kind="Copy" Width="14" Height="14"/></Button>
+                    <Button Style="{StaticResource Ghost}" Click="OnDeleteNote" ToolTip="Удалить заметку"><h:Icon Kind="Trash" Width="14" Height="14"/></Button>
+                </StackPanel>
+                <TextBlock x:Name="Saved" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Text="Сохраняется само"/>
+            </DockPanel>
+            <TextBox x:Name="Editor" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                     Tag="Пиши сюда что угодно: номер заказа, список дел, кусок кода. Сохраняется само." TextChanged="OnEdit"/>
+        </DockPanel>
+
+        <!-- Таймер и напоминания -->
+        <Border Grid.Column="2" Style="{StaticResource CardBox}" Padding="14">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Width="84" Height="84">
+                        <Ellipse Stroke="#2C2C33" StrokeThickness="5"/>
+                        <Path x:Name="Ring" Stroke="{StaticResource Accent}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        <TextBlock x:Name="TimeText" Text="5:00" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="StartBtn" Style="{StaticResource Primary}" Height="36" Click="OnStart">
+                            <StackPanel Orientation="Horizontal">
+                                <h:Icon x:Name="StartIcon" Kind="Play" Width="13" Height="13" Foreground="#08080A"/>
+                                <TextBlock x:Name="StartText" Text="Старт" Margin="7,0,0,0" Foreground="#08080A" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+                        <Grid Margin="0,6,0,0">
+                            <TextBox x:Name="Custom" Tag="Своё, мин" Padding="10,6" FontSize="12" KeyDown="OnCustomKey"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+                <UniformGrid DockPanel.Dock="Top" Columns="5" Margin="0,10,0,0" x:Name="Presets"/>
+                <TextBlock DockPanel.Dock="Top" Margin="0,14,0,6" FontSize="12" FontWeight="SemiBold">
+                    <Run Text="Напоминания"/>
+                </TextBlock>
+                <TextBox DockPanel.Dock="Bottom" x:Name="RemInput" Tag="Позвонить маме завтра в 9" Padding="10,7" FontSize="12" KeyDown="OnRemKey"/>
+                <TextBlock DockPanel.Dock="Bottom" x:Name="RemError" FontSize="11" Foreground="{StaticResource Red}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                <Grid>
+                    <TextBlock x:Name="RemHint" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center"
+                               Text="Напиши по-человечески, о чём и когда: «позвонить маме завтра в 9», «таблетки каждый день в 23:00», «через 20 минут выключить плиту»"/>
+                    <ListBox x:Name="RemList">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="r" Background="#1B1B20" CornerRadius="10" Padding="10,6">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Text}" FontSize="12" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding WhenText}" Style="{StaticResource MutedText}" FontSize="10"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource Ghost}" Click="OnRemDelete" Tag="{Binding}" ToolTip="Удалить">
+                                            <h:Icon Kind="Close" Width="11" Height="11"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

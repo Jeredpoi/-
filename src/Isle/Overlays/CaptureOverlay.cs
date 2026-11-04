@@ -1,0 +1,180 @@
+using System;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
+using Isle.Services;
+
+namespace Isle.Overlays
+{
+    public enum CaptureMode { Region, Ocr, Qr, Pipette }
+
+    /// <summary>Полноэкранный слой поверх «замороженного» снимка экрана: выделение области или пипетка.</summary>
+    public class CaptureOverlay : Window
+    {
+        private readonly BitmapSource _shot;
+        private readonly CaptureMode _mode;
+        private readonly Int32Rect _vs;
+        private readonly Canvas _canvas = new();
+        private readonly Rectangle _sel = new() { Stroke = Brushes.White, StrokeThickness = 1.5, Fill = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), Visibility = Visibility.Collapsed };
+        private readonly Path _dim = new() { Fill = new SolidColorBrush(Color.FromArgb(110, 0, 0, 0)) };
+        private readonly Border _hint;
+        private readonly TextBlock _hintText;
+        private readonly Border _swatch = new() { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), BorderBrush = Brushes.White, BorderThickness = new Thickness(1) };
+        private byte[] _px;
+        private int _pw, _ph;
+        private Point? _start;
+        private readonly TaskCompletionSource<object> _tcs = new();
+
+        private CaptureOverlay(BitmapSource shot, Int32Rect vs, CaptureMode mode)
+        {
+            _shot = shot; _vs = vs; _mode = mode;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            ShowInTaskbar = false;
+            Topmost = true;
+            AllowsTransparency = false;
+            Background = Brushes.Black;
+            Cursor = Cursors.Cross;
+            Left = 0; Top = 0; Width = 100; Height = 100;
+
+            var img = new Image { Source = shot, Stretch = Stretch.Fill };
+            var root = new Grid();
+            root.Children.Add(img);
+            root.Children.Add(_canvas);
+            _canvas.Children.Add(_dim);
+            _canvas.Children.Add(_sel);
+
+            _hintText = new TextBlock { Foreground = Brushes.White, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            var hintRow = new StackPanel { Orientation = Orientation.Horizontal };
+            if (mode == CaptureMode.Pipette) { hintRow.Children.Add(_swatch); _hintText.Margin = new Thickness(10, 0, 0, 0); }
+            hintRow.Children.Add(_hintText);
+            _hint = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(8, 8, 10)),
+                CornerRadius = new CornerRadius(0, 0, 16, 16),
+                Padding = new Thickness(18, 10, 18, 10),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Top,
+                Child = hintRow,
+                IsHitTestVisible = false
+            };
+            root.Children.Add(_hint);
+            Content = root;
+
+            _hintText.Text = mode switch
+            {
+                CaptureMode.Region => "Выдели область — снимок попадёт в буфер · Esc — отмена",
+                CaptureMode.Ocr => "Выдели текст для распознавания · Esc — отмена",
+                CaptureMode.Qr => "Выдели QR-код · Esc — отмена",
+                _ => "Наведи и кликни, чтобы скопировать цвет · Esc — отмена"
+            };
+
+            Loaded += (_, __) =>
+            {
+                var h = new WindowInteropHelper(this).Handle;
+                SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height, 0x0040);
+                Activate();
+                Focus();
+                UpdateDim(Rect.Empty);
+            };
+            KeyDown += (_, e) => { if (e.Key == Key.Escape) Finish(null); };
+            MouseLeftButtonDown += OnDown;
+            MouseMove += OnMove;
+            MouseLeftButtonUp += OnUp;
+            MouseRightButtonDown += (_, __) => Finish(null);
+            if (mode == CaptureMode.Pipette) _px = ScreenTools.Bgra(shot, out _pw, out _ph);
+        }
+
+        public static Task<object> Run(CaptureMode mode)
+        {
+            var vs = ScreenTools.VirtualScreen();
+            var shot = ScreenTools.Capture(vs);
+            var w = new CaptureOverlay(shot, vs, mode);
+            w.Show();
+            return w._tcs.Task;
+        }
+
+        private void Finish(object result)
+        {
+            if (_tcs.Task.IsCompleted) return;
+            _tcs.TrySetResult(result);
+            Close();
+        }
+
+        private double Kx => _shot.PixelWidth / Math.Max(1, ActualWidth);
+        private double Ky => _shot.PixelHeight / Math.Max(1, ActualHeight);
+
+        private void OnDown(object s, MouseButtonEventArgs e)
+        {
+            if (_mode == CaptureMode.Pipette)
+            {
+                var c = ColorAt(e.GetPosition(this));
+                Finish(c);
+                return;
+            }
+            _start = e.GetPosition(_canvas);
+            _sel.Visibility = Visibility.Visible;
+            CaptureMouse();
+        }
+
+        private void OnMove(object s, MouseEventArgs e)
+        {
+            var p = e.GetPosition(_canvas);
+            if (_mode == CaptureMode.Pipette)
+            {
+                var c = ColorAt(p);
+                _swatch.Background = new SolidColorBrush(c);
+                _hintText.Text = Hex(c) + "  ·  rgb(" + c.R + ", " + c.G + ", " + c.B + ")  ·  клик — скопировать";
+                return;
+            }
+            if (_start == null) return;
+            var r = new Rect(_start.Value, p);
+            Canvas.SetLeft(_sel, r.X); Canvas.SetTop(_sel, r.Y);
+            _sel.Width = r.Width; _sel.Height = r.Height;
+            UpdateDim(r);
+            _hintText.Text = (int)(r.Width * Kx) + " × " + (int)(r.Height * Ky);
+        }
+
+        private void OnUp(object s, MouseButtonEventArgs e)
+        {
+            if (_mode == CaptureMode.Pipette || _start == null) return;
+            ReleaseMouseCapture();
+            var r = new Rect(_start.Value, e.GetPosition(_canvas));
+            _start = null;
+            if (r.Width < 4 || r.Height < 4) { Finish(null); return; }
+            var crop = new Int32Rect(
+                (int)Math.Max(0, r.X * Kx), (int)Math.Max(0, r.Y * Ky),
+                (int)Math.Min(_shot.PixelWidth - r.X * Kx, r.Width * Kx),
+                (int)Math.Min(_shot.PixelHeight - r.Y * Ky, r.Height * Ky));
+            if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
+            var cb = new CroppedBitmap(_shot, crop);
+            cb.Freeze();
+            Finish(cb);
+        }
+
+        private void UpdateDim(Rect hole)
+        {
+            var full = new RectangleGeometry(new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight)));
+            _dim.Data = hole.IsEmpty ? full : new CombinedGeometry(GeometryCombineMode.Exclude, full, new RectangleGeometry(hole));
+        }
+
+        private Color ColorAt(Point p)
+        {
+            if (_px == null) return Colors.Black;
+            int x = Math.Clamp((int)(p.X * Kx), 0, _pw - 1);
+            int y = Math.Clamp((int)(p.Y * Ky), 0, _ph - 1);
+            int i = (y * _pw + x) * 4;
+            return Color.FromRgb(_px[i + 2], _px[i + 1], _px[i]);
+        }
+
+        public static string Hex(Color c) => "#" + c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2");
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    }
+}
