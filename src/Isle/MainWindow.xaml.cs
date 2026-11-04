@@ -412,7 +412,7 @@ namespace Isle
             CollapsedView.Visibility = Visibility.Collapsed;
             ExpandedView.Visibility = Visibility.Visible;
             Island.CornerRadius = new CornerRadius(0, 0, 30, 30);
-            DropHint.CornerRadius = Island.CornerRadius;
+            DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
             _collapseVersion++;
             MoveTabIndicator(TabButton(_currentTab), false);
             AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 620, spring: true);
@@ -451,7 +451,7 @@ namespace Isle
                 ExpandedView.Visibility = Visibility.Collapsed;
                 ExpandedView.Effect = null;
                 Island.CornerRadius = new CornerRadius(0, 0, 18, 18);
-                DropHint.CornerRadius = Island.CornerRadius;
+                DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
                 if (_toasts.Count > 0) { NextToast(); return; }
                 ShowCollapsedContent(false);
                 ScheduleOledHide(TimeSpan.FromSeconds(1.2));
