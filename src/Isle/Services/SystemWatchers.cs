@@ -57,7 +57,7 @@ namespace Isle.Services
                     if (!first && s.LayoutToasts)
                         ToastBus.Show(new Toast
                         {
-                            Kind = ToastKind.Layout, Title = LanguageCode, Icon = Icons.Keyboard,
+                            Kind = ToastKind.Layout, Title = LanguageCode + "  ·  " + LangName(langId), Icon = Icons.Keyboard,
                             ReplaceKey = "layout", Duration = TimeSpan.FromSeconds(1.2)
                         });
                 }
@@ -170,6 +170,16 @@ namespace Isle.Services
                 Win32.GetWindowThreadProcessId(hwnd, out uint pid);
                 using var p = System.Diagnostics.Process.GetProcessById((int)pid);
                 return p.ProcessName.ToLowerInvariant();
+            }
+            catch { return ""; }
+        }
+
+        private static string LangName(int langId)
+        {
+            try
+            {
+                var n = CultureInfo.GetCultureInfo(langId).Parent.NativeName;
+                return n.Length > 0 ? char.ToUpper(n[0]) + n.Substring(1) : n;
             }
             catch { return ""; }
         }

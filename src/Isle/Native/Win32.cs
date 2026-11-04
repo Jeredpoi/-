@@ -81,6 +81,29 @@ namespace Isle.Native
             finally { if (attached) AttachThreadInput(me, fgThread, false); }
         }
 
+        [DllImport("user32.dll")] public static extern int GetKeyboardLayoutList(int n, IntPtr[] list);
+
+        /// <summary>Переключает окно на следующую установленную раскладку. Возвращает код языка (EN, RU…).</summary>
+        public static string SwitchToNextLayout(IntPtr target)
+        {
+            try
+            {
+                if (target == IntPtr.Zero) return null;
+                int n = GetKeyboardLayoutList(0, null);
+                if (n <= 1) return null;
+                var list = new IntPtr[n];
+                GetKeyboardLayoutList(n, list);
+                uint tid = GetWindowThreadProcessId(target, out _);
+                var cur = GetKeyboardLayout(tid);
+                int i = Array.IndexOf(list, cur);
+                var next = list[(i + 1 + n) % n];
+                PostMessage(target, 0x0050, IntPtr.Zero, next); // WM_INPUTLANGCHANGEREQUEST
+                int lang = (int)((long)next & 0xFFFF);
+                return System.Globalization.CultureInfo.GetCultureInfo(lang).TwoLetterISOLanguageName.ToUpperInvariant();
+            }
+            catch { return null; }
+        }
+
         /// <summary>Переключить раскладку в активном окне на следующую.</summary>
         public static void NextKeyboardLayout(IntPtr target)
         {

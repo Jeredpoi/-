@@ -26,6 +26,62 @@ namespace Isle.Services
             return d.TryGetProperty("outputActive", out var oa) && oa.GetBoolean();
         }
 
+        public static bool Recording { get; private set; }
+        public static bool Streaming { get; private set; }
+        public static event Action Changed;
+        private static readonly System.Windows.Threading.DispatcherTimer Poll = new() { Interval = TimeSpan.FromSeconds(3) };
+        private static bool _polling;
+
+        /// <summary>Следит за OBS: горит REC/LIVE, а сохранённая запись приходит карточкой.</summary>
+        public static void StartMonitor()
+        {
+            Poll.Tick += async (_, __) =>
+            {
+                if (_polling) return;
+                _polling = true;
+                try { await PollOnce(); } finally { _polling = false; }
+            };
+            Poll.Start();
+        }
+
+        private static async Task PollOnce()
+        {
+            bool rec = false, live = false;
+            if (AppSettings.Current.ObsStatus && IsObsRunning())
+            {
+                try
+                {
+                    var r = await RequestAsync("GetRecordStatus");
+                    rec = r.TryGetProperty("outputActive", out var a) && a.GetBoolean();
+                    var st = await RequestAsync("GetStreamStatus");
+                    live = st.TryGetProperty("outputActive", out var b) && b.GetBoolean();
+                }
+                catch { return; }
+            }
+            bool stoppedRec = Recording && !rec;
+            if (rec == Recording && live == Streaming) return;
+            Recording = rec; Streaming = live;
+            Changed?.Invoke();
+            if (stoppedRec)
+            {
+                string file = null;
+                try
+                {
+                    var d = await RequestAsync("GetRecordDirectory");
+                    var dir = d.TryGetProperty("recordDirectory", out var rd) ? rd.GetString() : null;
+                    if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
+                        file = new System.IO.DirectoryInfo(dir).GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName;
+                }
+                catch { }
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Success, Title = "Запись сохранена",
+                    Subtitle = file != null ? System.IO.Path.GetFileName(file) : "В папке записей OBS",
+                    Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(5)
+                });
+            }
+        }
+
         /// <summary>Проверка подключения: возвращает версию OBS.</summary>
         public static async Task<string> TestAsync()
         {

@@ -85,15 +85,40 @@ namespace Isle.Views
             string answer;
             try
             {
-                var history = _msgs.Where(m => !ReferenceEquals(m, thinking)).ToList();
+                var history = _msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")).ToList();
                 answer = await AiService.AskAsync(history, _cts.Token);
             }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
+            var (clean, actions) = AiActions.Extract(answer ?? "");
+            var reports = new System.Collections.Generic.List<string>();
+            var confirm = new System.Collections.Generic.List<AiAction>();
+            foreach (var a in actions)
+            {
+                if (a.NeedsConfirm) confirm.Add(a);
+                else reports.Add(AiActions.Run(a));
+            }
+            var shown = clean + (reports.Count > 0 ? (clean.Length > 0 ? "\n\n" : "") + string.Join("\n", reports) : "");
             var idx = _msgs.IndexOf(thinking);
-            if (idx >= 0) _msgs[idx] = new ChatMessage { Role = "assistant", Text = string.IsNullOrWhiteSpace(answer) ? "(пустой ответ)" : answer };
+            if (idx >= 0) _msgs[idx] = new ChatMessage { Role = "assistant", Text = string.IsNullOrWhiteSpace(shown) ? "(пустой ответ)" : shown };
+            foreach (var a in confirm) _msgs.Add(new ChatMessage { Role = "action", Text = "Нужно подтверждение", Pending = a });
             Scroll.ScrollToEnd();
             _busy = false;
             SendBtn.IsEnabled = true;
+        }
+
+        private void OnRunPending(object s, RoutedEventArgs e)
+        {
+            if ((s as FrameworkElement)?.Tag is not ChatMessage m || m.Pending == null) return;
+            var report = AiActions.Run(m.Pending);
+            var i = _msgs.IndexOf(m);
+            if (i >= 0) _msgs[i] = new ChatMessage { Role = "assistant", Text = report };
+        }
+
+        private void OnSkipPending(object s, RoutedEventArgs e)
+        {
+            if ((s as FrameworkElement)?.Tag is not ChatMessage m) return;
+            var i = _msgs.IndexOf(m);
+            if (i >= 0) _msgs[i] = new ChatMessage { Role = "assistant", Text = "Отменено: " + m.PendingLabel };
         }
 
         private void OnMic(object s, RoutedEventArgs e)

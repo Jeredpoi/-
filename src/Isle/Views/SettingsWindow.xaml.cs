@@ -184,6 +184,7 @@ namespace Isle.Views
             ClipHist.IsChecked = S.ClipboardHistory;
             ClipImg.IsChecked = S.ClipboardImages;
             AutoUpdate.IsChecked = S.AutoUpdateCheck;
+            ObsStatus.IsChecked = S.ObsStatus;
         }
 
         private void OnToggle(object s, RoutedEventArgs e)
@@ -204,6 +205,7 @@ namespace Isle.Views
             S.ClipboardHistory = ClipHist.IsChecked == true;
             S.ClipboardImages = ClipImg.IsChecked == true;
             S.AutoUpdateCheck = AutoUpdate.IsChecked == true;
+            S.ObsStatus = ObsStatus.IsChecked == true;
             S.Save();
         }
 

@@ -17,7 +17,7 @@
         </Grid.RowDefinitions>
 
         <!-- Плеер -->
-        <Border Style="{StaticResource CardBox}" Padding="14">
+        <Border Style="{StaticResource CardBox}" Padding="14" ClipToBounds="True">
             <Grid>
             <!-- Пока ничего не играет: последние скопированные -->
             <DockPanel x:Name="RecentPanel" Visibility="Collapsed">
@@ -65,47 +65,77 @@
             </DockPanel>
             <Grid x:Name="PlayerPanel">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="210"/>
                 </Grid.ColumnDefinitions>
-                <Border Width="96" Height="96" CornerRadius="14" Background="#26262B" VerticalAlignment="Top" ClipToBounds="True">
-                    <Grid>
-                        <h:Icon Kind="Wave" Width="30" Height="30" Foreground="{StaticResource Muted}"/>
-                        <Image x:Name="Cover" Stretch="UniformToFill"/>
-                    </Grid>
-                </Border>
-                <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                    <TextBlock x:Name="Source" Text="НИЧЕГО НЕ ИГРАЕТ" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
-                    <TextBlock x:Name="Title" Text="Включи музыку в любом плеере" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock x:Name="Artist" Text="Spotify, браузер, Яндекс Музыка…" FontSize="13" Foreground="#B9B9C3" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
-                    <Slider x:Name="Progress" Margin="0,14,0,0" Minimum="0" Maximum="1" PreviewMouseLeftButtonUp="OnSeek"/>
-                    <Grid Margin="0,2,0,0">
+                <!-- размытое цветное свечение обложки на фоне -->
+                <Image x:Name="CoverGlow" Grid.ColumnSpan="2" Stretch="UniformToFill" Margin="-30,-40,180,-40" Opacity="0.55" IsHitTestVisible="False">
+                    <Image.Effect><BlurEffect Radius="70" KernelType="Gaussian" RenderingBias="Performance"/></Image.Effect>
+                    <Image.OpacityMask>
+                        <RadialGradientBrush GradientOrigin="0.5,0.45" Center="0.5,0.45" RadiusX="0.55" RadiusY="0.6">
+                            <GradientStop Color="#FF000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="1"/>
+                        </RadialGradientBrush>
+                    </Image.OpacityMask>
+                </Image>
+
+                <!-- плеер по центру -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Button x:Name="SourceBtn" Style="{StaticResource Ghost}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-6,0,0" Click="OnSources" ToolTip="Источник музыки">
+                        <Border Background="#99141417" CornerRadius="9" Padding="7,3">
+                            <StackPanel Orientation="Horizontal">
+                                <h:Icon Kind="ListBullet" Width="12" Height="12"/>
+                                <TextBlock x:Name="SourceCount" Text="1" FontSize="11" FontWeight="Bold" Margin="5,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Button>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Border Width="84" Height="84" CornerRadius="14" Background="#26262B" ClipToBounds="True" HorizontalAlignment="Center">
+                            <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.5"/></Border.Effect>
+                            <Grid>
+                                <h:Icon Kind="Wave" Width="26" Height="26" Foreground="{StaticResource Muted}"/>
+                                <Image x:Name="Cover" Stretch="UniformToFill"/>
+                            </Grid>
+                        </Border>
+                        <TextBlock x:Name="Title" Text="Включи музыку в любом плеере" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,0" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="330"/>
+                        <TextBlock x:Name="Artist" Text="Spotify, браузер, Яндекс Музыка…" FontSize="12" Foreground="#B9B9C3" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="330"/>
+                        <TextBlock x:Name="Source" Text="" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <Slider x:Name="Progress" Grid.Row="1" Style="{StaticResource Thin}" Margin="0,8,0,0" Minimum="0" Maximum="1" PreviewMouseLeftButtonUp="OnSeek"/>
+                    <Grid Grid.Row="2" Margin="0,3,0,0">
                         <TextBlock x:Name="PosText" Text="0:00" Style="{StaticResource MutedText}" FontSize="10"/>
                         <TextBlock x:Name="DurText" Text="0:00" Style="{StaticResource MutedText}" FontSize="10" HorizontalAlignment="Right"/>
                     </Grid>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,0">
                         <Button Style="{StaticResource Ghost}" Width="40" Height="40" Click="OnPrev" ToolTip="Предыдущий">
-                            <h:Icon Kind="Prev" Width="18" Height="18"/>
+                            <h:Icon Kind="Prev" Width="17" Height="17"/>
                         </Button>
-                        <Button Style="{StaticResource Ghost}" Width="44" Height="44" Margin="14,0" Click="OnPlay" ToolTip="Пауза / играть">
-                            <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource Fg}">
-                                <h:Icon x:Name="PlayIcon" Kind="Play" Width="16" Height="16" Foreground="#08080A"/>
+                        <Button Style="{StaticResource Ghost}" Width="46" Height="46" Padding="0" Margin="16,0" Click="OnPlay" ToolTip="Пауза / играть">
+                            <Border Width="42" Height="42" CornerRadius="21" Background="{StaticResource Fg}">
+                                <h:Icon x:Name="PlayIcon" Kind="Play" Width="16" Height="16" StrokeWidth="2.4" Foreground="#000000"/>
                             </Border>
                         </Button>
                         <Button Style="{StaticResource Ghost}" Width="40" Height="40" Click="OnNext" ToolTip="Следующий">
-                            <h:Icon Kind="Next" Width="18" Height="18"/>
+                            <h:Icon Kind="Next" Width="17" Height="17"/>
                         </Button>
                     </StackPanel>
-                </StackPanel>
-                <!-- Текст песни -->
-                <Border Grid.Column="2" Width="200" Margin="14,0,0,0" BorderBrush="{StaticResource CardBorder}" BorderThickness="1,0,0,0" Padding="14,0,0,0">
+                </Grid>
+
+                <!-- Текст песни: плавно прокручивается, текущая строка крупно -->
+                <Border Grid.Column="1" Margin="14,0,0,0" BorderBrush="#1F1F24" BorderThickness="1,0,0,0" Padding="14,0,0,0">
                     <Grid>
-                        <StackPanel x:Name="LyricsPanel" VerticalAlignment="Center">
-                            <TextBlock x:Name="LyrPrev" FontSize="12" Foreground="#5E5E68" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="LyrCur" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="LyrNext" FontSize="12" Foreground="#6F6F79" TextWrapping="Wrap"/>
-                        </StackPanel>
+                        <Canvas x:Name="LyricsViewport" ClipToBounds="True">
+                            <StackPanel x:Name="LyricsStack" Width="{Binding ActualWidth, ElementName=LyricsViewport}">
+                                <StackPanel.RenderTransform><TranslateTransform x:Name="LyricsShift"/></StackPanel.RenderTransform>
+                            </StackPanel>
+                        </Canvas>
+                        <TextBlock x:Name="LyrStatus" FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         <TextBlock x:Name="LyrSource" Text="LRCLIB" FontSize="9" Foreground="#4A4A52" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                     </Grid>
                 </Border>

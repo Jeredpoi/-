@@ -247,20 +247,22 @@
         </Setter>
     </Style>
 
-    <Style TargetType="Slider">
+    <!-- Тонкий ползунок без кружка: полоска заполняется, при наведении чуть толще -->
+    <Style x:Key="Thin" TargetType="Slider">
         <Setter Property="Focusable" Value="False"/>
         <Setter Property="IsMoveToPointEnabled" Value="True"/>
+        <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
                     <Grid Height="16" Background="Transparent">
-                        <Border Height="4" CornerRadius="2" Background="#2C2C33" VerticalAlignment="Center"/>
+                        <Border x:Name="track" Height="4" CornerRadius="2" Background="#2A2A30" VerticalAlignment="Center"/>
                         <Track x:Name="PART_Track" VerticalAlignment="Center">
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
                                     <RepeatButton.Template>
                                         <ControlTemplate TargetType="RepeatButton">
-                                            <Border Height="4" CornerRadius="2" Background="#ECECF1"/>
+                                            <Border x:Name="fill" Height="4" CornerRadius="2,0,0,2" Background="{DynamicResource Accent}"/>
                                         </ControlTemplate>
                                     </RepeatButton.Template>
                                 </RepeatButton>
@@ -278,7 +280,10 @@
                                 <Thumb Focusable="False">
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
-                                            <Ellipse Width="12" Height="12" Fill="#ECECF1"/>
+                                            <!-- невидимая «ручка»: за неё можно тянуть, но её не видно -->
+                                            <Border Width="10" Height="16" Background="Transparent">
+                                                <Border Width="2" Height="4" CornerRadius="0,2,2,0" Background="{DynamicResource Accent}" HorizontalAlignment="Left"/>
+                                            </Border>
                                         </ControlTemplate>
                                     </Thumb.Template>
                                 </Thumb>
@@ -289,6 +294,7 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style TargetType="Slider" BasedOn="{StaticResource Thin}"/>
 
     <!-- Тёмный выпадающий список -->
     <Style x:Key="ComboItem" TargetType="ComboBoxItem">

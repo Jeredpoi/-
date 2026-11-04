@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using Isle.Helpers;
 using Isle.Services;
@@ -192,5 +193,25 @@ namespace Isle.Tests
             t.Join();
             Assert.True(error == null, error?.ToString());
         }
+    }
+}
+
+namespace Isle.Tests
+{
+    public class AiActionsTests
+    {
+        [Fact]
+        public void ExtractsCommandsAndCleansText()
+        {
+            var (text, actions) = AiActions.Extract("Открываю блокнот.\n[[open: notepad]]\n[[timer: 10m]]\n[[screenshot]]\n[[cmd: ipconfig]]");
+            Assert.Equal("Открываю блокнот.", text);
+            Assert.Equal(new[] { "open", "timer", "screenshot", "cmd" }, actions.Select(a => a.Name).ToArray());
+            Assert.Equal("notepad", actions[0].Arg);
+            Assert.True(actions[3].NeedsConfirm);
+            Assert.False(actions[0].NeedsConfirm);
+        }
+
+        [Fact]
+        public void LeavesUnknownBrackets() => Assert.Contains("[[foo: bar]]", AiActions.Extract("x [[foo: bar]]").text);
     }
 }

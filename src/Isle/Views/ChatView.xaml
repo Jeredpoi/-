@@ -38,7 +38,8 @@
                         <DataTemplate>
                             <Border x:Name="bubble" CornerRadius="14" Padding="12,9" Margin="0,0,0,8" MaxWidth="680"
                                     HorizontalAlignment="Left" Background="{StaticResource Card}">
-                                <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Background="Transparent"
+                                <StackPanel>
+                                <TextBox x:Name="msgText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Background="Transparent"
                                          BorderThickness="0" Padding="0" FontSize="13">
                                     <TextBox.Template>
                                         <ControlTemplate TargetType="TextBox">
@@ -46,8 +47,21 @@
                                         </ControlTemplate>
                                     </TextBox.Template>
                                 </TextBox>
+                                <StackPanel x:Name="actionRow" Visibility="Collapsed">
+                                    <TextBlock Text="{Binding PendingLabel}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Primary}" Content="Выполнить" Padding="14,6" Click="OnRunPending" Tag="{Binding}"/>
+                                        <Button Style="{StaticResource Flat}" Content="Отмена" Padding="14,6" Margin="8,0,0,0" Click="OnSkipPending" Tag="{Binding}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                </StackPanel>
                             </Border>
                             <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding HasPending}" Value="True">
+                                    <Setter TargetName="actionRow" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="bubble" Property="BorderBrush" Value="#F87171"/>
+                                    <Setter TargetName="bubble" Property="BorderThickness" Value="1"/>
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding IsUser}" Value="True">
                                     <Setter TargetName="bubble" Property="HorizontalAlignment" Value="Right"/>
                                     <Setter TargetName="bubble" Property="Background" Value="#1F1F24"/>

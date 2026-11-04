@@ -31,7 +31,7 @@ namespace Isle.Services
 
         public string Tooltip => !Active ? "VPN выключен" :
             "VPN подключён" + (CountryName.Length > 0 ? " · " + CountryName : "") + (Ip.Length > 0 ? " · " + Ip : "") + " · " + Name +
-            "\nКлик — отключить VPN · правый клик — проверить заново";
+            "\nКлик — открыть VPN-клиент · Shift+клик — закрыть клиент (выключить VPN) · правый клик — проверить заново";
 
         /// <summary>Процессы VPN-клиентов: закрываем их, чтобы отключить туннель.</summary>
         private static readonly string[] Clients =
@@ -83,6 +83,37 @@ namespace Isle.Services
         }
 
         public void Recheck() { _last = null; _ = Check(); }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
+
+        /// <summary>Открывает окно VPN-клиента (Happ, v2rayN, Hiddify…), не закрывая его.</summary>
+        public string OpenClient()
+        {
+            foreach (var p in System.Diagnostics.Process.GetProcesses())
+            {
+                try
+                {
+                    var pn = p.ProcessName.ToLowerInvariant();
+                    if (!Clients.Any(c => pn == c || pn.StartsWith(c + "-") || pn.StartsWith(c + "."))) continue;
+                    if (p.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
+                        Native.Win32.ForceForeground(p.MainWindowHandle);
+                        return null;
+                    }
+                    // окна нет (сидит в трее) — повторный запуск обычно показывает уже открытый клиент
+                    var exe = p.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(exe) && !pn.StartsWith("xray") && !pn.StartsWith("sing-box") && !pn.StartsWith("v2ray") && !pn.StartsWith("mihomo"))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+                        return null;
+                    }
+                }
+                catch { }
+                finally { p.Dispose(); }
+            }
+            return "Не нашёл окно VPN-клиента — открой его из трея";
+        }
 
         private static async Task Run(string exe, string args)
         {

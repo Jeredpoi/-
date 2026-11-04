@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -40,6 +41,58 @@ namespace Isle.Services
         private string _lastKey = "";
 
         public MediaInfo Current { get; private set; } = new MediaInfo();
+        /// <summary>Выбранный вручную источник (AUMID приложения) или null — «автоматически».</summary>
+        public string PreferredSource { get; private set; }
+
+        public class Source { public string Id; public string Name; public string Title; public bool Playing; }
+
+        /// <summary>Все приложения, которые сейчас отдают музыку в Windows.</summary>
+        public async Task<System.Collections.Generic.List<Source>> SourcesAsync()
+        {
+            var list = new System.Collections.Generic.List<Source>();
+            if (_mgr == null) return list;
+            foreach (var ses in _mgr.GetSessions())
+            {
+                var src = new Source { Id = ses.SourceAppUserModelId, Name = PrettyApp(ses.SourceAppUserModelId) };
+                try
+                {
+                    var props = await ses.TryGetMediaPropertiesAsync();
+                    src.Title = props == null ? "" : (props.Artist?.Length > 0 ? props.Title + " — " + props.Artist : props.Title);
+                    src.Playing = ses.GetPlaybackInfo()?.PlaybackStatus == WinMedia.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+                }
+                catch { }
+                list.Add(src);
+            }
+            return list;
+        }
+
+        public int SourceCount { get { try { return _mgr?.GetSessions().Count ?? 0; } catch { return 0; } } }
+
+        public void ChooseSource(string id)
+        {
+            PreferredSource = id;
+            Attach();
+        }
+
+        /// <summary>Автовыбор: выбранный вручную → играющий сейчас → системный текущий.</summary>
+        private WinMedia.GlobalSystemMediaTransportControlsSession PickSession()
+        {
+            var sessions = _mgr.GetSessions();
+            if (PreferredSource != null)
+            {
+                var chosen = sessions.FirstOrDefault(x => x.SourceAppUserModelId == PreferredSource);
+                if (chosen != null) return chosen;
+            }
+            var cur = _mgr.GetCurrentSession();
+            try
+            {
+                if (cur != null && cur.GetPlaybackInfo()?.PlaybackStatus == WinMedia.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing) return cur;
+                var playing = sessions.FirstOrDefault(x => x.GetPlaybackInfo()?.PlaybackStatus == WinMedia.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
+                if (playing != null) return playing;
+            }
+            catch { }
+            return cur;
+        }
         public event Action Changed;
         public event Action<MediaInfo> TrackChanged;
 
@@ -61,7 +114,7 @@ namespace Isle.Services
         {
             try
             {
-                var s = _mgr?.GetCurrentSession();
+                var s = _mgr == null ? null : PickSession();
                 if (!ReferenceEquals(s, _session))
                 {
                     if (_session != null)
@@ -84,7 +137,7 @@ namespace Isle.Services
         }
 
         private void OnProps(WinMedia.GlobalSystemMediaTransportControlsSession s, WinMedia.MediaPropertiesChangedEventArgs e) => _ = RefreshAsync();
-        private void OnPlayback(WinMedia.GlobalSystemMediaTransportControlsSession s, WinMedia.PlaybackInfoChangedEventArgs e) => _ = RefreshAsync();
+        private void OnPlayback(WinMedia.GlobalSystemMediaTransportControlsSession s, WinMedia.PlaybackInfoChangedEventArgs e) { if (PreferredSource == null) Attach(); else _ = RefreshAsync(); }
         private void OnTimeline(WinMedia.GlobalSystemMediaTransportControlsSession s, WinMedia.TimelinePropertiesChangedEventArgs e) => _ = RefreshAsync();
 
         public async Task RefreshAsync()

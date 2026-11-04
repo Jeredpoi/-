@@ -125,6 +125,8 @@ namespace Isle.Services
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
         public bool FirstRunDone { get; set; } = false;
         public bool AutoUpdateCheck { get; set; } = true;
+        public bool ScaleFixV2 { get; set; } = false;
+        public bool ObsStatus { get; set; } = true;
 
         public static string Protect(string value)
         {

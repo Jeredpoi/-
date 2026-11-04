@@ -14,6 +14,10 @@ namespace Isle.Services
         public string Role { get; set; } // user | assistant
         public string Text { get; set; }
         public bool IsUser => Role == "user";
+        /// <summary>Действие, которое ждёт подтверждения пользователя (кнопка «Выполнить»).</summary>
+        public AiAction Pending { get; set; }
+        public bool HasPending => Pending != null;
+        public string PendingLabel => Pending?.Label ?? "";
     }
 
     public class AiPreset
@@ -50,7 +54,8 @@ namespace Isle.Services
 
         public static AiPreset Preset(string id) => Presets.FirstOrDefault(p => p.Id == id);
 
-        private const string SystemPrompt =
+        private static string SystemPrompt => BasePrompt + AiActions.Prompt;
+        private const string BasePrompt =
             "Ты — помощник, встроенный в панель Isle на рабочем столе Windows. Отвечай кратко и по делу, на языке пользователя. " +
             "Используй простой текст без лишней разметки.";
 

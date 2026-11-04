@@ -71,14 +71,15 @@ namespace Isle
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
             AppHost.Media.TrackChanged += m => Edge.SpikeColor = DominantColor(m.Cover) ?? AccentColor();
             AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) { Buddy.Cheer(); Edge.DropBead(); } });
-            if (!s.FirstRunDone)
+            if (!s.ScaleFixV2)
             {
-                // 4K без масштабирования Windows — всё мелкое, сразу делаем остров крупнее
-                if (SystemParameters.PrimaryScreenWidth >= 3000) s.Scale = 1.3;
+                // прошлая версия сама ставила 130% на 4K — получалось слишком крупно и обрезалось. Возвращаем 100%.
+                if (Math.Abs(s.Scale - 1.3) < 0.01) s.Scale = 1.0;
                 s.FirstRunDone = true;
+                s.ScaleFixV2 = true;
                 s.Save();
-                ScaleT.ScaleX = ScaleT.ScaleY = s.Scale;
             }
+            ApplyScale();
             AppHost.Vpn = new VpnService();
             AppHost.Vpn.Changed += () =>
             {
@@ -91,7 +92,8 @@ namespace Isle
             AppHost.Media.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); UpdateMini(); };
             AppHost.Timer.Changed += () =>
             {
-                MiniTimer.Text = TimerService.Format(AppHost.Timer.Left);
+                MiniTimer.Text = (AppHost.Timer.Paused ? "пауза · " : "") + TimerService.Format(AppHost.Timer.Left);
+                MediaTimer.Text = (AppHost.Timer.Paused ? "❚❚ " : "") + TimerService.Format(AppHost.Timer.Left);
                 if (State == IslandState.Collapsed) ShowCollapsedContent(true);
             };
             AppHost.Audio.VolumeChanged += (v, muted) =>
@@ -184,6 +186,21 @@ namespace Isle
                 await RefreshWeather();
                 ApplyOledMode();
                 UpdateService.StartAutoCheck();
+                ObsService.StartMonitor();
+                ObsService.Changed += () => Dispatcher.InvokeAsync(() =>
+                {
+                    RecChip.Visibility = ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
+                    RecText.Text = ObsService.Streaming ? (ObsService.Recording ? "LIVE · REC" : "LIVE") : "REC";
+                    if (State == IslandState.Collapsed) ShowCollapsedContent(false);
+                });
+                // экономим память: свёрнутому острову не нужно держать лишнее в RAM
+                var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
+                trim.Tick += (_, __) =>
+                {
+                    if (State != IslandState.Collapsed) return;
+                    try { Win32.SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, new IntPtr(-1), new IntPtr(-1)); } catch { }
+                };
+                trim.Start();
                 App.Trace("все модули запущены");
             };
         }
@@ -196,7 +213,8 @@ namespace Isle
             _hwnd = new WindowInteropHelper(this).Handle;
             _src = HwndSource.FromHwnd(_hwnd);
             var ex = Win32.GetWindowLong(_hwnd, Win32.GWL_EXSTYLE);
-            Win32.SetWindowLong(_hwnd, Win32.GWL_EXSTYLE, ex | Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE);
+            // Без WS_EX_NOACTIVATE: активацию решаем сами в WM_MOUSEACTIVATE (клик в поле ввода — активируемся, иначе нет)
+            Win32.SetWindowLong(_hwnd, Win32.GWL_EXSTYLE, (ex | Win32.WS_EX_TOOLWINDOW) & ~Win32.WS_EX_NOACTIVATE);
             _src.AddHook(WndProc);
             ApplyCaptureVisibility();
             AppHost.Clipboard.Attach(_src);
@@ -218,6 +236,14 @@ namespace Isle
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr w, IntPtr l, ref bool handled)
         {
+            if (msg == 0x0021) // WM_MOUSEACTIVATE
+            {
+                handled = true;
+                var fg = Win32.GetForegroundWindow();
+                if (fg != _hwnd && fg != IntPtr.Zero) PreviousForeground = fg;
+                // MA_ACTIVATE = 1, MA_NOACTIVATE = 3: окно не крадёт фокус, если кликнули не в поле ввода
+                return new IntPtr(ClickIsOnTextInput() ? 1 : 3);
+            }
             if (msg == Win32.WM_HOTKEY)
             {
                 handled = true;
@@ -245,12 +271,19 @@ namespace Isle
             return IntPtr.Zero;
         }
 
-        private void MakeNoActivate(bool on)
+        /// <summary>Оставлено для совместимости: активацией теперь управляет WM_MOUSEACTIVATE.</summary>
+        private void MakeNoActivate(bool on) { }
+
+        private bool ClickIsOnTextInput()
         {
-            if (_hwnd == IntPtr.Zero) return;
-            var ex = Win32.GetWindowLong(_hwnd, Win32.GWL_EXSTYLE);
-            ex = on ? ex | Win32.WS_EX_NOACTIVATE : ex & ~Win32.WS_EX_NOACTIVATE;
-            Win32.SetWindowLong(_hwnd, Win32.GWL_EXSTYLE, ex);
+            try
+            {
+                if (!Win32.GetCursorPos(out var p)) return false;
+                var pt = Root.PointFromScreen(new Point(p.X, p.Y));
+                var hit = Root.InputHitTest(pt) as DependencyObject;
+                return FindParent<System.Windows.Controls.Primitives.TextBoxBase>(hit) != null || FindParent<PasswordBox>(hit) != null;
+            }
+            catch { return false; }
         }
 
         /// <summary>Даём окну фокус клавиатуры (нужно, чтобы печатать в полях).</summary>
@@ -368,14 +401,18 @@ namespace Isle
             CollapsedView.Visibility = Visibility.Visible;
             ToastRow.Visibility = Visibility.Collapsed;
             var m = AppHost.Media?.Current;
-            bool timer = AppHost.Timer != null && (AppHost.Timer.Running || AppHost.Timer.Paused);
-            bool media = !timer && AppSettings.Current.MediaEnabled && m != null && m.HasSession && m.IsPlaying && !string.IsNullOrEmpty(m.Title);
+            bool timerRunning = AppHost.Timer != null && AppHost.Timer.Running;
+            bool timerPaused = AppHost.Timer != null && AppHost.Timer.Paused;
+            bool media = AppSettings.Current.MediaEnabled && m != null && m.HasSession && m.IsPlaying && !string.IsNullOrEmpty(m.Title);
+            // музыка важнее: таймер тогда показывается маленьким рядом с треком
+            bool timer = !media && (timerRunning || timerPaused);
+            MediaTimer.Visibility = media && (timerRunning || timerPaused) ? Visibility.Visible : Visibility.Collapsed;
 
             TimerRow.Visibility = timer ? Visibility.Visible : Visibility.Collapsed;
             MediaRow.Visibility = media ? Visibility.Visible : Visibility.Collapsed;
             IdleRow.Visibility = !timer && !media ? Visibility.Visible : Visibility.Collapsed;
 
-            double w = timer ? 240 : media ? 320 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0);
+            double w = timer ? 240 : media ? (MediaTimer.Visibility == Visibility.Visible ? 380 : 320) : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
             if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - 34) < 1) return;
             AnimateSize(w, 34, 380);
         }
@@ -475,14 +512,24 @@ namespace Isle
 
         private void OnLangClick(object sender, RoutedEventArgs e)
         {
-            Win32.NextKeyboardLayout(PreviousForeground);
+            var target = Win32.GetForegroundWindow();
+            if (target == _hwnd || target == IntPtr.Zero) target = PreviousForeground;
+            var code = Win32.SwitchToNextLayout(target);
+            if (code != null) LangChip.Text = code;
         }
 
         private async void OnVpnClick(object sender, RoutedEventArgs e)
         {
-            VpnText.Text = "…";
-            var msg = await AppHost.Vpn.DisconnectAsync();
-            ToastBus.Show(new Toast { Title = msg, Icon = Icons.Shield, Important = true, Duration = TimeSpan.FromSeconds(3) });
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                VpnText.Text = "…";
+                var msg = await AppHost.Vpn.DisconnectAsync();
+                ToastBus.Show(new Toast { Title = msg, Icon = Icons.Shield, Important = true, Duration = TimeSpan.FromSeconds(3) });
+                return;
+            }
+            Collapse();
+            var err = AppHost.Vpn.OpenClient();
+            if (err != null) ToastBus.Show(new Toast { Title = err, Icon = Icons.Shield, Important = true, Duration = TimeSpan.FromSeconds(3) });
         }
 
         private void OnVpnRightClick(object sender, MouseButtonEventArgs e)
@@ -648,7 +695,7 @@ namespace Isle
             ToastBar.Visibility = t.Progress.HasValue ? Visibility.Visible : Visibility.Collapsed;
 
             double textLen = Math.Max(t.Title.Length, (t.Subtitle ?? "").Length);
-            double w = Math.Clamp(110 + textLen * 7.2, compact ? 150 : 240, 560);
+            double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
             if (t.Progress.HasValue) w = Math.Max(w, 280);
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
             if (t.Progress.HasValue)
@@ -740,7 +787,11 @@ namespace Isle
         private void Clock()
         {
             ClockText.Text = DateTime.Now.ToString(AppSettings.Current.Use24h ? "HH:mm" : "h:mm");
-            if (AppHost.Timer != null) MiniTimer.Text = TimerService.Format(AppHost.Timer.Left);
+            if (AppHost.Timer != null)
+            {
+                MiniTimer.Text = (AppHost.Timer.Paused ? "пауза · " : "") + TimerService.Format(AppHost.Timer.Left);
+                MediaTimer.Text = (AppHost.Timer.Paused ? "❚❚ " : "") + TimerService.Format(AppHost.Timer.Left);
+            }
             var w = AppHost.Watchers;
             bool showBattery = w != null && w.HasBattery && w.BatteryPercent >= 0;
             BatteryMini.Visibility = showBattery ? Visibility.Visible : Visibility.Collapsed;
@@ -799,6 +850,7 @@ namespace Isle
             Edge.Raining = AppHost.Weather != null && (AppHost.Weather.Code >= 51 && AppHost.Weather.Code <= 67 || AppHost.Weather.Code >= 80);
 
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
+            if (RecChip.Visibility == Visibility.Visible) RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
             if (Buddy.Visibility == Visibility.Visible)
             {
                 var m = AppHost.Media?.Current;
@@ -866,7 +918,15 @@ namespace Isle
             Win32.SetWindowDisplayAffinity(_hwnd, AppSettings.Current.ShowInCaptures ? 0u : 0x11u);
         }
 
-        public void ApplyScale() => ScaleT.ScaleX = ScaleT.ScaleY = Math.Clamp(AppSettings.Current.Scale, 0.7, 1.6);
+        /// <summary>Масштаб острова. Окно растёт вместе с ним — иначе края панели обрезаются.</summary>
+        public void ApplyScale()
+        {
+            double sc = Math.Clamp(AppSettings.Current.Scale, 0.7, 2.0);
+            ScaleT.ScaleX = ScaleT.ScaleY = sc;
+            Width = 960 * sc;
+            Height = 620 * sc;
+            PlaceWindow();
+        }
 
         // ===================== Перетаскивание на полку =====================
 

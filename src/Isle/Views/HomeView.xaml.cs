@@ -22,7 +22,7 @@ namespace Isle.Views
     public partial class HomeView : UserControl, IIslandView
     {
         private readonly System.Collections.ObjectModel.ObservableCollection<LauncherItem> _launch = new();
-        private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(250) };
+        private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(100) };
         private List<LyricLine> _lyrics;
         private string _lyricsKey = "";
         private bool _fillingDevices;
@@ -162,12 +162,14 @@ namespace Isle.Views
             bool nothing = !m.HasSession || string.IsNullOrEmpty(m.Title);
             RecentPanel.Visibility = nothing ? Visibility.Visible : Visibility.Collapsed;
             PlayerPanel.Visibility = nothing ? Visibility.Collapsed : Visibility.Visible;
+            SourceCount.Text = Math.Max(1, AppHost.Media.SourceCount).ToString();
             if (nothing)
             {
-                Source.Text = "НИЧЕГО НЕ ИГРАЕТ";
+                Source.Text = "";
                 Title.Text = "Включи музыку в любом плеере";
                 Artist.Text = "Spotify, браузер, Яндекс Музыка…";
                 Cover.Source = null;
+                CoverGlow.Source = null;
                 PlayIcon.Kind = "Play";
                 SetLyrics(null);
                 return;
@@ -176,10 +178,34 @@ namespace Isle.Views
             Title.Text = m.Title;
             Artist.Text = m.Artist;
             Cover.Source = m.Cover;
+            CoverGlow.Source = m.Cover;
             PlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
             DurText.Text = Fmt(m.Duration);
             TickPosition();
             _ = LoadLyrics(m);
+        }
+
+        private async void OnSources(object s, RoutedEventArgs e)
+        {
+            var menu = new ContextMenu { PlacementTarget = SourceBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            AppHost.Window.SuppressAutoCollapse = true;
+            menu.Closed += (_, __) => AppHost.Window.SuppressAutoCollapse = false;
+            var auto = new MenuItem { Header = "Автоматически — что играет", IsCheckable = true, IsChecked = AppHost.Media.PreferredSource == null };
+            auto.Click += (_, __) => AppHost.Media.ChooseSource(null);
+            menu.Items.Add(auto);
+            menu.Items.Add(new Separator());
+            foreach (var src in await AppHost.Media.SourcesAsync())
+            {
+                var item = new MenuItem
+                {
+                    Header = (src.Playing ? "▶ " : "") + src.Name + (string.IsNullOrEmpty(src.Title) ? "" : "  ·  " + src.Title),
+                    IsCheckable = true, IsChecked = AppHost.Media.PreferredSource == src.Id
+                };
+                var id = src.Id;
+                item.Click += (_, __) => AppHost.Media.ChooseSource(id);
+                menu.Items.Add(item);
+            }
+            menu.IsOpen = true;
         }
 
         private async System.Threading.Tasks.Task LoadLyrics(MediaInfo m)
@@ -189,23 +215,69 @@ namespace Isle.Views
             if (key == _lyricsKey) return;
             _lyricsKey = key;
             _lyrics = null;
-            LyrPrev.Text = ""; LyrNext.Text = ""; LyrCur.Text = "Ищу текст песни…";
+            LyricsStack.Children.Clear();
+            LyrStatus.Text = "Ищу текст песни…";
+            LyrStatus.Visibility = Visibility.Visible;
             var lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
             if (key != _lyricsKey) return;
             SetLyrics(lyr);
         }
 
+        private int _curLine = -2;
+        private readonly List<TextBlock> _lines = new();
+
         private void SetLyrics(List<LyricLine> lyr)
         {
             _lyrics = lyr;
+            _curLine = -2;
+            _lines.Clear();
+            LyricsStack.Children.Clear();
+            LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            LyricsShift.Y = 0;
             if (lyr == null || lyr.Count == 0)
             {
-                LyrPrev.Text = "";
-                LyrCur.Text = AppHost.Media.Current.HasSession && !string.IsNullOrEmpty(AppHost.Media.Current.Title) ? "Текст песни не найден" : "";
-                LyrCur.Foreground = (System.Windows.Media.Brush)FindResource("Muted");
-                LyrNext.Text = "";
+                LyrStatus.Text = AppHost.Media.Current.HasSession && !string.IsNullOrEmpty(AppHost.Media.Current.Title) ? "Текст песни не найден" : "";
+                LyrStatus.Visibility = Visibility.Visible;
+                return;
             }
-            else LyrCur.Foreground = (System.Windows.Media.Brush)FindResource("Fg");
+            LyrStatus.Visibility = Visibility.Collapsed;
+            foreach (var l in lyr)
+            {
+                var tb = new TextBlock
+                {
+                    Text = l.Text.Length == 0 ? "♪" : l.Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, FontWeight = FontWeights.SemiBold,
+                    Foreground = (System.Windows.Media.Brush)FindResource("Fg"), Opacity = 0.3, Margin = new Thickness(0, 0, 0, 10),
+                    RenderTransformOrigin = new Point(0, 0.5), RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
+                };
+                _lines.Add(tb);
+                LyricsStack.Children.Add(tb);
+            }
+        }
+
+        /// <summary>Плавно прокручивает текст так, чтобы текущая строка стояла на трети высоты; она ярче и крупнее.</summary>
+        private void ShowLine(int i)
+        {
+            if (i == _curLine || _lines.Count == 0) return;
+            _curLine = i;
+            if (_lines[0].ActualHeight <= 0) LyricsStack.UpdateLayout();
+            var dur = TimeSpan.FromMilliseconds(420);
+            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+            for (int k = 0; k < _lines.Count; k++)
+            {
+                int d = Math.Abs(k - i);
+                double op = k == i ? 1 : d == 1 ? 0.45 : d == 2 ? 0.25 : 0.12;
+                double sc = k == i ? 1.12 : 1;
+                _lines[k].BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(op, dur) { EasingFunction = ease });
+                var st = (System.Windows.Media.ScaleTransform)_lines[k].RenderTransform;
+                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, dur) { EasingFunction = ease });
+                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, dur) { EasingFunction = ease });
+            }
+            double y = 0;
+            for (int k = 0; k < Math.Max(0, i); k++) y += _lines[k].ActualHeight + 10;
+            double target = -(y - LyricsViewport.ActualHeight / 3);
+            if (i < 0) target = LyricsViewport.ActualHeight / 3;
+            LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(target, TimeSpan.FromMilliseconds(520)) { EasingFunction = ease });
         }
 
         private void TickPosition()
@@ -220,12 +292,7 @@ namespace Isle.Views
             }
             PosText.Text = Fmt(pos);
             if (_lyrics != null && _lyrics.Count > 0)
-            {
-                int i = _lyrics.FindLastIndex(l => l.At <= pos + TimeSpan.FromMilliseconds(300));
-                LyrPrev.Text = i > 0 ? _lyrics[i - 1].Text : "";
-                LyrCur.Text = i >= 0 ? (_lyrics[i].Text.Length == 0 ? "♪" : _lyrics[i].Text) : "♪";
-                LyrNext.Text = i + 1 < _lyrics.Count ? _lyrics[i + 1].Text : "";
-            }
+                ShowLine(_lyrics.FindLastIndex(l => l.At <= pos + TimeSpan.FromMilliseconds(250)));
         }
 
         private static string Fmt(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : ((int)t.TotalMinutes) + ":" + t.Seconds.ToString("00");
