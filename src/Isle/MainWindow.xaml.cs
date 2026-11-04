@@ -52,6 +52,9 @@ namespace Isle
         public MainWindow()
         {
             InitializeComponent();
+            // пока видна подсказка — не поднимаем остров поверх неё (иначе она «уходит за чёлку»)
+            AddHandler(ToolTipService.ToolTipOpeningEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.Now.AddSeconds(8)), true);
+            AddHandler(ToolTipService.ToolTipClosingEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.MinValue), true);
             var s = AppSettings.Current;
             ScaleT.ScaleX = ScaleT.ScaleY = Math.Clamp(s.Scale, 0.7, 1.6);
 
@@ -781,21 +784,13 @@ namespace Isle
             var target = Win32.GetForegroundWindow();
             if (target == _hwnd || target == IntPtr.Zero) target = PreviousForeground;
             if (target == IntPtr.Zero) return;
-            var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
-            var asked = Win32.RequestNextLayout(target);
-            if (asked == IntPtr.Zero) return;
-            await Task.Delay(180);
-            var now = Win32.LayoutOf(Win32.FocusWindowOf(target));
-            if (now == before)
-            {
-                // окно проигнорировало просьбу (Chrome, Telegram, приложения из Store…) — переключаем как система, Win+Пробел
-                Win32.ForceForeground(target);
-                await Task.Delay(60);
-                Win32.PressWinSpace();
-                await Task.Delay(200);
-                now = Win32.LayoutOf(Win32.FocusWindowOf(target));
-            }
-            var code = Win32.LangCode(now != before ? now : asked);
+            // Переключаем так же, как это делает сам пользователь: возвращаем фокус в его окно и жмём Win+Пробел.
+            // Просьба окну (WM_INPUTLANGCHANGEREQUEST) в Windows 10/11 часто игнорируется — поэтому только системный способ.
+            Win32.ForceForeground(target);
+            await Task.Delay(90);
+            Win32.PressWinSpace();
+            await Task.Delay(250);
+            var code = Win32.LangCode(Win32.LayoutOf(Win32.FocusWindowOf(target)));
             if (code != null) LangChip.Text = code;
         }
 
@@ -921,6 +916,7 @@ namespace Isle
             if (rain) return Helpers.Outfit.Rain;
             if (w.Temp <= 3 || w.Code >= 71 && w.Code <= 77 || w.Code == 85 || w.Code == 86) return Helpers.Outfit.Winter;
             if (w.Temp >= 25) return Helpers.Outfit.Summer;
+            if (w.Temp >= 15 && w.Code <= 2) return Helpers.Outfit.Sunny; // тепло и ясно — кепка
             return Helpers.Outfit.None;
         }
         private bool _pulsing;
@@ -1168,9 +1164,13 @@ namespace Isle
             _peekTimer.Start();
         }
 
+        private DateTime _tipUntil;
+
         private void KeepOnTop()
         {
             if (_hwnd == IntPtr.Zero || !IsVisible) return;
+            // открыта подсказка или выпадающий список — не поднимаем остров над ними, иначе они «уходят за чёлку»
+            if (DateTime.Now < _tipUntil || CursorOverOurPopup()) return;
             // HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER
             SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010 | 0x0200);
         }
@@ -1301,7 +1301,16 @@ namespace Isle
             {
                 var m = AppHost.Media?.Current;
                 bool playing = m != null && m.HasSession && m.IsPlaying;
-                float beat = playing ? (AppHost.Audio?.Peak ?? 0) : 0;
+                // такт: всплеск на каждый удар баса (не зависит от громкости), иначе — пик громкости
+                float beat = 0;
+                double bpm = 0, energy = 0;
+                if (playing && AppHost.Spectrum.Running)
+                {
+                    bpm = AppHost.Spectrum.Bpm; energy = AppHost.Spectrum.Energy;
+                    beat = (float)Math.Max(Math.Exp(-AppHost.Spectrum.SinceBeat * 7) * 0.5, energy * 0.6);
+                }
+                else if (playing) beat = AppHost.Audio?.Peak ?? 0;
+                bool snowing = AppHost.Weather != null && (AppHost.Weather.Code >= 71 && AppHost.Weather.Code <= 77 || AppHost.Weather.Code == 85 || AppHost.Weather.Code == 86);
                 var idle = IdleTime();
                 UpdateWorking(idle);
                 // ночью (23:00–6:00) Клоди хочет спать: засыпает уже через минуту без тебя, а пока ты здесь — зевает
@@ -1315,7 +1324,7 @@ namespace Isle
                     : night ? Helpers.Mood.Drowsy
                     : Helpers.Mood.Idle;
                 var outfit = OutfitForWeather();
-                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Mood = mood; b.Outfit = outfit; b.Night = night; }
+                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Bpm = bpm; b.Energy = energy; b.Mood = mood; b.Outfit = outfit; b.Night = night; b.Snowing = snowing; }
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {

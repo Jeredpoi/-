@@ -23,7 +23,68 @@ namespace Isle.Services
         private readonly float[] _bands = new float[BandCount];
         private readonly float[] _norm = new float[BandCount];
         private readonly float[] _fresh = new float[BandCount];
-        private readonly float[] _raw = new float[BandCount];
+        private readonly double[] _db = new double[BandCount];
+        private double _peakDb = -60;
+
+        // ---- темп: ищем удары по басам и считаем интервалы между ними
+        private double _bassAvg, _clock;
+        private double _lastBeat = -1;
+        private readonly double[] _intervals = new double[16];
+        private int _intervalCount, _intervalPos;
+        private double _bpm, _energy;
+
+        /// <summary>Темп музыки в ударах в минуту (0 — пока не понял).</summary>
+        public double Bpm { get { lock (_lock) return _bpm; } }
+        /// <summary>Насколько «плотная» музыка сейчас, 0..1 (доля громких полос).</summary>
+        public double Energy { get { lock (_lock) return _energy; } }
+        /// <summary>Сколько секунд назад был последний удар баса (для танца в такт).</summary>
+        public double SinceBeat { get { lock (_lock) return _lastBeat < 0 ? 99 : _clock - _lastBeat; } }
+
+        private void DetectBeat(bool silent)
+        {
+            double hop = (FftSize / 2.0) / _sampleRate;
+            _clock += hop;
+            // энергия басов (первые полосы) относительно своего среднего
+            double bass = 0;
+            for (int b = 0; b < 5; b++) bass += Math.Pow(10, (_db[b] - _peakDb) / 20);
+            _bassAvg = _bassAvg * 0.96 + bass * 0.04;
+            double energy = 0;
+            for (int b = 0; b < BandCount; b++) energy += _fresh[b];
+            energy /= BandCount;
+            if (silent) { lock (_lock) { _energy *= 0.9; } return; }
+            if (bass > _bassAvg * 1.45 && bass > 0.05 && (_lastBeat < 0 || _clock - _lastBeat > 0.28))
+            {
+                if (_lastBeat >= 0)
+                {
+                    double iv = _clock - _lastBeat;
+                    if (iv > 0.28 && iv < 1.6) { _intervals[_intervalPos] = iv; _intervalPos = (_intervalPos + 1) % _intervals.Length; _intervalCount = Math.Min(_intervals.Length, _intervalCount + 1); }
+                }
+                lock (_lock) _lastBeat = _clock;
+                if (_intervalCount >= 4)
+                {
+                    // медиана интервалов → удары в минуту, приводим к 70–180
+                    var arr = new double[_intervalCount];
+                    Array.Copy(_intervals, arr, _intervalCount);
+                    Array.Sort(arr);
+                    double bpm = 60 / arr[arr.Length / 2];
+                    while (bpm < 70) bpm *= 2;
+                    while (bpm > 180) bpm /= 2;
+                    lock (_lock) _bpm = _bpm <= 0 ? bpm : _bpm * 0.8 + bpm * 0.2;
+                }
+            }
+            lock (_lock) _energy = _energy * 0.9 + energy * 0.1;
+        }
+
+        /// <summary>Темп по списку интервалов между ударами (для тестов).</summary>
+        public static double BpmFromIntervals(double[] intervals)
+        {
+            var arr = (double[])intervals.Clone();
+            Array.Sort(arr);
+            double bpm = 60 / arr[arr.Length / 2];
+            while (bpm < 70) bpm *= 2;
+            while (bpm > 180) bpm /= 2;
+            return bpm;
+        }
         private int _sampleRate = 48000;
         private readonly object _lock = new();
 
@@ -59,6 +120,8 @@ namespace Isle.Services
             try { c.DataAvailable -= OnData; c.StopRecording(); c.Dispose(); } catch { }
             lock (_lock) Array.Clear(_bands, 0, BandCount);
             Array.Clear(_norm, 0, BandCount);
+            lock (_lock) { _bpm = 0; _energy = 0; _lastBeat = -1; }
+            _intervalCount = 0; _peakDb = -60;
         }
 
         private void OnData(object s, WaveInEventArgs e)
@@ -105,6 +168,7 @@ namespace Isle.Services
             double fMin = 40, fMax = Math.Min(16000, _sampleRate / 2.0);
             double binHz = _sampleRate / (double)FftSize;
             var fresh = _fresh;
+            double loudest = -200;
             for (int b = 0; b < BandCount; b++)
             {
                 double lo = fMin * Math.Pow(fMax / fMin, b / (double)BandCount);
@@ -113,26 +177,26 @@ namespace Isle.Services
                 double acc = 0;
                 for (int i = i0; i < i1 && i < FftSize / 2; i++)
                     acc = Math.Max(acc, Math.Sqrt(_fft[i].X * _fft[i].X + _fft[i].Y * _fft[i].Y));
-                // в децибелы и в 0..1; высоким частотам чуть помогаем — их энергия меньше
-                double db = 20 * Math.Log10(acc + 1e-9) + b * 0.55;
-                fresh[b] = (float)Math.Clamp((db + 62) / 52.0, 0, 1);
-                _raw[b] = fresh[b];
+                // децибелы; высоким частотам чуть помогаем — их энергия меньше
+                _db[b] = 20 * Math.Log10(acc + 1e-12) + b * 0.55;
+                loudest = Math.Max(loudest, _db[b]);
             }
-            // Своя «громкость» для каждой полосы: запоминаем недавний максимум и делим на него.
-            // Иначе высокие частоты всегда почти нулевые, а басы — всегда в потолок.
+
+            // Автоусиление: шкала идёт от недавней самой громкой полосы, а не от фиксированного уровня.
+            // Поэтому эквалайзер одинаково живой и на громкости 100%, и почти на нуле —
+            // звук, который слышно, всегда даёт движение.
+            _peakDb = Math.Max(loudest, _peakDb - 0.06);      // громкость «забывается» ~3 дБ/с — после убавления звука подстроится за несколько секунд
+            const double Range = 42;                           // показываем верхние 42 дБ
+            bool silent = loudest < -125;                      // настоящая цифровая тишина (пауза, конец трека)
             for (int b = 0; b < BandCount; b++)
             {
-                // недавний максимум забывается медленно и не опускается ниже 0,35 —
-                // иначе на тихих местах и паузах усиливался шум и полоски дёргались до потолка
-                _norm[b] = Math.Max(0.35f, Math.Max(fresh[b], _norm[b] * 0.998f));
-                float floor = _norm[b] * 0.4f;                        // «тишина» для этой полосы
-                float v = (fresh[b] - floor) / Math.Max(0.12f, _norm[b] - floor);
-                fresh[b] = Math.Clamp(v, 0, 1);
+                float v = silent ? 0 : (float)Math.Clamp((_db[b] - (_peakDb - Range)) / Range, 0, 1);
+                // своя «громкость» для каждой полосы, чтобы высокие не были всегда внизу, а басы — в потолке
+                _norm[b] = Math.Max(0.3f, Math.Max(v, _norm[b] * 0.998f));
+                float floor = _norm[b] * 0.35f;
+                fresh[b] = Math.Clamp((v - floor) / Math.Max(0.12f, _norm[b] - floor), 0, 1);
             }
-            // совсем тихо (пауза, конец трека) — полоски плавно опускаются, а не пляшут от шума
-            float loud = 0;
-            for (int b = 0; b < BandCount; b++) loud = Math.Max(loud, _raw[b]);
-            if (loud < 0.12f) Array.Clear(fresh, 0, BandCount);
+            DetectBeat(silent);
             lock (_lock)
             {
                 for (int b = 0; b < BandCount; b++)
