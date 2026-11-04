@@ -125,6 +125,18 @@ namespace Isle.Views
             return list;
         }
 
+        /// <summary>Голосовая команда, которой нужно подтверждение: показываем её в чате с кнопками «Выполнить / Отмена».</summary>
+        public void AddExchange(string userText, string answer, System.Collections.Generic.IEnumerable<AiAction> confirm)
+        {
+            Welcome.Visibility = Visibility.Collapsed;
+            Scroll.Visibility = Visibility.Visible;
+            _msgs.Add(new ChatMessage { Role = "user", Text = "🎙 " + userText });
+            if (!string.IsNullOrWhiteSpace(answer)) _msgs.Add(new ChatMessage { Role = "assistant", Text = answer });
+            foreach (var a in confirm) _msgs.Add(new ChatMessage { Role = "action", Text = "Нужно подтверждение", Pending = a });
+            Scroll.ScrollToEnd();
+            SaveSession();
+        }
+
         public async void Ask(string text)
         {
             if (_busy) return;

@@ -32,7 +32,7 @@ namespace Isle.Services
             else Start();
         }
 
-        public void Start()
+        public void Start(string hint = null)
         {
             if (Recording) return;
             try
@@ -47,7 +47,7 @@ namespace Isle.Services
                 RecordingChanged?.Invoke(true);
                 ToastBus.Show(new Toast
                 {
-                    Kind = ToastKind.Info, Title = "Слушаю…", Subtitle = "Говори. Ctrl+Alt+D ещё раз — вставить текст",
+                    Kind = ToastKind.Info, Title = "Слушаю…", Subtitle = hint ?? "Говори. Ctrl+Alt+D ещё раз — вставить текст",
                     Icon = Icons.Mic, Accent = System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71), Progress = 0.03,
                     ReplaceKey = "voice", Duration = TimeSpan.FromMinutes(5), Important = true
                 });
@@ -128,9 +128,15 @@ namespace Isle.Services
                 return;
             }
             if (AppSettings.Current.VoicePunctuate) text = await AiService.PunctuateAsync(text);
+            if (onText != null)
+            {
+                // текст нужен программе (чат, голосовая команда) — буфер не трогаем
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Распознано", Subtitle = text, Icon = Icons.Check, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(1.2) });
+                onText(text);
+                return;
+            }
             ClipboardService.SetText(text);
-            if (onText != null) onText(text);
-            else if (AppSettings.Current.VoiceAutoPaste)
+            if (AppSettings.Current.VoiceAutoPaste)
             {
                 await Task.Delay(100);
                 Native.Win32.SendKeyCombo(Native.Win32.VK_CONTROL, Native.Win32.VK_V);

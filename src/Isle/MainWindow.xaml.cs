@@ -18,7 +18,7 @@ namespace Isle
 
     public partial class MainWindow : Window
     {
-        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5;
+        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5, HkVoiceCmd = 6;
         private static readonly Size ExpandedSize = new(900, 470);
 
         private HwndSource _src;
@@ -276,11 +276,12 @@ namespace Isle
             Win32.RegisterHotKey(_hwnd, HkClipboard, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x56); // Ctrl+Alt+V
             Win32.RegisterHotKey(_hwnd, HkShot, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x53);     // Ctrl+Alt+S
             Win32.RegisterHotKey(_hwnd, HkVoice, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x44);    // Ctrl+Alt+D
+            Win32.RegisterHotKey(_hwnd, HkVoiceCmd, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x41); // Ctrl+Alt+A
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice }) Win32.UnregisterHotKey(_hwnd, id);
+            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice, HkVoiceCmd }) Win32.UnregisterHotKey(_hwnd, id);
             AppHost.Audio?.Dispose();
             AppHost.Spectrum?.Dispose();
             base.OnClosed(e);
@@ -315,6 +316,9 @@ namespace Isle
                         break;
                     case HkVoice:
                         AppHost.Voice.Toggle();
+                        break;
+                    case HkVoiceCmd:
+                        VoiceCommandKey();
                         break;
                     case HkShot:
                         _ = Tools.RegionShot();
@@ -698,6 +702,80 @@ namespace Isle
         }
 
         private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
+
+        // ===================== Голосовая команда ИИ (Ctrl+Alt+A) =====================
+
+        private readonly DispatcherTimer _voiceKeyPoll = new() { Interval = TimeSpan.FromMilliseconds(50) };
+        private DateTime _voiceKeyDown;
+
+        /// <summary>
+        /// Зажал Ctrl+Alt+A — слушаем, отпустил — ИИ выполняет сказанное.
+        /// Если просто коротко нажать — запись идёт до следующего нажатия.
+        /// </summary>
+        private void VoiceCommandKey()
+        {
+            if (AppHost.Voice.Recording)
+            {
+                // второе нажатие в режиме «нажал-нажал»
+                _voiceKeyPoll.Stop();
+                _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                return;
+            }
+            AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм»");
+            if (!AppHost.Voice.Recording) return;
+            _voiceKeyDown = DateTime.Now;
+            if (_voiceKeyPoll.Tag == null)
+            {
+                _voiceKeyPoll.Tag = true;
+                _voiceKeyPoll.Tick += (_, __) =>
+                {
+                    if (!AppHost.Voice.Recording) { _voiceKeyPoll.Stop(); return; }
+                    bool held = (Win32.GetAsyncKeyState(0x41) & 0x8000) != 0; // клавиша A ещё зажата
+                    if (held) return;
+                    _voiceKeyPoll.Stop();
+                    if (DateTime.Now - _voiceKeyDown < TimeSpan.FromMilliseconds(400)) return; // короткое нажатие — запись идёт до второго нажатия
+                    _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                };
+            }
+            _voiceKeyPoll.Start();
+        }
+
+        private async Task RunVoiceCommand(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            ToastBus.Show(new Toast { Title = "«" + text + "»", Subtitle = "Думаю…", Icon = Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
+            var history = new List<ChatMessage>
+            {
+                new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" }
+            };
+            string answer;
+            try { answer = await AiService.AskAsync(history); }
+            catch (Exception ex) { answer = "Ошибка: " + ex.Message; }
+            var (clean, actions) = AiActions.Extract(answer ?? "");
+            var reports = new List<string>();
+            var confirm = new List<AiAction>();
+            foreach (var a in actions)
+            {
+                if (a.NeedsConfirm) confirm.Add(a);
+                else reports.Add(AiActions.Run(a));
+            }
+            bool failed = (answer ?? "").StartsWith("Ошибка") || (answer ?? "").StartsWith("Нужен API-ключ") || reports.Any(r => r.StartsWith("✗"));
+            var sub = reports.Count > 0 ? string.Join(" · ", reports) : clean;
+            if (sub.Length > 160) sub = sub.Substring(0, 160) + "…";
+            ToastBus.Show(new Toast
+            {
+                Kind = failed ? ToastKind.Info : ToastKind.Success,
+                Title = reports.Count > 0 && clean.Length > 0 && clean.Length <= 80 ? clean : "«" + text + "»",
+                Subtitle = sub, Icon = failed ? Icons.Info : Icons.Check, ReplaceKey = "voice", Important = true,
+                Duration = TimeSpan.FromSeconds(Math.Clamp(2 + sub.Length / 25.0, 3, 9))
+            });
+            if (confirm.Count > 0)
+            {
+                // опасное (консоль, сон, блокировка) — только по кнопке: открываем чат с подтверждением
+                Expand("chat");
+                (GetView("chat") as Views.ChatView)?.AddExchange(text, clean, confirm);
+            }
+        }
 
         private async void OnLangClick(object sender, RoutedEventArgs e)
         {
