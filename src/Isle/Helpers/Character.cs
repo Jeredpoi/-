@@ -113,6 +113,7 @@ namespace Isle.Helpers
         // ---- танцы под музыку: меняются сами каждые 7–12 секунд
         private int _dance;
         private DateTime _nextDance = DateTime.Now;
+        private double _danceStart;
         public const int DanceCount = 9;
         private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка", "брейк-данс" };
 
@@ -122,7 +123,7 @@ namespace Isle.Helpers
         /// </summary>
         private (double angle, double down, double phase) Breakdance()
         {
-            double ph = (_time * 0.17) % 1;
+            double ph = ((_time - _danceStart) * 0.17) % 1; // от начала танца: всегда начинает с падения
             if (ph < 0.15)
             {
                 double k = ph / 0.15;                       // падает назад
@@ -295,7 +296,9 @@ namespace Isle.Helpers
             {
                 int d = _rnd.Next(DanceCount - 1);
                 _dance = d >= _dance ? d + 1 : d; // всегда другой танец
-                _nextDance = DateTime.Now.AddSeconds(7 + _rnd.NextDouble() * 5);
+                _danceStart = _time;
+                // брейк-данс — ровно два полных круга (падение → вращение → фриз), чтобы не обрывался посреди
+                _nextDance = DateTime.Now.AddSeconds(_dance == 8 ? 2 / 0.17 : 7 + _rnd.NextDouble() * 5);
             }
             if (mood == Mood.Music && (_dance == 4)) { _lookY += (0.8 - _lookY) * 0.3; } // хедбэнг — смотрит в пол
         }
