@@ -83,25 +83,61 @@ namespace Isle.Native
 
         [DllImport("user32.dll")] public static extern int GetKeyboardLayoutList(int n, IntPtr[] list);
 
-        /// <summary>Переключает окно на следующую установленную раскладку. Возвращает код языка (EN, RU…).</summary>
-        public static string SwitchToNextLayout(IntPtr target)
+        [StructLayout(LayoutKind.Sequential)]
+        private struct GUITHREADINFO
+        {
+            public int cbSize, flags;
+            public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+            public int l, t, r, b;
+        }
+        [DllImport("user32.dll")] private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO info);
+
+        /// <summary>Окно с фокусом ввода внутри окна target (поле ввода в браузере, мессенджере и т. п.).</summary>
+        public static IntPtr FocusWindowOf(IntPtr target)
+        {
+            uint tid = GetWindowThreadProcessId(target, out _);
+            var gi = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
+            return GetGUIThreadInfo(tid, ref gi) && gi.hwndFocus != IntPtr.Zero ? gi.hwndFocus : target;
+        }
+
+        public static IntPtr LayoutOf(IntPtr hwnd) => GetKeyboardLayout(GetWindowThreadProcessId(hwnd, out _));
+
+        public static string LangCode(IntPtr hkl)
+        {
+            try { return System.Globalization.CultureInfo.GetCultureInfo((int)((long)hkl & 0xFFFF)).TwoLetterISOLanguageName.ToUpperInvariant(); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Просит окно (точнее, его поле с фокусом) включить следующую установленную раскладку.
+        /// Возвращает раскладку, которую попросили, или IntPtr.Zero.
+        /// </summary>
+        public static IntPtr RequestNextLayout(IntPtr target)
         {
             try
             {
-                if (target == IntPtr.Zero) return null;
+                if (target == IntPtr.Zero) return IntPtr.Zero;
                 int n = GetKeyboardLayoutList(0, null);
-                if (n <= 1) return null;
+                if (n <= 1) return IntPtr.Zero;
                 var list = new IntPtr[n];
                 GetKeyboardLayoutList(n, list);
-                uint tid = GetWindowThreadProcessId(target, out _);
-                var cur = GetKeyboardLayout(tid);
-                int i = Array.IndexOf(list, cur);
+                var focus = FocusWindowOf(target);
+                int i = Array.IndexOf(list, LayoutOf(focus));
                 var next = list[(i + 1 + n) % n];
-                PostMessage(target, 0x0050, IntPtr.Zero, next); // WM_INPUTLANGCHANGEREQUEST
-                int lang = (int)((long)next & 0xFFFF);
-                return System.Globalization.CultureInfo.GetCultureInfo(lang).TwoLetterISOLanguageName.ToUpperInvariant();
+                PostMessage(focus, 0x0050, new IntPtr(1), next); // WM_INPUTLANGCHANGEREQUEST, INPUTLANGCHANGE_SYSCHARSET
+                if (focus != target) PostMessage(target, 0x0050, new IntPtr(1), next);
+                return next;
             }
-            catch { return null; }
+            catch { return IntPtr.Zero; }
+        }
+
+        /// <summary>Нажать Win+Пробел — системное переключение раскладки (работает и там, где сообщение игнорируют).</summary>
+        public static void PressWinSpace()
+        {
+            keybd_event(0x5B, 0, 0, IntPtr.Zero);       // Win
+            keybd_event(0x20, 0, 0, IntPtr.Zero);       // Space
+            keybd_event(0x20, 0, 2, IntPtr.Zero);
+            keybd_event(0x5B, 0, 2, IntPtr.Zero);
         }
 
         /// <summary>Переключить раскладку в активном окне на следующую.</summary>

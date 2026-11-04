@@ -70,6 +70,25 @@ namespace Isle.Tests
         }
 
         [Fact]
+        public void TodayPastHourMeansEvening()
+        {
+            // 14:00, «сегодня в 9» — это 21:00, а не звонок прямо сейчас
+            Assert.Equal(new DateTime(2026, 11, 4, 21, 0, 0), ReminderService.Parse("сегодня в 9 созвон", Now).When);
+            // «сегодня в 13:30» уже прошло и вечером не бывает — завтра
+            Assert.Equal(new DateTime(2026, 11, 5, 13, 30, 0), ReminderService.Parse("сегодня в 13:30 обед", Now).When);
+        }
+
+        [Theory]
+        [InlineData("Привет! Как дела? У меня всё хорошо, спасибо. Давай встретимся завтра в девять, хорошо?", true)]
+        [InlineData("Продолжение следует...", true)]
+        [InlineData("Субтитры сделал DimaTorzok", true)]
+        [InlineData("", true)]
+        [InlineData("Привет!", false)]
+        [InlineData("Напомни купить молоко", false)]
+        public void WhisperHallucinations(string text, bool junk) =>
+            Assert.Equal(junk, VoiceService.IsHallucination(text, "Привет! Как дела? У меня всё хорошо, спасибо. Давай встретимся завтра в девять, хорошо?"));
+
+        [Fact]
         public void NoTimeReturnsNull()
         {
             Assert.Null(ReminderService.Parse("купить хлеб", Now));
@@ -213,6 +232,27 @@ namespace Isle.Tests
 
         [Fact]
         public void LeavesUnknownBrackets() => Assert.Contains("[[foo: bar]]", AiActions.Extract("x [[foo: bar]]").text);
+
+        [Fact]
+        public void ThinkingIsRemovedEvenIfCut()
+        {
+            Assert.Equal("Ответ", AiService.StripThinking("<think>думаю…</think>Ответ"));
+            Assert.Equal("Начало", AiService.StripThinking("Начало <think>рассуждение без конца"));
+        }
+
+        [Fact]
+        public void HistoryAlternatesAndStartsWithUser()
+        {
+            var h = Isle.Views.ChatView.BuildHistory(new[]
+            {
+                new ChatMessage { Role = "assistant", Text = "привет" },
+                new ChatMessage { Role = "user", Text = "a" },
+                new ChatMessage { Role = "user", Text = "b" },
+                new ChatMessage { Role = "assistant", Text = "c" },
+            });
+            Assert.Equal(new[] { "user", "assistant" }, h.Select(m => m.Role).ToArray());
+            Assert.Equal("a\n\nb", h[0].Text);
+        }
 
         [Theory]
         [InlineData(@"C:\Users\me\Downloads\run.bat", true)]

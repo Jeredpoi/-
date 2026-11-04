@@ -18,7 +18,7 @@ namespace Isle
 
     public partial class MainWindow : Window
     {
-        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5;
+        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5, HkVoiceCmd = 6;
         private static readonly Size ExpandedSize = new(900, 470);
 
         private HwndSource _src;
@@ -184,7 +184,26 @@ namespace Isle
                 MakeNoActivate(true);
                 if (State == IslandState.Expanded && !_pinned && !SuppressAutoCollapse && !CursorNearIsland(14) && !CursorOverOurPopup()) Collapse();
             };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; } };
+            KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Escape && AlarmService.Ringing) { AlarmService.Stop(); e.Handled = true; return; }
+                if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; }
+            };
+            // таймер в свёрнутой чёлке: правый клик — отменить, средний — пауза/продолжить
+            TimerRow.MouseRightButtonUp += (_, e) =>
+            {
+                AppHost.Timer.Reset();
+                ToastBus.Show(new Toast { Title = "Таймер отменён", Icon = Icons.Timer, Duration = TimeSpan.FromSeconds(2) });
+                e.Handled = true;
+            };
+            TimerRow.MouseDown += (_, e) =>
+            {
+                if (e.ChangedButton != MouseButton.Middle) return;
+                if (AppHost.Timer.Running) AppHost.Timer.Pause(); else AppHost.Timer.Start();
+                e.Handled = true;
+            };
+            TimerRow.Background = Brushes.Transparent; // чтобы клик ловился по всей строке
+            TimerRow.ToolTip = "Клик — открыть · правый клик — отменить таймер · колесо — пауза";
 
             Island.SizeChanged += (_, __) =>
             {
@@ -257,11 +276,12 @@ namespace Isle
             Win32.RegisterHotKey(_hwnd, HkClipboard, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x56); // Ctrl+Alt+V
             Win32.RegisterHotKey(_hwnd, HkShot, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x53);     // Ctrl+Alt+S
             Win32.RegisterHotKey(_hwnd, HkVoice, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x44);    // Ctrl+Alt+D
+            Win32.RegisterHotKey(_hwnd, HkVoiceCmd, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x41); // Ctrl+Alt+A
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice }) Win32.UnregisterHotKey(_hwnd, id);
+            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice, HkVoiceCmd }) Win32.UnregisterHotKey(_hwnd, id);
             AppHost.Audio?.Dispose();
             AppHost.Spectrum?.Dispose();
             base.OnClosed(e);
@@ -283,6 +303,7 @@ namespace Isle
                 switch (w.ToInt32())
                 {
                     case HkToggle:
+                        if (AlarmService.Ringing) { AlarmService.Stop(); break; } // Ctrl+Alt+Пробел выключает звонок
                         if (State == IslandState.Expanded) Collapse(); else { Expand(null); FocusIsland(); }
                         break;
                     case HkCommand:
@@ -295,6 +316,9 @@ namespace Isle
                         break;
                     case HkVoice:
                         AppHost.Voice.Toggle();
+                        break;
+                    case HkVoiceCmd:
+                        VoiceCommandKey();
                         break;
                     case HkShot:
                         _ = Tools.RegionShot();
@@ -337,9 +361,9 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (AlarmService.Ringing && State == IslandState.Toast)
+            if (AlarmService.Ringing && State != IslandState.Expanded)
             {
-                AlarmService.Stop(); // клик по звенящей чёлке — выключить будильник
+                AlarmService.Stop(); // клик по звенящей чёлке (в любом виде) — выключить будильник
                 e.Handled = true;
                 return;
             }
@@ -485,7 +509,9 @@ namespace Isle
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
-            if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - h) < 1) return;
+            // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
+            // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
+            if (onlyIfChanged && Math.Abs(_sizeTarget.Width - w) < 1 && Math.Abs(_sizeTarget.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
 
@@ -546,8 +572,11 @@ namespace Isle
         private int _slideDir = 1;
         private UIElement _lastRow;
 
+        private Size _sizeTarget = new(210, 34);
+
         private void AnimateSize(double w, double h, int ms, bool spring = false)
         {
+            _sizeTarget = new Size(w, h);
             // раскрытие — пружиной, остальное — мягким «желе»
             IEasingFunction ease = spring ? new Helpers.Spring { Damping = 10, Frequency = 10 }
                 : new Helpers.Spring { Damping = 9, Frequency = 9 };
@@ -674,11 +703,100 @@ namespace Isle
 
         private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
 
-        private void OnLangClick(object sender, RoutedEventArgs e)
+        // ===================== Голосовая команда ИИ (Ctrl+Alt+A) =====================
+
+        private readonly DispatcherTimer _voiceKeyPoll = new() { Interval = TimeSpan.FromMilliseconds(50) };
+        private DateTime _voiceKeyDown;
+
+        /// <summary>
+        /// Зажал Ctrl+Alt+A — слушаем, отпустил — ИИ выполняет сказанное.
+        /// Если просто коротко нажать — запись идёт до следующего нажатия.
+        /// </summary>
+        private void VoiceCommandKey()
+        {
+            if (AppHost.Voice.Recording)
+            {
+                // второе нажатие в режиме «нажал-нажал»
+                _voiceKeyPoll.Stop();
+                _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                return;
+            }
+            AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм»");
+            if (!AppHost.Voice.Recording) return;
+            _voiceKeyDown = DateTime.Now;
+            if (_voiceKeyPoll.Tag == null)
+            {
+                _voiceKeyPoll.Tag = true;
+                _voiceKeyPoll.Tick += (_, __) =>
+                {
+                    if (!AppHost.Voice.Recording) { _voiceKeyPoll.Stop(); return; }
+                    bool held = (Win32.GetAsyncKeyState(0x41) & 0x8000) != 0; // клавиша A ещё зажата
+                    if (held) return;
+                    _voiceKeyPoll.Stop();
+                    if (DateTime.Now - _voiceKeyDown < TimeSpan.FromMilliseconds(400)) return; // короткое нажатие — запись идёт до второго нажатия
+                    _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                };
+            }
+            _voiceKeyPoll.Start();
+        }
+
+        private async Task RunVoiceCommand(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            ToastBus.Show(new Toast { Title = "«" + text + "»", Subtitle = "Думаю…", Icon = Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
+            var history = new List<ChatMessage>
+            {
+                new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" }
+            };
+            string answer;
+            try { answer = await AiService.AskAsync(history); }
+            catch (Exception ex) { answer = "Ошибка: " + ex.Message; }
+            var (clean, actions) = AiActions.Extract(answer ?? "");
+            var reports = new List<string>();
+            var confirm = new List<AiAction>();
+            foreach (var a in actions)
+            {
+                if (a.NeedsConfirm) confirm.Add(a);
+                else reports.Add(AiActions.Run(a));
+            }
+            bool failed = (answer ?? "").StartsWith("Ошибка") || (answer ?? "").StartsWith("Нужен API-ключ") || reports.Any(r => r.StartsWith("✗"));
+            var sub = reports.Count > 0 ? string.Join(" · ", reports) : clean;
+            if (sub.Length > 160) sub = sub.Substring(0, 160) + "…";
+            ToastBus.Show(new Toast
+            {
+                Kind = failed ? ToastKind.Info : ToastKind.Success,
+                Title = reports.Count > 0 && clean.Length > 0 && clean.Length <= 80 ? clean : "«" + text + "»",
+                Subtitle = sub, Icon = failed ? Icons.Info : Icons.Check, ReplaceKey = "voice", Important = true,
+                Duration = TimeSpan.FromSeconds(Math.Clamp(2 + sub.Length / 25.0, 3, 9))
+            });
+            if (confirm.Count > 0)
+            {
+                // опасное (консоль, сон, блокировка) — только по кнопке: открываем чат с подтверждением
+                Expand("chat");
+                (GetView("chat") as Views.ChatView)?.AddExchange(text, clean, confirm);
+            }
+        }
+
+        private async void OnLangClick(object sender, RoutedEventArgs e)
         {
             var target = Win32.GetForegroundWindow();
             if (target == _hwnd || target == IntPtr.Zero) target = PreviousForeground;
-            var code = Win32.SwitchToNextLayout(target);
+            if (target == IntPtr.Zero) return;
+            var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            var asked = Win32.RequestNextLayout(target);
+            if (asked == IntPtr.Zero) return;
+            await Task.Delay(180);
+            var now = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            if (now == before)
+            {
+                // окно проигнорировало просьбу (Chrome, Telegram, приложения из Store…) — переключаем как система, Win+Пробел
+                Win32.ForceForeground(target);
+                await Task.Delay(60);
+                Win32.PressWinSpace();
+                await Task.Delay(200);
+                now = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            }
+            var code = Win32.LangCode(now != before ? now : asked);
             if (code != null) LangChip.Text = code;
         }
 

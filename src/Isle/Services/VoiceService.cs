@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -31,7 +32,7 @@ namespace Isle.Services
             else Start();
         }
 
-        public void Start()
+        public void Start(string hint = null)
         {
             if (Recording) return;
             try
@@ -46,7 +47,7 @@ namespace Isle.Services
                 RecordingChanged?.Invoke(true);
                 ToastBus.Show(new Toast
                 {
-                    Kind = ToastKind.Info, Title = "Слушаю…", Subtitle = "Говори. Ctrl+Alt+D ещё раз — вставить текст",
+                    Kind = ToastKind.Info, Title = "Слушаю…", Subtitle = hint ?? "Говори. Ctrl+Alt+D ещё раз — вставить текст",
                     Icon = Icons.Mic, Accent = System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71), Progress = 0.03,
                     ReplaceKey = "voice", Duration = TimeSpan.FromMinutes(5), Important = true
                 });
@@ -80,7 +81,9 @@ namespace Isle.Services
                     int o = idx + c * bytesPerSample;
                     float v = isFloat ? BitConverter.ToSingle(e.Buffer, o)
                         : bytesPerSample == 2 ? BitConverter.ToInt16(e.Buffer, o) / 32768f
-                        : bytesPerSample == 4 ? BitConverter.ToInt32(e.Buffer, o) / 2147483648f : 0;
+                        : bytesPerSample == 4 ? BitConverter.ToInt32(e.Buffer, o) / 2147483648f
+                        : bytesPerSample == 3 ? ((e.Buffer[o] | e.Buffer[o + 1] << 8 | (sbyte)e.Buffer[o + 2] << 16) / 8388608f) // 24-битные микрофоны
+                        : 0;
                     sum += v;
                 }
                 float m = Math.Clamp(sum / ch, -1f, 1f);
@@ -125,9 +128,15 @@ namespace Isle.Services
                 return;
             }
             if (AppSettings.Current.VoicePunctuate) text = await AiService.PunctuateAsync(text);
+            if (onText != null)
+            {
+                // текст нужен программе (чат, голосовая команда) — буфер не трогаем
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Распознано", Subtitle = text, Icon = Icons.Check, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(1.2) });
+                onText(text);
+                return;
+            }
             ClipboardService.SetText(text);
-            if (onText != null) onText(text);
-            else if (AppSettings.Current.VoiceAutoPaste)
+            if (AppSettings.Current.VoiceAutoPaste)
             {
                 await Task.Delay(100);
                 Native.Win32.SendKeyCombo(Native.Win32.VK_CONTROL, Native.Win32.VK_V);
@@ -179,9 +188,34 @@ namespace Isle.Services
             req.Headers.Add("Authorization", "Bearer " + key.Trim());
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            if (!resp.IsSuccessStatusCode) throw new Exception(AiService.ErrorText(doc.RootElement, (int)resp.StatusCode));
-            return doc.RootElement.TryGetProperty("text", out var t) ? (t.GetString() ?? "").Trim() : "";
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(json); }
+            catch { throw new Exception("сервис ответил не по делу (код " + (int)resp.StatusCode + ") — попробуй ещё раз или включи VPN"); }
+            using (doc)
+            {
+                if (!resp.IsSuccessStatusCode) throw new Exception(AiService.ErrorText(doc.RootElement, (int)resp.StatusCode));
+                var text = doc.RootElement.TryGetProperty("text", out var t) ? (t.GetString() ?? "").Trim() : "";
+                return IsHallucination(text, hint) ? "" : text;
+            }
+        }
+
+        /// <summary>
+        /// На тишине Whisper любит «выдумывать»: повторяет подсказку или пишет титры из видео.
+        /// Такое считаем пустой записью, а не вставляем в чужое окно.
+        /// </summary>
+        public static bool IsHallucination(string text, string hint)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return true;
+            string Norm(string x) => new string(x.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            var t = Norm(text);
+            if (t.Length == 0) return true;
+            if (!string.IsNullOrEmpty(hint) && (t.Length >= 15 && Norm(hint).Contains(t) || t.Contains(Norm(hint)))) return true; // короткое «привет» — это ты, а не подсказка
+            string[] junk =
+            {
+                "продолжениеследует", "субтитрысделал", "субтитрыделал", "редакторсубтитров", "спасибозапросмотр",
+                "подписывайтесьнаканал", "ставьтелайки", "thanksforwatching", "subtitlesby", "pleasesubscribe"
+            };
+            return t.Length < 60 && junk.Any(t.Contains);
         }
 
         /// <summary>Проверка: отправляем секунду тишины — если ключ верный, сервис ответит.</summary>

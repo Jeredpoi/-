@@ -27,6 +27,16 @@ namespace Isle.Views
         {
             InitializeComponent();
             Messages.ItemsSource = _msgs;
+            // Клоди в чате одет по погоде, ночью — в колпаке и зевает
+            ChatBuddy.IsVisibleChanged += (_, __) =>
+            {
+                if (!ChatBuddy.IsVisible) return;
+                int hour = DateTime.Now.Hour;
+                bool night = hour >= 23 || hour < 6;
+                ChatBuddy.Night = night;
+                ChatBuddy.Outfit = MainWindow.OutfitForWeather();
+                ChatBuddy.Mood = night ? Isle.Helpers.Mood.Drowsy : Isle.Helpers.Mood.Idle;
+            };
             foreach (var idea in Ideas)
             {
                 var b = new Button { Content = idea, Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 0, 6), HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(14, 6, 14, 6) };
@@ -91,6 +101,42 @@ namespace Isle.Views
             Ask(text);
         }
 
+        /// <summary>Ошибки сервиса и подсказки Isle — не реплики ИИ, в разговор их не отправляем.</summary>
+        public static bool IsServiceError(string text)
+        {
+            var t = text ?? "";
+            return t.StartsWith("Ошибка сети:") || t.StartsWith("Ошибка:") || t.StartsWith("Нужен API-ключ") || t == "(пустой ответ)";
+        }
+
+        /// <summary>
+        /// Реплики должны чередоваться и начинаться с пользователя (Claude иначе отвечает ошибкой 400):
+        /// подряд идущие сообщения одной роли склеиваем, ведущие ответы ИИ отбрасываем.
+        /// </summary>
+        public static System.Collections.Generic.List<ChatMessage> BuildHistory(System.Collections.Generic.IEnumerable<ChatMessage> src)
+        {
+            var list = new System.Collections.Generic.List<ChatMessage>();
+            foreach (var m in src)
+            {
+                if (list.Count == 0 && m.Role != "user") continue;
+                if (list.Count > 0 && list[^1].Role == m.Role)
+                    list[^1] = new ChatMessage { Role = m.Role, Text = list[^1].Text + "\n\n" + m.Text };
+                else list.Add(new ChatMessage { Role = m.Role, Text = m.Text });
+            }
+            return list;
+        }
+
+        /// <summary>Голосовая команда, которой нужно подтверждение: показываем её в чате с кнопками «Выполнить / Отмена».</summary>
+        public void AddExchange(string userText, string answer, System.Collections.Generic.IEnumerable<AiAction> confirm)
+        {
+            Welcome.Visibility = Visibility.Collapsed;
+            Scroll.Visibility = Visibility.Visible;
+            _msgs.Add(new ChatMessage { Role = "user", Text = "🎙 " + userText });
+            if (!string.IsNullOrWhiteSpace(answer)) _msgs.Add(new ChatMessage { Role = "assistant", Text = answer });
+            foreach (var a in confirm) _msgs.Add(new ChatMessage { Role = "action", Text = "Нужно подтверждение", Pending = a });
+            Scroll.ScrollToEnd();
+            SaveSession();
+        }
+
         public async void Ask(string text)
         {
             if (_busy) return;
@@ -106,8 +152,8 @@ namespace Isle.Views
             string answer;
             try
             {
-                var history = _msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")
-                                               && !(m.Text ?? "").StartsWith("Ошибка сети:")).ToList(); // свои ошибки ИИ не показываем как его ответы
+                var history = BuildHistory(_msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")
+                                               && !IsServiceError(m.Text))); // свои ошибки ИИ не показываем как его ответы
                 answer = await AiService.AskAsync(history, _cts.Token);
             }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
