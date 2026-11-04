@@ -377,8 +377,23 @@ namespace Isle
             ExpandedView.Visibility = Visibility.Visible;
             Island.CornerRadius = new CornerRadius(0, 0, 30, 30);
             DropHint.CornerRadius = Island.CornerRadius;
-            AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 420);
-            Fade(ExpandedView, 1, 260, 90);
+            _collapseVersion++;
+            AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 620, spring: true);
+            // содержимое проявляется из лёгкого размытия и чуть «подрастает»
+            var st = new ScaleTransform(0.95, 0.95);
+            ExpandedView.RenderTransformOrigin = new Point(0.5, 0);
+            ExpandedView.RenderTransform = st;
+            var blur = new System.Windows.Media.Effects.BlurEffect { Radius = 14, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
+            ExpandedView.Effect = blur;
+            var dur = TimeSpan.FromMilliseconds(340);
+            var begin = TimeSpan.FromMilliseconds(90);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, dur) { BeginTime = begin, EasingFunction = ease });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, dur) { BeginTime = begin, EasingFunction = ease });
+            var unblur = new DoubleAnimation(0, dur) { BeginTime = begin, EasingFunction = ease };
+            unblur.Completed += (_, __) => { if (State == IslandState.Expanded) ExpandedView.Effect = null; }; // без эффекта рисуется быстрее
+            blur.BeginAnimation(System.Windows.Media.Effects.BlurEffect.RadiusProperty, unblur);
+            ExpandedView.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { BeginTime = begin, EasingFunction = ease });
             (TabHost.Content as Views.IIslandView)?.OnShown();
         }
 
@@ -389,14 +404,22 @@ namespace Isle
             if (FocusManager.GetFocusedElement(this) is IInputElement) Keyboard.ClearFocus();
             MakeNoActivate(true);
             State = IslandState.Collapsed;
-            ExpandedView.Opacity = 0;
-            ExpandedView.Visibility = Visibility.Collapsed;
-            Island.CornerRadius = new CornerRadius(0, 0, 18, 18);
-            DropHint.CornerRadius = Island.CornerRadius;
             (_views.TryGetValue("home", out var hv) ? hv as Views.HomeView : null)?.HideCommand();
-            if (_toasts.Count > 0) { NextToast(); return; }
-            ShowCollapsedContent(false);
-            ScheduleOledHide(TimeSpan.FromSeconds(1.2));
+            // сначала гаснет содержимое, потом остров сжимается
+            int version = ++_collapseVersion;
+            var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(120)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+            fade.Completed += (_, __) =>
+            {
+                if (version != _collapseVersion || State == IslandState.Expanded) return;
+                ExpandedView.Visibility = Visibility.Collapsed;
+                ExpandedView.Effect = null;
+                Island.CornerRadius = new CornerRadius(0, 0, 18, 18);
+                DropHint.CornerRadius = Island.CornerRadius;
+                if (_toasts.Count > 0) { NextToast(); return; }
+                ShowCollapsedContent(false);
+                ScheduleOledHide(TimeSpan.FromSeconds(1.2));
+            };
+            ExpandedView.BeginAnimation(OpacityProperty, fade);
         }
 
         private void ShowCollapsedContent(bool onlyIfChanged)
@@ -415,6 +438,7 @@ namespace Isle
             TimerRow.Visibility = timer ? Visibility.Visible : Visibility.Collapsed;
             MediaRow.Visibility = media ? Visibility.Visible : Visibility.Collapsed;
             IdleRow.Visibility = !timer && !media ? Visibility.Visible : Visibility.Collapsed;
+            RevealRow(timer ? TimerRow : media ? MediaRow : (UIElement)IdleRow);
 
             double h = 34;
             double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
@@ -479,11 +503,28 @@ namespace Isle
             MiniCover.Source = m.Cover;
         }
 
-        private void AnimateSize(double w, double h, int ms)
+        private int _collapseVersion;
+        private UIElement _lastRow;
+
+        private void AnimateSize(double w, double h, int ms, bool spring = false)
         {
-            var ease = new BackEase { Amplitude = 0.25, EasingMode = EasingMode.EaseOut };
-            Island.BeginAnimation(WidthProperty, new DoubleAnimation(w, TimeSpan.FromMilliseconds(ms)) { EasingFunction = ease });
-            Island.BeginAnimation(HeightProperty, new DoubleAnimation(h, TimeSpan.FromMilliseconds(ms)) { EasingFunction = ease });
+            // раскрытие — пружиной, остальное — мягким «желе»
+            IEasingFunction ease = spring ? new Helpers.Spring { Damping = 10, Frequency = 10 }
+                : new Helpers.Spring { Damping = 9, Frequency = 9 };
+            Island.BeginAnimation(WidthProperty, new DoubleAnimation(w, TimeSpan.FromMilliseconds(spring ? ms : Math.Max(ms, 460))) { EasingFunction = ease });
+            Island.BeginAnimation(HeightProperty, new DoubleAnimation(h, TimeSpan.FromMilliseconds(spring ? ms : Math.Max(ms, 460))) { EasingFunction = ease });
+        }
+
+        /// <summary>Новое состояние свёрнутой чёлки проявляется и чуть съезжает на место.</summary>
+        private void RevealRow(UIElement row)
+        {
+            if (row == null || ReferenceEquals(row, _lastRow)) return;
+            _lastRow = row;
+            var tt = new TranslateTransform(0, 5);
+            row.RenderTransform = tt;
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(280)) { EasingFunction = ease });
+            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(60) });
         }
 
         private static void Fade(UIElement el, double to, int ms, int delayMs = 0)
@@ -736,6 +777,8 @@ namespace Isle
             CollapsedView.Visibility = Visibility.Visible;
             IdleRow.Visibility = MediaRow.Visibility = TimerRow.Visibility = Visibility.Collapsed;
             ToastRow.Visibility = Visibility.Visible;
+            _lastRow = null;
+            RevealRow(ToastRow);
             RenderToast(t);
             _toastTimer.Interval = t.Duration;
             _toastTimer.Start();
@@ -901,9 +944,29 @@ namespace Isle
 
         private int _specIdle;
 
+        private int _pushTicks;
+
+        /// <summary>Курсор упёрся в самый верх экрана над островом — открываем (как в оригинале).</summary>
+        private void CheckTopPush()
+        {
+            if (State == IslandState.Expanded || !Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
+            bool atTop = false;
+            try
+            {
+                var tl = Island.PointToScreen(new Point(0, 0));
+                var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
+                atTop = p.Y <= tl.Y + 1 && p.X >= tl.X - 30 && p.X <= br.X + 30;
+            }
+            catch { }
+            if (!atTop) { _pushTicks = 0; return; }
+            if (_oledHidden) { OledReveal(); return; }
+            if (++_pushTicks == 6 && Scaler.Visibility == Visibility.Visible) Expand(null);
+        }
+
         private void Animate()
         {
             CheckOutsideClick();
+            CheckTopPush();
 
             // спектр включаем только пока играет музыка и чёлка свёрнута
             var md = AppHost.Media?.Current;
@@ -989,8 +1052,9 @@ namespace Isle
         {
             double sc = Math.Clamp(AppSettings.Current.Scale, 0.7, 2.0);
             ScaleT.ScaleX = ScaleT.ScaleY = sc;
-            Width = 960 * sc;
-            Height = 620 * sc;
+            // запас по краям: пружина на миг делает остров чуть больше конечного размера
+            Width = 1010 * sc;
+            Height = 660 * sc;
             PlaceWindow();
         }
 

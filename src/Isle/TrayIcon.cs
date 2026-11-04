@@ -12,7 +12,7 @@ namespace Isle
 
         public TrayIcon()
         {
-            _img = MakeIcon();
+            _img = LoadAppIcon() ?? MakeIcon();
             var menu = new Forms.ContextMenuStrip();
             menu.Items.Add("Открыть остров", null, (_, __) => AppHost.Window?.BringUp());
             menu.Items.Add("Настройки", null, (_, __) => AppHost.Window?.BringUp("settings"));
@@ -32,7 +32,20 @@ namespace Isle
                 "Чёлка сверху по центру экрана. Наведи курсор на верхний край или нажми Ctrl+Alt+Space.", Forms.ToolTipIcon.None);
         }
 
-        /// <summary>Рисуем значок сами: чёрная капсула с двумя «глазами».</summary>
+        /// <summary>Значок приложения (Клоди) из ресурсов — тот же, что у exe и ярлыка.</summary>
+        private static Drawing.Icon LoadAppIcon()
+        {
+            try
+            {
+                var res = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Isle;component/app.ico"));
+                if (res == null) return null;
+                using var st = res.Stream;
+                return new Drawing.Icon(st, new Drawing.Size(32, 32));
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Запасной вариант: рисуем значок сами — чёрная капсула с двумя «глазами».</summary>
         private static Drawing.Icon MakeIcon()
         {
             using var bmp = new Drawing.Bitmap(32, 32);

@@ -31,14 +31,14 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "autostart"; Description: "Запускать Isle вместе с Windows"
-Name: "desktopicon"; Description: "Ярлык на рабочем столе"; Flags: unchecked
+Name: "desktop"; Description: "Ярлык Isle на рабочем столе"
 
 [Files]
 Source: "..\out\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Isle"; Filename: "{app}\Isle.exe"
-Name: "{autodesktop}\Isle"; Filename: "{app}\Isle.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Isle"; Filename: "{app}\Isle.exe"; IconFilename: "{app}\Isle.exe"; Comment: "Isle — чёлка для Windows"
+Name: "{autodesktop}\Isle"; Filename: "{app}\Isle.exe"; IconFilename: "{app}\Isle.exe"; Comment: "Isle — чёлка для Windows"; Tasks: desktop
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Isle"; ValueData: """{app}\Isle.exe"""; Tasks: autostart; Flags: uninsdeletevalue
