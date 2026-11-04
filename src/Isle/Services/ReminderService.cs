@@ -144,6 +144,9 @@ namespace Isle.Services
                 if (h > 23 || min > 59) return null;
                 var t = baseDay.AddHours(h).AddMinutes(min);
                 if (!explicitDay && t <= now) t = t.AddDays(1);
+                // «сегодня в 9», а уже 15:00 — значит, вечером (21:00), а не звонок прямо сейчас за прошедшее время
+                if (explicitDay && t <= now && baseDay == now.Date)
+                    t = part == "" && h < 12 && t.AddHours(12) > now ? t.AddHours(12) : t.AddDays(1);
                 when = t;
                 text = text.Remove(mAt.Index, mAt.Length).Insert(mAt.Index, " ");
             }

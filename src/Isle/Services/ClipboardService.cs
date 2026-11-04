@@ -98,6 +98,13 @@ namespace Isle.Services
             {
                 if (Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing") ||
                     Clipboard.ContainsData("Clipboard Viewer Ignore")) return;
+                // KeePass, Bitwarden, 1Password и др. просят Windows не класть пароль в журнал: CanIncludeInClipboardHistory = 0
+                if (Clipboard.ContainsData("CanIncludeInClipboardHistory") &&
+                    Clipboard.GetData("CanIncludeInClipboardHistory") is MemoryStream ms && ms.Length >= 4)
+                {
+                    var b = ms.ToArray();
+                    if (BitConverter.ToInt32(b, 0) == 0) return;
+                }
             }
             catch { }
 
@@ -218,7 +225,8 @@ namespace Isle.Services
         {
             if (!SetItem(item)) return;
             if (!pasteToo || target == IntPtr.Zero) return;
-            Win32.SetForegroundWindow(target);
+            // обычный SetForegroundWindow Windows часто блокирует — тогда вставка улетала в никуда
+            Win32.ForceForeground(target);
             await Task.Delay(120);
             Win32.SendKeyCombo(Win32.VK_CONTROL, Win32.VK_V);
         }

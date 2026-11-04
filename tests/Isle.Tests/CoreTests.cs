@@ -70,6 +70,15 @@ namespace Isle.Tests
         }
 
         [Fact]
+        public void TodayPastHourMeansEvening()
+        {
+            // 14:00, «сегодня в 9» — это 21:00, а не звонок прямо сейчас
+            Assert.Equal(new DateTime(2026, 11, 4, 21, 0, 0), ReminderService.Parse("сегодня в 9 созвон", Now).When);
+            // «сегодня в 13:30» уже прошло и вечером не бывает — завтра
+            Assert.Equal(new DateTime(2026, 11, 5, 13, 30, 0), ReminderService.Parse("сегодня в 13:30 обед", Now).When);
+        }
+
+        [Fact]
         public void NoTimeReturnsNull()
         {
             Assert.Null(ReminderService.Parse("купить хлеб", Now));
