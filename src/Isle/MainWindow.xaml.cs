@@ -485,7 +485,9 @@ namespace Isle
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
-            if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - h) < 1) return;
+            // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
+            // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
+            if (onlyIfChanged && Math.Abs(_sizeTarget.Width - w) < 1 && Math.Abs(_sizeTarget.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
 
@@ -546,8 +548,11 @@ namespace Isle
         private int _slideDir = 1;
         private UIElement _lastRow;
 
+        private Size _sizeTarget = new(210, 34);
+
         private void AnimateSize(double w, double h, int ms, bool spring = false)
         {
+            _sizeTarget = new Size(w, h);
             // раскрытие — пружиной, остальное — мягким «желе»
             IEasingFunction ease = spring ? new Helpers.Spring { Damping = 10, Frequency = 10 }
                 : new Helpers.Spring { Damping = 9, Frequency = 9 };

@@ -29,8 +29,9 @@ namespace Isle.Views
 
             foreach (var m in new[] { 5, 10, 15, 25, 45 })
             {
-                var b = new Button { Content = m.ToString(), Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 4, 0), Height = 28, Padding = new Thickness(0) };
-                b.Click += (_, __) => AppHost.Timer.Set(TimeSpan.FromMinutes(m));
+                var b = new Button { Content = m + " м", Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 4, 0), Height = 28, Padding = new Thickness(0), ToolTip = "Запустить таймер на " + m + " мин" };
+                // пресет сразу запускает таймер — раньше он только выставлял время и молча останавливал идущий
+                b.Click += (_, __) => AppHost.Timer.StartNew(TimeSpan.FromMinutes(m));
                 Presets.Children.Add(b);
             }
 
@@ -200,6 +201,7 @@ namespace Isle.Views
         {
             var t = AppHost.Timer;
             TimeText.Text = TimerService.Format(t.Left);
+            TimeText.FontSize = t.Left.TotalHours >= 1 ? 14 : 18; // «1:20:00» не вылезает за кольцо
             StartIcon.Kind = t.Running ? "Pause" : "Play";
             StartText.Text = t.Running ? "Пауза" : (t.Paused ? "Дальше" : "Старт");
             ResetBtn.Visibility = t.Running || t.Paused ? Visibility.Visible : Visibility.Collapsed;
@@ -224,20 +226,43 @@ namespace Isle.Views
         private void OnStart(object s, RoutedEventArgs e)
         {
             var t = AppHost.Timer;
-            if (t.Running) t.Pause();
-            else t.Start();
+            if (t.Running) { t.Pause(); return; }
+            // ввели своё время и нажали «Старт» — запускаем его, а не прошлые 5 минут
+            if (Custom.Text.Trim().Length > 0) { StartCustom(); return; }
+            t.Start();
         }
 
         private void OnCustomKey(object s, KeyEventArgs e)
         {
             if (e.Key != Key.Enter) return;
+            StartCustom();
+            e.Handled = true;
+        }
+
+        private void OnCustomChanged(object s, TextChangedEventArgs e)
+        {
+            if (Custom.ToolTip == null) return;
+            Custom.ClearValue(BorderBrushProperty);
+            Custom.ToolTip = null;
+        }
+
+        private void StartCustom()
+        {
             var d = TimerService.ParseDuration(Custom.Text);
             if (d != null)
             {
                 AppHost.Timer.StartNew(d.Value);
                 Custom.Text = "";
+                Custom.ClearValue(BorderBrushProperty);
+                Custom.ToolTip = null;
             }
-            e.Handled = true;
+            else
+            {
+                // не поняли — подсвечиваем поле и подсказываем формат, а не молчим
+                Custom.BorderBrush = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
+                Custom.ToolTip = "Не понял время. Примеры: 5 (минут), 30с, 1:30, 1ч 20м";
+                Custom.SelectAll();
+            }
         }
 
         // ---------- Напоминания ----------
