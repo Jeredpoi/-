@@ -221,11 +221,12 @@ namespace Isle.Views
             Ring.Data = new PathGeometry(new[] { fig });
         }
 
-        private void OnTimerReset(object s, RoutedEventArgs e) => AppHost.Timer.Reset();
+        private void OnTimerReset(object s, RoutedEventArgs e) { AlarmService.Stop(); AppHost.Timer.Reset(); }
 
         private void OnStart(object s, RoutedEventArgs e)
         {
             var t = AppHost.Timer;
+            AlarmService.Stop();
             if (t.Running) { t.Pause(); return; }
             // ввели своё время и нажали «Старт» — запускаем его, а не прошлые 5 минут
             if (Custom.Text.Trim().Length > 0) { StartCustom(); return; }

@@ -184,7 +184,26 @@ namespace Isle
                 MakeNoActivate(true);
                 if (State == IslandState.Expanded && !_pinned && !SuppressAutoCollapse && !CursorNearIsland(14) && !CursorOverOurPopup()) Collapse();
             };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; } };
+            KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Escape && AlarmService.Ringing) { AlarmService.Stop(); e.Handled = true; return; }
+                if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; }
+            };
+            // таймер в свёрнутой чёлке: правый клик — отменить, средний — пауза/продолжить
+            TimerRow.MouseRightButtonUp += (_, e) =>
+            {
+                AppHost.Timer.Reset();
+                ToastBus.Show(new Toast { Title = "Таймер отменён", Icon = Icons.Timer, Duration = TimeSpan.FromSeconds(2) });
+                e.Handled = true;
+            };
+            TimerRow.MouseDown += (_, e) =>
+            {
+                if (e.ChangedButton != MouseButton.Middle) return;
+                if (AppHost.Timer.Running) AppHost.Timer.Pause(); else AppHost.Timer.Start();
+                e.Handled = true;
+            };
+            TimerRow.Background = Brushes.Transparent; // чтобы клик ловился по всей строке
+            TimerRow.ToolTip = "Клик — открыть · правый клик — отменить таймер · колесо — пауза";
 
             Island.SizeChanged += (_, __) =>
             {
@@ -283,6 +302,7 @@ namespace Isle
                 switch (w.ToInt32())
                 {
                     case HkToggle:
+                        if (AlarmService.Ringing) { AlarmService.Stop(); break; } // Ctrl+Alt+Пробел выключает звонок
                         if (State == IslandState.Expanded) Collapse(); else { Expand(null); FocusIsland(); }
                         break;
                     case HkCommand:
@@ -337,9 +357,9 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (AlarmService.Ringing && State == IslandState.Toast)
+            if (AlarmService.Ringing && State != IslandState.Expanded)
             {
-                AlarmService.Stop(); // клик по звенящей чёлке — выключить будильник
+                AlarmService.Stop(); // клик по звенящей чёлке (в любом виде) — выключить будильник
                 e.Handled = true;
                 return;
             }
