@@ -76,7 +76,6 @@ namespace Isle.Helpers
         /// <summary>Следить глазами за курсором.</summary>
         public bool FollowCursor { get; set; } = true;
 
-        private readonly DispatcherTimer _t = new() { Interval = TimeSpan.FromMilliseconds(40) };
         private readonly Random _rnd = new();
         private double _time;
         private double _lookX, _lookY;       // текущий взгляд (−1..1)
@@ -94,9 +93,45 @@ namespace Isle.Helpers
         {
             Width = 26; Height = 20;
             SnapsToDevicePixels = false;
-            _t.Tick += (_, __) => { _time += 0.04; Tick(); InvalidateVisual(); };
-            IsVisibleChanged += (_, __) => { if (IsVisible) _t.Start(); else _t.Stop(); };
-            if (IsVisible) _t.Start();
+            // общий кадр приложения; пока Клоди не виден (или остров спрятан) — не считаем и не рисуем
+            IsVisibleChanged += (_, __) => { if (IsVisible) Subscribe(); else Unsubscribe(); };
+            Loaded += (_, __) => { if (IsVisible) Subscribe(); };
+            Unloaded += (_, __) => Unsubscribe();
+        }
+
+        private bool _subscribed;
+        private void Subscribe() { if (_subscribed) return; _subscribed = true; FrameClock.Tick += OnFrame; }
+        private void Unsubscribe() { if (!_subscribed) return; _subscribed = false; FrameClock.Tick -= OnFrame; }
+        private void OnFrame(double dt)
+        {
+            if (FrameClock.Hidden) return;
+            _time += dt;
+            Tick();
+            InvalidateVisual();
+        }
+
+        // ---- танцы под музыку: меняются сами каждые 7–12 секунд
+        private int _dance;
+        private DateTime _nextDance = DateTime.Now;
+        public const int DanceCount = 8;
+        private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка" };
+        public string DanceName => DanceNames[_dance];
+
+        /// <summary>Сдвиг ручки по вертикали в пикселях спрайта для текущего танца (минус — выше).</summary>
+        private double DanceArm(bool left)
+        {
+            double side = left ? 0 : Math.PI;
+            switch (_dance)
+            {
+                case 1: return Math.Sin(_time * 3.2 + side) > 0 ? -1 : 0;                          // машет в такт покачиванию
+                case 2: return (_time * 1.9) % 1 >= 0.55 ? -2 : 0;                                    // в прыжке — руки вверх
+                case 3: { int pose = (int)(_time * 3.5) % 4; return (pose + (left ? 0 : 2)) % 4 < 2 ? -2 : 1; } // робот: вверх-вниз рывками
+                case 4: return Math.Abs(Math.Sin(_time * 6.5)) > 0.7 ? 1 : 0;                         // хедбэнг — руки внизу, дёргаются
+                case 5: return -1 - (Math.Sin(_time * 6 + side) > 0 ? 1 : 0);                         // кружится, руки в стороны и вверх
+                case 6: return (Math.Sin(_time * 1.6) > 0) == left ? -3 : 0.5;                        // диско: одна рука указывает в небо
+                case 7: return Math.Sin(_time * 9 + side) > 0 ? -0.5 : 0.5;                           // лунная походка — руки покачиваются
+                default: return Math.Sin(_time * 10 + side) > 0 ? -1 : 0;
+            }
         }
 
         /// <summary>Короткая радость (скриншот, ответ ИИ, файл на полке).</summary>
@@ -225,6 +260,13 @@ namespace Isle.Helpers
                 _lookX += (_wander.X - _lookX) * 0.2; _lookY += (_wander.Y - _lookY) * 0.2;
             }
             _bob += ((mood == Mood.Music ? Math.Min(1, Beat * 2.2) : 0) - _bob) * 0.5;
+            if (mood == Mood.Music && DateTime.Now >= _nextDance)
+            {
+                int d = _rnd.Next(DanceCount - 1);
+                _dance = d >= _dance ? d + 1 : d; // всегда другой танец
+                _nextDance = DateTime.Now.AddSeconds(7 + _rnd.NextDouble() * 5);
+            }
+            if (mood == Mood.Music && (_dance == 4)) { _lookY += (0.8 - _lookY) * 0.3; } // хедбэнг — смотрит в пол
         }
 
         private static readonly Brush BookCover = Freeze(new SolidColorBrush(Color.FromRgb(0x3B, 0x6F, 0xD9)));
@@ -311,10 +353,60 @@ namespace Isle.Helpers
                     break;
                 case Mood.Music:
                     // танцует всегда, даже на тихих местах; под громкие доли прыгает выше
-                    dy = -(Math.Abs(Math.Sin(_time * 7.5)) * 1.1 + _bob * 1.4) * px;
-                    tilt = Math.Sin(_time * 3.75) * 9;
-                    dx = Math.Sin(_time * 3.75) * 0.8 * px;
-                    step = Math.Sin(_time * 7.5) > 0;
+                    switch (_dance)
+                    {
+                        case 1: // покачивание из стороны в сторону
+                            dx = Math.Sin(_time * 3.2) * 1.6 * px;
+                            tilt = Math.Sin(_time * 3.2) * 12;
+                            dy = -(Math.Abs(Math.Sin(_time * 6.4)) * 0.4 + _bob * 0.8) * px;
+                            step = Math.Sin(_time * 3.2) > 0;
+                            break;
+                        case 2: // присед и прыжок на сильную долю
+                        {
+                            double ph = (_time * 1.9) % 1;
+                            dy = ph < 0.55 ? Math.Sin(ph / 0.55 * Math.PI) * 1.2 * px : -Math.Sin((ph - 0.55) / 0.45 * Math.PI) * (2.2 + _bob * 1.2) * px;
+                            step = ph >= 0.55;
+                            break;
+                        }
+                        case 3: // робот: резкие фиксированные позы
+                        {
+                            int pose = (int)(_time * 3.5) % 4;
+                            dx = (pose == 1 ? 1 : pose == 3 ? -1 : 0) * px;
+                            tilt = pose == 1 ? 6 : pose == 3 ? -6 : 0;
+                            dy = -_bob * 0.6 * px;
+                            step = pose % 2 == 1;
+                            break;
+                        }
+                        case 4: // хедбэнг: резкие кивки в бит
+                            tilt = Math.Pow(Math.Abs(Math.Sin(_time * 6.5)), 3) * 14 + _bob * 6;
+                            dy = Math.Abs(Math.Sin(_time * 6.5)) * 0.7 * px;
+                            break;
+                        case 5: // кружится (поворачивается то одним боком, то другим)
+                            dy = -(Math.Abs(Math.Sin(_time * 6)) * 0.9 + _bob) * px;
+                            step = Math.Sin(_time * 6) > 0;
+                            break;
+                        case 6: // диско: рука в небо то слева, то справа, бёдрами в бит
+                            dx = Math.Sin(_time * 7) * 0.7 * px;
+                            tilt = Math.Sin(_time * 1.6) > 0 ? 7 : -7;
+                            dy = -_bob * 1.0 * px;
+                            step = Math.Sin(_time * 7) > 0;
+                            break;
+                        case 7: // лунная походка: скользит назад, переставляя ножки
+                        {
+                            double ph = (_time * 0.35) % 1;
+                            dx = (1.6 - ph * 3.2) * px;
+                            step = Math.Sin(_time * 9) > 0;
+                            dy = -_bob * 0.5 * px;
+                            tilt = -4;
+                            break;
+                        }
+                        default: // прыжки (как раньше)
+                            dy = -(Math.Abs(Math.Sin(_time * 7.5)) * 1.1 + _bob * 1.4) * px;
+                            tilt = Math.Sin(_time * 3.75) * 9;
+                            dx = Math.Sin(_time * 3.75) * 0.8 * px;
+                            step = Math.Sin(_time * 7.5) > 0;
+                            break;
+                    }
                     break;
                 case Mood.Thinking:
                     dy = Math.Sin(_time * 1.5) * 0.3 * px;
@@ -344,7 +436,13 @@ namespace Isle.Helpers
             double oy = (ActualHeight - H * px) / 2 + dy + 0.5 * px;
             var body = Body;
 
-            dc.PushTransform(new RotateTransform(tilt, ActualWidth / 2, ActualHeight));
+            // «кружится»: сжимаем по горизонтали — будто поворачивается боком
+            double spin = mood == Mood.Music && _dance == 5 ? Math.Cos(_time * 2.6) : 1;
+            if (Math.Abs(spin) < 0.18) spin = spin < 0 ? -0.18 : 0.18;
+            var tf = new TransformGroup();
+            tf.Children.Add(new ScaleTransform(spin, 1, ActualWidth / 2, ActualHeight / 2));
+            tf.Children.Add(new RotateTransform(tilt, ActualWidth / 2, ActualHeight));
+            dc.PushTransform(tf);
             for (int y = 0; y < H; y++)
             {
                 var row = Sprite[y];
@@ -367,8 +465,7 @@ namespace Isle.Helpers
                     // ручки машут под музыку и от радости, а за ноутбуком — «печатают»
                     if ((x == 0 || x == 12) && (mood == Mood.Music || _cheer > 0))
                     {
-                        bool up = Math.Sin(_time * 10 + (x == 0 ? 0 : Math.PI)) > 0;
-                        cy = up ? y - 1 : y;
+                        cy = mood == Mood.Music && _cheer <= 0 ? y + DanceArm(x == 0) : (Math.Sin(_time * 10 + (x == 0 ? 0 : Math.PI)) > 0 ? y - 1 : y);
                     }
                     // зевая, потягивается — ручки вверх
                     if ((x == 0 || x == 12) && _yawn > 0.1 && _yawn < 0.9) cy = y - 1 - (Math.Sin(_yawn * Math.PI) > 0.6 ? 1 : 0);

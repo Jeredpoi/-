@@ -18,7 +18,6 @@ namespace Isle.Helpers
     public class LiquidEdge : FrameworkElement
     {
         private const int Samples = 72;
-        private readonly DispatcherTimer _t = new() { Interval = TimeSpan.FromMilliseconds(33) };
         private readonly float[] _spec = new float[Services.SpectrumService.BandCount];
         private readonly double[] _depth = new double[Samples];
         private double _bulgeX, _bulgeAmp, _sag;
@@ -41,8 +40,7 @@ namespace Isle.Helpers
         {
             IsHitTestVisible = false;
             Height = 46;
-            _t.Tick += (_, __) => Step();
-            _t.Start();
+            FrameClock.Tick += _ => { if (!FrameClock.Hidden) Step(); };
         }
 
         public void DropBead()
@@ -126,6 +124,7 @@ namespace Isle.Helpers
         }
 
         private bool _wasAny;
+        private readonly Point[] _pts = new Point[Samples];
 
         protected override void OnRender(DrawingContext dc)
         {
@@ -141,12 +140,12 @@ namespace Isle.Helpers
                 using (var c = g.Open())
                 {
                     c.BeginFigure(new Point(r - 2, -1), true, true);
-                    var pts = new List<Point>();
-                    for (int i = 0; i < Samples; i++) pts.Add(new Point(r + i / (double)(Samples - 1) * span, _depth[i] - 0.5));
+                    var pts = _pts;
+                    for (int i = 0; i < Samples; i++) pts[i] = new Point(r + i / (double)(Samples - 1) * span, _depth[i] - 0.5);
                     // гладкая кривая через точки (Катмулл-Ром → Безье)
-                    for (int i = 0; i < pts.Count - 1; i++)
+                    for (int i = 0; i < pts.Length - 1; i++)
                     {
-                        var p0 = pts[Math.Max(0, i - 1)]; var p1 = pts[i]; var p2 = pts[i + 1]; var p3 = pts[Math.Min(pts.Count - 1, i + 2)];
+                        var p0 = pts[Math.Max(0, i - 1)]; var p1 = pts[i]; var p2 = pts[i + 1]; var p3 = pts[Math.Min(pts.Length - 1, i + 2)];
                         var c1 = new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6);
                         var c2 = new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6);
                         c.BezierTo(c1, c2, p2, true, true);

@@ -26,7 +26,7 @@
                     Width="{Binding ActualWidth, ElementName=Island}" Height="{Binding ActualHeight, ElementName=Island}"
                     HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
                 <Border.Effect>
-                    <DropShadowEffect BlurRadius="28" ShadowDepth="6" Direction="270" Opacity="0.35" Color="Black" RenderingBias="Quality"/>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="6" Direction="270" Opacity="0.35" Color="Black" RenderingBias="Performance"/>
                 </Border.Effect>
             </Border>
 
