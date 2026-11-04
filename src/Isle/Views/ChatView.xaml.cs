@@ -106,7 +106,8 @@ namespace Isle.Views
             string answer;
             try
             {
-                var history = _msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")).ToList();
+                var history = _msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")
+                                               && !(m.Text ?? "").StartsWith("Ошибка сети:")).ToList(); // свои ошибки ИИ не показываем как его ответы
                 answer = await AiService.AskAsync(history, _cts.Token);
             }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
@@ -134,6 +135,7 @@ namespace Isle.Views
             var report = AiActions.Run(m.Pending);
             var i = _msgs.IndexOf(m);
             if (i >= 0) _msgs[i] = new ChatMessage { Role = "assistant", Text = report };
+            SaveSession();
         }
 
         private void OnSkipPending(object s, RoutedEventArgs e)
@@ -141,6 +143,7 @@ namespace Isle.Views
             if ((s as FrameworkElement)?.Tag is not ChatMessage m) return;
             var i = _msgs.IndexOf(m);
             if (i >= 0) _msgs[i] = new ChatMessage { Role = "assistant", Text = "Отменено: " + m.PendingLabel };
+            SaveSession();
         }
 
         private void OnMic(object s, RoutedEventArgs e)

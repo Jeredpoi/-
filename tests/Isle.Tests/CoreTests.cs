@@ -213,6 +213,15 @@ namespace Isle.Tests
 
         [Fact]
         public void LeavesUnknownBrackets() => Assert.Contains("[[foo: bar]]", AiActions.Extract("x [[foo: bar]]").text);
+
+        [Theory]
+        [InlineData(@"C:\Users\me\Downloads\run.bat", true)]
+        [InlineData(@"C:\tools\x.exe", true)]
+        [InlineData("telegram", false)]
+        [InlineData("https://youtube.com", false)]
+        [InlineData(@"C:\Users\me\Documents", false)]
+        public void OpenOfScriptNeedsConfirm(string arg, bool confirm) =>
+            Assert.Equal(confirm, new AiAction { Name = "open", Arg = arg }.NeedsConfirm);
     }
 }
 

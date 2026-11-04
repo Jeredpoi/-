@@ -261,6 +261,8 @@ namespace Isle.Services
         }
 
         public async void PlayPause() { try { if (_session != null) await _session.TryTogglePlayPauseAsync(); } catch { } }
+        public async void Play() { try { if (_session != null) await _session.TryPlayAsync(); } catch { } }
+        public async void Pause() { try { if (_session != null) await _session.TryPauseAsync(); } catch { } }
         public async void Next() { try { if (_session != null) await _session.TrySkipNextAsync(); } catch { } }
         public async void Previous() { try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { } }
 
