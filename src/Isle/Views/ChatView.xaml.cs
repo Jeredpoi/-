@@ -27,6 +27,16 @@ namespace Isle.Views
         {
             InitializeComponent();
             Messages.ItemsSource = _msgs;
+            // Клоди в чате одет по погоде, ночью — в колпаке и зевает
+            ChatBuddy.IsVisibleChanged += (_, __) =>
+            {
+                if (!ChatBuddy.IsVisible) return;
+                int hour = DateTime.Now.Hour;
+                bool night = hour >= 23 || hour < 6;
+                ChatBuddy.Night = night;
+                ChatBuddy.Outfit = MainWindow.OutfitForWeather();
+                ChatBuddy.Mood = night ? Isle.Helpers.Mood.Drowsy : Isle.Helpers.Mood.Idle;
+            };
             foreach (var idea in Ideas)
             {
                 var b = new Button { Content = idea, Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 0, 6), HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(14, 6, 14, 6) };

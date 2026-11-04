@@ -674,11 +674,26 @@ namespace Isle
 
         private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
 
-        private void OnLangClick(object sender, RoutedEventArgs e)
+        private async void OnLangClick(object sender, RoutedEventArgs e)
         {
             var target = Win32.GetForegroundWindow();
             if (target == _hwnd || target == IntPtr.Zero) target = PreviousForeground;
-            var code = Win32.SwitchToNextLayout(target);
+            if (target == IntPtr.Zero) return;
+            var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            var asked = Win32.RequestNextLayout(target);
+            if (asked == IntPtr.Zero) return;
+            await Task.Delay(180);
+            var now = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            if (now == before)
+            {
+                // окно проигнорировало просьбу (Chrome, Telegram, приложения из Store…) — переключаем как система, Win+Пробел
+                Win32.ForceForeground(target);
+                await Task.Delay(60);
+                Win32.PressWinSpace();
+                await Task.Delay(200);
+                now = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            }
+            var code = Win32.LangCode(now != before ? now : asked);
             if (code != null) LangChip.Text = code;
         }
 

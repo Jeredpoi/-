@@ -31,10 +31,8 @@
         </Grid>
         <Grid>
             <StackPanel x:Name="Welcome" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Border Width="10" Height="20" CornerRadius="5" Background="{StaticResource Fg}"/>
-                    <Border Width="10" Height="20" CornerRadius="5" Background="{StaticResource Fg}" Margin="8,0,0,0"/>
-                </StackPanel>
+                <!-- Клоди встречает в чате: следит за курсором, думает вместе с ИИ, радуется ответу -->
+                <h:Character x:Name="ChatBuddy" Width="64" Height="48" HorizontalAlignment="Center"/>
                 <TextBlock Text="Спроси что угодно" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,4"/>
                 <TextBlock x:Name="ModelLine" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
                 <StackPanel x:Name="Suggestions" Margin="0,14,0,0"/>
