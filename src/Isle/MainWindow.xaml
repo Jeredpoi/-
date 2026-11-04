@@ -21,7 +21,8 @@
             </Grid.RenderTransform>
 
             <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
-                    Width="210" Height="34" ClipToBounds="True" Margin="24,0,24,24">
+                    Width="210" Height="34" ClipToBounds="True" Margin="24,0,24,24"
+                    BorderBrush="#17171C" BorderThickness="1,0,1,1">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="22" ShadowDepth="4" Direction="270" Opacity="0.4" Color="Black"/>
                 </Border.Effect>

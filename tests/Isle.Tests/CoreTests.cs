@@ -128,3 +128,21 @@ namespace Isle.Tests
         }
     }
 }
+
+namespace Isle.Tests
+{
+    public class IconTests
+    {
+        [Fact]
+        public void AllIconsParse()
+        {
+            foreach (var f in typeof(Icons).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+            {
+                var data = (string)f.GetValue(null);
+                var g = System.Windows.Media.Geometry.Parse(data);
+                Assert.False(g.Bounds.IsEmpty, f.Name);
+                Assert.True(g.Bounds.Right <= 24.5 && g.Bounds.Bottom <= 24.5 && g.Bounds.Left >= -0.5 && g.Bounds.Top >= -0.5, f.Name + " выходит за сетку 24×24: " + g.Bounds);
+            }
+        }
+    }
+}

@@ -3,9 +3,9 @@
 
     <Color x:Key="BgColor">#08080A</Color>
     <SolidColorBrush x:Key="Bg" Color="#08080A"/>
-    <SolidColorBrush x:Key="Card" Color="#141418"/>
-    <SolidColorBrush x:Key="CardHover" Color="#1D1D23"/>
-    <SolidColorBrush x:Key="CardBorder" Color="#222228"/>
+    <SolidColorBrush x:Key="Card" Color="#131316"/>
+    <SolidColorBrush x:Key="CardHover" Color="#1B1B20"/>
+    <SolidColorBrush x:Key="CardBorder" Color="#1F1F25"/>
     <SolidColorBrush x:Key="Track" Color="#2C2C33"/>
     <SolidColorBrush x:Key="Fg" Color="#ECECF1"/>
     <SolidColorBrush x:Key="Muted" Color="#8B8B95"/>
@@ -83,6 +83,14 @@
         <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
 
+    <!-- Цветная плашка под иконку инструмента -->
+    <Style x:Key="IconChip" TargetType="Border">
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="TextElement.Foreground" Value="White"/>
+    </Style>
+
     <!-- Вкладки -->
     <Style x:Key="Tab" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{StaticResource Muted}"/>
@@ -95,10 +103,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="b" Background="Transparent" CornerRadius="15" Height="30" Padding="9,0" Margin="0,0,2,0">
+                    <Border x:Name="b" Background="Transparent" CornerRadius="16" Height="32" Padding="9,0" Margin="0,0,2,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <ContentPresenter x:Name="icon" Content="{TemplateBinding Tag}" VerticalAlignment="Center"/>
-                            <ContentPresenter x:Name="label" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <ContentPresenter x:Name="label" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                         </StackPanel>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -106,7 +114,7 @@
                             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#26262D"/>
+                            <Setter TargetName="b" Property="Background" Value="#24242B"/>
                             <Setter TargetName="label" Property="Visibility" Value="Visible"/>
                             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                         </Trigger>

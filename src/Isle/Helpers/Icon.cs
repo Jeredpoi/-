@@ -27,7 +27,7 @@ namespace Isle.Helpers
 
         public static readonly DependencyProperty StrokeWidthProperty = DependencyProperty.Register(
             nameof(StrokeWidth), typeof(double), typeof(Icon),
-            new FrameworkPropertyMetadata(2.0, FrameworkPropertyMetadataOptions.AffectsRender));
+            new FrameworkPropertyMetadata(1.75, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public string Kind { get => (string)GetValue(KindProperty); set => SetValue(KindProperty, value); }
         public string Data { get => (string)GetValue(DataProperty); set => SetValue(DataProperty, value); }
