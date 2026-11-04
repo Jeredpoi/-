@@ -129,6 +129,13 @@ namespace Isle
             _toastTimer.Tick += (_, __) => { _toastTimer.Stop(); NextToast(); };
             _clock.Tick += (_, __) => Clock();
             _anim.Tick += (_, __) => Animate();
+            _ungrow.Tick += (_, __) =>
+            {
+                if (CursorNearIsland(10)) return; // ещё рядом — ждём
+                _ungrow.Stop();
+                _hoverGrown = false;
+                if (State == IslandState.Collapsed) ShowCollapsedContent(false);
+            };
             _hoverOpen.Tick += (_, __) => { _hoverOpen.Stop(); if (State != IslandState.Expanded && Island.IsMouseOver) Expand(null); };
             _leaveClose.Tick += (_, __) => { _leaveClose.Stop(); if (!Island.IsMouseOver && !IsActive) Collapse(); };
             _oledHide.Tick += (_, __) => { _oledHide.Stop(); TryOledHide(); };
@@ -138,7 +145,8 @@ namespace Isle
             {
                 _leaveClose.Stop();
                 _oledHide.Stop();
-                if (State == IslandState.Collapsed) AnimateSize(Island.Width + 16, 38, 260); // остров «тянется» к курсору
+                _ungrow.Stop();
+                if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
                 bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
                 if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer) _hoverOpen.Start();
             };
@@ -146,7 +154,8 @@ namespace Isle
             {
                 _hoverOpen.Stop();
                 if (State == IslandState.Expanded && !_pinned && !IsActive && !SuppressAutoCollapse) _leaveClose.Start();
-                if (State == IslandState.Collapsed) ShowCollapsedContent(false);
+                // не сжимаемся сразу: курсор на самой границе иначе дёргает остров туда-сюда
+                if (State == IslandState.Collapsed && _hoverGrown) { _ungrow.Stop(); _ungrow.Start(); }
                 if (State != IslandState.Expanded) ScheduleOledHide(TimeSpan.FromSeconds(1.2));
             };
             Island.PreviewMouseLeftButtonDown += OnIslandMouseDown;
@@ -470,6 +479,7 @@ namespace Isle
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
+            if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             if (onlyIfChanged && Math.Abs(Island.Width - w) < 1 && Math.Abs(Island.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
@@ -737,6 +747,23 @@ namespace Isle
         }
 
         private bool _aiBusy;
+        private bool _hoverGrown;
+        private readonly DispatcherTimer _ungrow = new() { Interval = TimeSpan.FromMilliseconds(260) };
+        /// <summary>Остров был спрятан (OLED) до всплывашки — после неё прячемся снова, не показывая музыку и Клоди.</summary>
+        private bool _hideAfterToast;
+
+        /// <summary>Курсор у острова с запасом в несколько пикселей (чтобы край не «дрожал»).</summary>
+        private bool CursorNearIsland(double margin)
+        {
+            if (!Win32.GetCursorPos(out var p)) return false;
+            try
+            {
+                var tl = Island.PointToScreen(new Point(-margin, 0));
+                var br = Island.PointToScreen(new Point(Island.ActualWidth + margin, Island.ActualHeight + margin));
+                return p.X >= tl.X && p.X <= br.X && p.Y >= tl.Y - 2 && p.Y <= br.Y;
+            }
+            catch { return false; }
+        }
 
         /// <summary>Клоди одевается по погоде за окном.</summary>
         public static Helpers.Outfit OutfitForWeather()
@@ -879,12 +906,24 @@ namespace Isle
                 StopAlarmPulse();
                 _currentToast = null;
                 State = IslandState.Collapsed;
+                if (_hideAfterToast && AppSettings.Current.OledMode && !Island.IsMouseOver)
+                {
+                    // уведомил — и сразу обратно за край, не переключаясь на музыку/Клоди
+                    _hideAfterToast = false;
+                    TryOledHide();
+                    // содержимое меняем, когда остров уже уехал — чтобы не мелькала музыка
+                    var later = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(380) };
+                    later.Tick += (_, __) => { later.Stop(); if (State == IslandState.Collapsed) ShowCollapsedContent(false); };
+                    later.Start();
+                    return;
+                }
+                _hideAfterToast = false;
                 ShowCollapsedContent(false);
                 ScheduleOledHide();
                 return;
             }
             var t = _toasts.Dequeue();
-            if (_oledHidden) OledReveal(false);
+            if (_oledHidden) { _hideAfterToast = true; OledReveal(false); }
             State = IslandState.Toast;
             CollapsedView.Visibility = Visibility.Visible;
             IdleRow.Visibility = MediaRow.Visibility = TimerRow.Visibility = Visibility.Collapsed;

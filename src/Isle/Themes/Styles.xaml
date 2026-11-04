@@ -271,7 +271,7 @@
                                 <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
                                     <RepeatButton.Template>
                                         <ControlTemplate TargetType="RepeatButton">
-                                            <Border x:Name="fill" Height="4" CornerRadius="2,0,0,2" Background="{DynamicResource Accent}"/>
+                                            <Border x:Name="fill" Height="4" CornerRadius="2" Background="{DynamicResource Accent}"/>
                                         </ControlTemplate>
                                     </RepeatButton.Template>
                                 </RepeatButton>
@@ -289,10 +289,11 @@
                                 <Thumb Focusable="False">
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
-                                            <!-- невидимая «ручка»: за неё можно тянуть, но её не видно -->
-                                            <Border Width="24" Height="30" Background="Transparent">
-                                                <Border Width="2" Height="4" CornerRadius="0,2,2,0" Background="{DynamicResource Accent}" HorizontalAlignment="Left"/>
-                                            </Border>
+                                            <!-- «ручка» нулевой ширины: заливка доходит ровно до значения (на 100% — до конца),
+                                                 а невидимая область захвата шириной 28 px торчит в обе стороны -->
+                                            <Canvas Width="0" Height="30">
+                                                <Border Canvas.Left="-14" Width="28" Height="30" Background="Transparent"/>
+                                            </Canvas>
                                         </ControlTemplate>
                                     </Thumb.Template>
                                 </Thumb>
