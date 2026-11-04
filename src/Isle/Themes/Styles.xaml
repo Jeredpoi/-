@@ -1,18 +1,19 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Color x:Key="BgColor">#08080A</Color>
-    <SolidColorBrush x:Key="Bg" Color="#08080A"/>
-    <SolidColorBrush x:Key="Card" Color="#131316"/>
-    <SolidColorBrush x:Key="CardHover" Color="#1B1B20"/>
-    <SolidColorBrush x:Key="CardBorder" Color="#1F1F25"/>
-    <SolidColorBrush x:Key="Track" Color="#2C2C33"/>
+    <Color x:Key="BgColor">#000000</Color>
+    <SolidColorBrush x:Key="Bg" Color="#000000"/>
+    <SolidColorBrush x:Key="Card" Color="#0E0E10"/>
+    <SolidColorBrush x:Key="CardHover" Color="#18181B"/>
+    <SolidColorBrush x:Key="CardBorder" Color="#1C1C20"/>
+    <SolidColorBrush x:Key="Track" Color="#26262B"/>
     <SolidColorBrush x:Key="Fg" Color="#ECECF1"/>
     <SolidColorBrush x:Key="Muted" Color="#8B8B95"/>
-    <SolidColorBrush x:Key="Accent" Color="#FFB547"/>
-    <SolidColorBrush x:Key="Blue" Color="#5B6CF0"/>
-    <SolidColorBrush x:Key="Green" Color="#4ADE80"/>
-    <SolidColorBrush x:Key="Red" Color="#F87171"/>
+    <!-- Монохром: единственный акцент — белый -->
+    <SolidColorBrush x:Key="Accent" Color="#ECECF1"/>
+    <SolidColorBrush x:Key="Blue" Color="#4A4A55"/>
+    <SolidColorBrush x:Key="Green" Color="#ECECF1"/>
+    <SolidColorBrush x:Key="Red" Color="#B9B9C3"/>
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
     <!-- Цвет текста не задаём здесь: он наследуется от окна/кнопки (иначе ломаются тёмные кнопки и выпадающие списки) -->
@@ -114,7 +115,7 @@
                             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#24242B"/>
+                            <Setter TargetName="b" Property="Background" Value="#1F1F24"/>
                             <Setter TargetName="label" Property="Visibility" Value="Visible"/>
                             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                         </Trigger>
@@ -134,12 +135,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="b" Background="#1B1B20" CornerRadius="13" Height="26" Padding="9,0">
+                    <Border x:Name="b" Background="#141417" CornerRadius="13" Height="26" Padding="9,0">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#3A2E17"/>
+                            <Setter TargetName="b" Property="Background" Value="#26262B"/>
                             <Setter Property="Foreground" Value="{StaticResource Accent}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -209,13 +210,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <ContentPresenter VerticalAlignment="Center"/>
-                        <Border x:Name="track" Grid.Column="1" Width="38" Height="22" CornerRadius="11" Background="#2C2C33" Margin="12,0,0,0">
+                        <Border x:Name="track" Grid.Column="1" Width="38" Height="22" CornerRadius="11" Background="#26262B" Margin="12,0,0,0">
                             <Ellipse x:Name="knob" Width="16" Height="16" Fill="#ECECF1" HorizontalAlignment="Left" Margin="3,0"/>
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="track" Property="Background" Value="#4ADE80"/>
+                            <Setter TargetName="track" Property="Background" Value="#ECECF1"/>
+                            <Setter TargetName="knob" Property="Fill" Value="#000000"/>
                             <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
                         </Trigger>
                     </ControlTemplate.Triggers>

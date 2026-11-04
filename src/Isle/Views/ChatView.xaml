@@ -46,7 +46,7 @@
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding IsUser}" Value="True">
                                     <Setter TargetName="bubble" Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter TargetName="bubble" Property="Background" Value="#26262D"/>
+                                    <Setter TargetName="bubble" Property="Background" Value="#1F1F24"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>

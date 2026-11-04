@@ -32,7 +32,7 @@
             </Button>
             <Button Style="{StaticResource Tile}" Margin="3,0" Click="OnBluetooth">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="BtDot" Width="38" Height="38" CornerRadius="19" Background="#2C2C33" HorizontalAlignment="Left">
+                    <Border DockPanel.Dock="Top" x:Name="BtDot" Width="38" Height="38" CornerRadius="19" Background="#1C1C20" HorizontalAlignment="Left">
                         <h:Icon Kind="Bluetooth" Width="17" Height="17"/>
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
@@ -43,7 +43,7 @@
             </Button>
             <Button Style="{StaticResource Tile}" Margin="6,0,0,0" Click="OnTheme">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="ThemeDot" Width="38" Height="38" CornerRadius="19" Background="#2C2C33" HorizontalAlignment="Left">
+                    <Border DockPanel.Dock="Top" x:Name="ThemeDot" Width="38" Height="38" CornerRadius="19" Background="#1C1C20" HorizontalAlignment="Left">
                         <h:Icon Kind="Contrast" Width="17" Height="17"/>
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">

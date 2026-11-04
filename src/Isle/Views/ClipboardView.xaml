@@ -30,10 +30,10 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid VerticalAlignment="Top">
-                                    <Border x:Name="textIcon" Width="28" Height="28" CornerRadius="8" Background="#222228">
+                                    <Border x:Name="textIcon" Width="28" Height="28" CornerRadius="8" Background="#1C1C20">
                                         <TextBlock Text="T" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#222228" ClipToBounds="True" Visibility="Collapsed">
+                                    <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#1C1C20" ClipToBounds="True" Visibility="Collapsed">
                                         <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
                                     </Border>
                                 </Grid>

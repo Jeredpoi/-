@@ -13,8 +13,8 @@ namespace Isle.Views
     {
         private readonly Dictionary<string, DateTime> _armed = new();
         private readonly DispatcherTimer _reset = new() { Interval = TimeSpan.FromSeconds(3) };
-        private static readonly Brush On = new SolidColorBrush(Color.FromRgb(0x5B, 0x6C, 0xF0));
-        private static readonly Brush Off = new SolidColorBrush(Color.FromRgb(0x2C, 0x2C, 0x33));
+        private static readonly Brush On = new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x55));
+        private static readonly Brush Off = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20));
 
         public ControlsView()
         {

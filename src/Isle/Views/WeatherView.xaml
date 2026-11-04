@@ -9,30 +9,30 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <Border CornerRadius="18" Background="#2F4A73" Padding="16">
+        <Border CornerRadius="18" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Padding="16">
             <DockPanel>
                 <DockPanel DockPanel.Dock="Top">
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Click="OnRefresh" ToolTip="Обновить">
-                        <h:Icon Kind="Restart" Width="13" Height="13" Foreground="#DFE7F5"/>
+                        <h:Icon Kind="Restart" Width="13" Height="13" Foreground="#A1A1AB"/>
                     </Button>
-                    <TextBlock x:Name="City" Text="—" FontSize="12" Foreground="#DFE7F5" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="City" Text="—" FontSize="12" Foreground="#A1A1AB" VerticalAlignment="Center"/>
                 </DockPanel>
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,0">
                     <TextBlock x:Name="Glyph" Text="·" FontSize="40" VerticalAlignment="Center"/>
                     <TextBlock x:Name="Temp" Text="—" FontSize="50" FontWeight="SemiBold" Margin="10,0,0,0"/>
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium"/>
-                <TextBlock DockPanel.Dock="Top" x:Name="Feels" FontSize="11" Foreground="#DFE7F5" Margin="0,2,0,0"/>
-                <TextBlock DockPanel.Dock="Bottom" x:Name="Sun" FontSize="11" Foreground="#DFE7F5" Margin="0,8,0,0"/>
+                <TextBlock DockPanel.Dock="Top" x:Name="Feels" FontSize="11" Foreground="#A1A1AB" Margin="0,2,0,0"/>
+                <TextBlock DockPanel.Dock="Bottom" x:Name="Sun" FontSize="11" Foreground="#A1A1AB" Margin="0,8,0,0"/>
                 <UniformGrid DockPanel.Dock="Bottom" Columns="3" VerticalAlignment="Bottom">
-                    <Border CornerRadius="10" Background="#26405F" Padding="8,6" Margin="0,0,4,0">
-                        <StackPanel><TextBlock Text="ветер" FontSize="10" Foreground="#B8C7E0"/><TextBlock x:Name="Wind" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                    <Border CornerRadius="10" Background="#17171A" Padding="8,6" Margin="0,0,4,0">
+                        <StackPanel><TextBlock Text="ветер" FontSize="10" Foreground="#8B8B95"/><TextBlock x:Name="Wind" FontSize="12" FontWeight="SemiBold"/></StackPanel>
                     </Border>
-                    <Border CornerRadius="10" Background="#26405F" Padding="8,6" Margin="2,0">
-                        <StackPanel><TextBlock Text="влажность" FontSize="10" Foreground="#B8C7E0"/><TextBlock x:Name="Hum" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                    <Border CornerRadius="10" Background="#17171A" Padding="8,6" Margin="2,0">
+                        <StackPanel><TextBlock Text="влажность" FontSize="10" Foreground="#8B8B95"/><TextBlock x:Name="Hum" FontSize="12" FontWeight="SemiBold"/></StackPanel>
                     </Border>
-                    <Border CornerRadius="10" Background="#26405F" Padding="8,6" Margin="4,0,0,0">
-                        <StackPanel><TextBlock Text="осадки" FontSize="10" Foreground="#B8C7E0"/><TextBlock x:Name="Prec" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                    <Border CornerRadius="10" Background="#17171A" Padding="8,6" Margin="4,0,0,0">
+                        <StackPanel><TextBlock Text="осадки" FontSize="10" Foreground="#8B8B95"/><TextBlock x:Name="Prec" FontSize="12" FontWeight="SemiBold"/></StackPanel>
                     </Border>
                 </UniformGrid>
                 <Grid/>
@@ -80,15 +80,15 @@
                                             <Border Canvas.Left="{Binding BarLeft}" Width="{Binding BarWidth}" Height="4" CornerRadius="2">
                                                 <Border.Background>
                                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                        <GradientStop Color="#7DB5FF" Offset="0"/>
-                                                        <GradientStop Color="#FFB547" Offset="1"/>
+                                                        <GradientStop Color="#55555F" Offset="0"/>
+                                                        <GradientStop Color="#ECECF1" Offset="1"/>
                                                     </LinearGradientBrush>
                                                 </Border.Background>
                                             </Border>
                                         </Canvas>
                                     </Grid>
                                     <TextBlock Grid.Column="4" Text="{Binding MaxText}" FontSize="12" Margin="8,0,0,0"/>
-                                    <TextBlock Grid.Column="5" Text="{Binding PrecipText}" FontSize="11" Foreground="#7DB5FF" HorizontalAlignment="Right"/>
+                                    <TextBlock Grid.Column="5" Text="{Binding PrecipText}" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

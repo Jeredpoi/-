@@ -456,7 +456,7 @@ namespace Isle
             ToastSub.Text = t.Subtitle ?? "";
             ToastSub.Visibility = string.IsNullOrEmpty(t.Subtitle) ? Visibility.Collapsed : Visibility.Visible;
             ToastIcon.Data = t.Icon;
-            ToastIcon.Foreground = new SolidColorBrush(t.Accent);
+            ToastIcon.Foreground = t.Icon == Icons.Pipette ? new SolidColorBrush(t.Accent) : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
             ToastIcon.Visibility = t.Image == null ? Visibility.Visible : Visibility.Collapsed;
             bool compact = string.IsNullOrEmpty(t.Subtitle) && !t.Progress.HasValue;

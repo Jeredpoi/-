@@ -39,7 +39,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid Width="40" Height="28">
-                                        <Border x:Name="t" Width="28" Height="28" CornerRadius="7" Background="#222228" HorizontalAlignment="Left">
+                                        <Border x:Name="t" Width="28" Height="28" CornerRadius="7" Background="#1C1C20" HorizontalAlignment="Left">
                                             <TextBlock Text="T" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <Border x:Name="i" CornerRadius="6" ClipToBounds="True" Visibility="Collapsed">
@@ -69,7 +69,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Border Width="96" Height="96" CornerRadius="14" Background="#2C2C33" VerticalAlignment="Top" ClipToBounds="True">
+                <Border Width="96" Height="96" CornerRadius="14" Background="#26262B" VerticalAlignment="Top" ClipToBounds="True">
                     <Grid>
                         <h:Icon Kind="Wave" Width="30" Height="30" Foreground="{StaticResource Muted}"/>
                         <Image x:Name="Cover" Stretch="UniformToFill"/>
@@ -134,28 +134,28 @@
         <!-- Инструменты -->
         <UniformGrid Grid.Column="2" Grid.RowSpan="3" Columns="2" Rows="4">
             <Button Style="{StaticResource Flat}" Margin="0,0,4,4" Padding="10,6" HorizontalContentAlignment="Left" Click="OnRegion">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#5B6CF0"><h:Icon Kind="Crop" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Область" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Crop" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Область" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,0,0,4" HorizontalContentAlignment="Left" Click="OnFull">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#5B6CF0"><h:Icon Kind="Monitor" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Весь экран" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Monitor" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Весь экран" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="0,4,4,4" HorizontalContentAlignment="Left" Click="OnOcr">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#30B28C"><h:Icon Kind="Scan" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Текст с экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Scan" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Текст с экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,4,0,4" HorizontalContentAlignment="Left" Click="OnQr">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#30B28C"><h:Icon Kind="Qr" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="QR-код" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Qr" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="QR-код" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="0,4,4,4" HorizontalContentAlignment="Left" Click="OnPipette">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#E07A5F"><h:Icon Kind="Pipette" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Пипетка" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Pipette" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Пипетка" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,4,0,4" HorizontalContentAlignment="Left" Click="OnClean">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#E07A5F"><h:Icon Kind="Eraser" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Чистый текст" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Eraser" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Чистый текст" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="0,4,4,0" HorizontalContentAlignment="Left" Click="OnRecord">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#D6455D"><h:Icon Kind="Record" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Запись экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Record" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Запись экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,4,0,0" HorizontalContentAlignment="Left" Click="OnCommandBtn">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#55555F"><h:Icon Kind="Terminal" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Команда" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Terminal" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Команда" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
         </UniformGrid>
 
@@ -163,7 +163,7 @@
         <Grid Grid.Row="4" Grid.ColumnSpan="3">
             <Border x:Name="LauncherBox" Style="{StaticResource CardBox}" Padding="8" AllowDrop="True" Drop="OnLauncherDrop" Height="56">
                 <DockPanel>
-                    <Border DockPanel.Dock="Left" Width="38" Height="38" CornerRadius="10" BorderBrush="#34343C" BorderThickness="1" Margin="0,0,10,0">
+                    <Border DockPanel.Dock="Left" Width="38" Height="38" CornerRadius="10" BorderBrush="#26262B" BorderThickness="1" Margin="0,0,10,0">
                         <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
                     </Border>
                     <Grid>

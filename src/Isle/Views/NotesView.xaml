@@ -33,7 +33,7 @@
                     <Button Style="{StaticResource Ghost}" Click="OnBold" ToolTip="Жирный (Ctrl+B)"><h:Icon Kind="Bold" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnItalic" ToolTip="Курсив (Ctrl+I)"><h:Icon Kind="Italic" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnStrike" ToolTip="Зачеркнуть"><h:Icon Kind="Strike" Width="13" Height="13"/></Button>
-                    <Border Width="1" Height="14" Background="#2C2C33" Margin="6,0"/>
+                    <Border Width="1" Height="14" Background="#26262B" Margin="6,0"/>
                     <Button Style="{StaticResource Ghost}" Click="OnBullets" ToolTip="Список"><h:Icon Kind="ListBullet" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnNumbers" ToolTip="Нумерованный список"><h:Icon Kind="ListNumber" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnCheck" ToolTip="Чек-лист: ☐ / ☑"><h:Icon Kind="ListCheck" Width="13" Height="13"/></Button>
@@ -65,15 +65,15 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Grid Width="84" Height="84">
-                        <Ellipse Stroke="#2C2C33" StrokeThickness="5"/>
+                        <Ellipse Stroke="#26262B" StrokeThickness="5"/>
                         <Path x:Name="Ring" Stroke="{StaticResource Accent}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <TextBlock x:Name="TimeText" Text="5:00" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
                     <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                         <Button x:Name="StartBtn" Style="{StaticResource Primary}" Height="36" Click="OnStart">
                             <StackPanel Orientation="Horizontal">
-                                <h:Icon x:Name="StartIcon" Kind="Play" Width="13" Height="13" Foreground="#08080A"/>
-                                <TextBlock x:Name="StartText" Text="Старт" Margin="7,0,0,0" Foreground="#08080A" FontWeight="SemiBold"/>
+                                <h:Icon x:Name="StartIcon" Kind="Play" Width="13" Height="13" Foreground="#000000"/>
+                                <TextBlock x:Name="StartText" Text="Старт" Margin="7,0,0,0" Foreground="#000000" FontWeight="SemiBold"/>
                             </StackPanel>
                         </Button>
                         <Grid Margin="0,6,0,0">
@@ -93,7 +93,7 @@
                     <ListBox x:Name="RemList">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="r" Background="#1B1B20" CornerRadius="10" Padding="10,6">
+                                <Border x:Name="r" Background="#141417" CornerRadius="10" Padding="10,6">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
