@@ -16,6 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Version
+        shell: pwsh
+        run: |
+          # тег v1.2.3 → 1.2.3; иначе 0.2.<номер сборки> — растёт с каждой сборкой, по нему приложение видит обновления
+          $v = if ("${{ github.ref }}" -like "refs/tags/v*") { "${{ github.ref_name }}".TrimStart("v") } else { "0.2.${{ github.run_number }}" }
+          "ISLE_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Версия $v"
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -24,15 +32,14 @@ jobs:
         run: dotnet test tests/Isle.Tests/Isle.Tests.csproj -c Release
 
       - name: Publish (папка с программой, .NET не нужен)
-        run: dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true -o out/app
+        run: dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true -p:Version=${{ env.ISLE_VERSION }} -o out/app
 
       - name: Installer (Inno Setup)
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
-          $version = if ("${{ github.ref }}" -like "refs/tags/v*") { "${{ github.ref_name }}".TrimStart("v") } else { "0.1.${{ github.run_number }}" }
-          & $iscc "/DMyAppVersion=$version" installer/Isle.iss
+          & $iscc "/DMyAppVersion=$env:ISLE_VERSION" installer/Isle.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
@@ -45,8 +52,13 @@ jobs:
           name: Isle-portable
           path: out/app
 
+      # Каждый push в main (и каждый тег v*) — новый релиз. Isle сам находит его в «Настройки → Обновления».
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.ISLE_VERSION }}
+          name: Isle ${{ env.ISLE_VERSION }}
+          body: ${{ github.event.head_commit.message }}
           files: out/Isle-Setup.exe
+          make_latest: true

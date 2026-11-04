@@ -101,6 +101,13 @@
                 <RadioButton Style="{StaticResource Nav}" Content="Погода" Tag="{h:IconFor Sun}" x:Name="NavWeather" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Всплывашки и модули" Tag="{h:IconFor Bell}" x:Name="NavModules" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Клавиши" Tag="{h:IconFor Keyboard}" x:Name="NavKeys" Checked="OnNav"/>
+                <Border Height="1" Background="#1C1C20" Margin="10,10,10,10"/>
+                <RadioButton Style="{StaticResource Nav}" Tag="{h:IconFor Restart}" x:Name="NavUpdates" Checked="OnNav">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Обновления"/>
+                        <Border x:Name="UpdateDot" Width="7" Height="7" CornerRadius="3.5" Background="#4ADE80" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </RadioButton>
             </StackPanel>
         </DockPanel>
 
@@ -398,6 +405,45 @@
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Сохранять картинки"/><TextBlock Style="{StaticResource RowNote}" Text="Секретные копии из менеджеров паролей не сохраняются никогда."/></StackPanel>
                                 <CheckBox x:Name="ClipImg" HorizontalAlignment="Right" Click="OnToggle"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ ОБНОВЛЕНИЯ ============ -->
+                <StackPanel x:Name="SecUpdates" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource H1}" Text="Обновления"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Margin="0,14">
+                            <Grid>
+                                <StackPanel Margin="0,0,180,0">
+                                    <TextBlock x:Name="UpdTitle" Style="{StaticResource RowTitle}" FontSize="16" Text="Isle"/>
+                                    <TextBlock x:Name="UpdStatus" Style="{StaticResource RowNote}" Text="Нажми «Проверить»"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button x:Name="UpdCheckBtn" Style="{StaticResource Flat}" Content="Проверить" Padding="14,8" Click="OnUpdateCheck"/>
+                                    <Button x:Name="UpdInstallBtn" Style="{StaticResource Primary}" Content="Обновить" Padding="16,8" Margin="8,0,0,0" Click="OnUpdateInstall" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid x:Name="UpdProgress" Height="6" Margin="0,14,0,0" Visibility="Collapsed">
+                                <Border CornerRadius="3" Background="#26262B"/>
+                                <Border x:Name="UpdBar" CornerRadius="3" Background="{StaticResource Accent}" HorizontalAlignment="Left" Width="0"/>
+                            </Grid>
+                            <TextBlock x:Name="UpdNotes" Style="{StaticResource RowNote}" Margin="0,14,0,0" Visibility="Collapsed" FontFamily="Consolas, Segoe UI"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Проверять обновления автоматически"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="При запуске и раз в 6 часов. О новой версии скажет всплывашка — обновляешься сам, одной кнопкой."/></StackPanel>
+                                <CheckBox x:Name="AutoUpdate" HorizontalAlignment="Right" Click="OnToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Все версии"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Список изменений и установщики на GitHub"/></StackPanel>
+                                <Button Style="{StaticResource Flat}" Content="Открыть" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnReleases"/>
                             </Grid>
                         </StackPanel>
                     </Border>

@@ -28,7 +28,68 @@ namespace Isle.Views
             BuildKeys();
             Load();
             _loading = false;
+            UpdateService.Changed += RenderUpdate;
+            Closed += (_, __) => UpdateService.Changed -= RenderUpdate;
+            RenderUpdate();
         }
+
+        // ---------- Обновления ----------
+
+        private void RenderUpdate()
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                var cur = UpdateService.Current.ToString(3);
+                var a = UpdateService.Available;
+                UpdateDot.Visibility = a != null ? Visibility.Visible : Visibility.Collapsed;
+                if (a != null)
+                {
+                    UpdTitle.Text = "Доступна версия " + a.Version.ToString(3);
+                    UpdStatus.Text = "Сейчас установлена " + cur + " · вышла " + a.Published.ToString("dd.MM.yyyy HH:mm") + (a.Size > 0 ? " · " + (a.Size / 1048576.0).ToString("0.#") + " МБ" : "");
+                    UpdInstallBtn.Visibility = Visibility.Visible;
+                    UpdNotes.Text = string.IsNullOrWhiteSpace(a.Notes) ? "" : a.Notes.Trim();
+                    UpdNotes.Visibility = UpdNotes.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else
+                {
+                    UpdTitle.Text = "Isle " + cur;
+                    UpdStatus.Text = UpdateService.LastCheck == null ? "Нажми «Проверить»" : "Установлена последняя версия · проверено в " + UpdateService.LastCheck.Value.ToString("HH:mm");
+                    UpdInstallBtn.Visibility = Visibility.Collapsed;
+                    UpdNotes.Visibility = Visibility.Collapsed;
+                }
+            });
+        }
+
+        private async void OnUpdateCheck(object s, RoutedEventArgs e)
+        {
+            UpdCheckBtn.IsEnabled = false;
+            UpdStatus.Text = "Проверяю…";
+            try { await UpdateService.CheckAsync(false); RenderUpdate(); }
+            catch (Exception ex) { UpdStatus.Text = "Не удалось проверить: " + ex.Message; }
+            finally { UpdCheckBtn.IsEnabled = true; }
+        }
+
+        private async void OnUpdateInstall(object s, RoutedEventArgs e)
+        {
+            var a = UpdateService.Available;
+            if (a == null) return;
+            UpdInstallBtn.IsEnabled = UpdCheckBtn.IsEnabled = false;
+            UpdProgress.Visibility = Visibility.Visible;
+            var bar = UpdBar;
+            var progress = new Progress<double>(p =>
+            {
+                bar.Width = Math.Max(0, (UpdProgress.ActualWidth) * p);
+                UpdStatus.Text = p < 1 ? "Скачиваю… " + (int)(p * 100) + "%" : "Устанавливаю — Isle перезапустится сам";
+            });
+            try { await UpdateService.DownloadAndInstallAsync(a, progress); }
+            catch (Exception ex)
+            {
+                UpdStatus.Text = "Не получилось: " + ex.Message;
+                UpdInstallBtn.IsEnabled = UpdCheckBtn.IsEnabled = true;
+            }
+        }
+
+        private void OnReleases(object s, RoutedEventArgs e) => SystemControls.Shell("https://github.com/Jeredpoi/-/releases");
 
         private void DarkTitleBar()
         {
@@ -50,7 +111,7 @@ namespace Isle.Views
             var rb = key switch
             {
                 "look" => NavLook, "ai" => NavAi, "voice" => NavVoice, "record" => NavRecord, "weather" => NavWeather,
-                "modules" => NavModules, "keys" => NavKeys, _ => NavGeneral
+                "modules" => NavModules, "keys" => NavKeys, "updates" => NavUpdates, _ => NavGeneral
             };
             rb.IsChecked = true;
         }
@@ -61,7 +122,7 @@ namespace Isle.Views
             var map = new (RadioButton nav, FrameworkElement sec)[]
             {
                 (NavGeneral, SecGeneral), (NavLook, SecLook), (NavAi, SecAi), (NavVoice, SecVoice), (NavRecord, SecRecord),
-                (NavWeather, SecWeather), (NavModules, SecModules), (NavKeys, SecKeys)
+                (NavWeather, SecWeather), (NavModules, SecModules), (NavKeys, SecKeys), (NavUpdates, SecUpdates)
             };
             foreach (var (nav, sec) in map) sec.Visibility = nav.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
             Scroll?.ScrollToTop();
@@ -122,6 +183,7 @@ namespace Isle.Views
             Vpn.IsChecked = S.VpnStatus;
             ClipHist.IsChecked = S.ClipboardHistory;
             ClipImg.IsChecked = S.ClipboardImages;
+            AutoUpdate.IsChecked = S.AutoUpdateCheck;
         }
 
         private void OnToggle(object s, RoutedEventArgs e)
@@ -141,6 +203,7 @@ namespace Isle.Views
             S.VpnStatus = Vpn.IsChecked == true;
             S.ClipboardHistory = ClipHist.IsChecked == true;
             S.ClipboardImages = ClipImg.IsChecked == true;
+            S.AutoUpdateCheck = AutoUpdate.IsChecked == true;
             S.Save();
         }
 

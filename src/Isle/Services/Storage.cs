@@ -124,6 +124,7 @@ namespace Isle.Services
         public double IslandOpacity { get; set; } = 1.0;
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
         public bool FirstRunDone { get; set; } = false;
+        public bool AutoUpdateCheck { get; set; } = true;
 
         public static string Protect(string value)
         {

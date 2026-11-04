@@ -16,6 +16,7 @@ namespace Isle
             var menu = new Forms.ContextMenuStrip();
             menu.Items.Add("Открыть остров", null, (_, __) => AppHost.Window?.BringUp());
             menu.Items.Add("Настройки", null, (_, __) => AppHost.Window?.BringUp("settings"));
+            menu.Items.Add("Проверить обновления", null, (_, __) => AppHost.Window?.OpenSettings("updates"));
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add("Выйти из Isle", null, (_, __) => System.Windows.Application.Current.Shutdown());
 

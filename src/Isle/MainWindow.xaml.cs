@@ -183,6 +183,7 @@ namespace Isle
                 _weatherTimer.Start();
                 await RefreshWeather();
                 ApplyOledMode();
+                UpdateService.StartAutoCheck();
                 App.Trace("все модули запущены");
             };
         }
