@@ -4,7 +4,7 @@
         xmlns:h="clr-namespace:Isle.Helpers"
         Title="Isle — настройки" Width="900" Height="700" MinWidth="760" MinHeight="520"
         Background="#0A0A0C" Foreground="{StaticResource Fg}" FontFamily="{StaticResource UiFont}"
-        WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="/app.ico">
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="pack://application:,,,/Isle;component/app.ico">
     <Window.Resources>
         <Style x:Key="Nav" TargetType="RadioButton">
             <Setter Property="Foreground" Value="#B9B9C3"/>
@@ -78,7 +78,7 @@
         <DockPanel Background="#060607" >
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
                 <Border Width="44" Height="22" CornerRadius="11" Background="Black" BorderBrush="#3A3A42" BorderThickness="1">
-                    <h:Character Width="18" Height="15"/>
+                    <h:Character Width="30" Height="18"/>
                 </Border>
                 <StackPanel Margin="12,0,0,0">
                     <TextBlock Text="Isle" FontSize="16" FontWeight="Bold"/>
@@ -173,7 +173,7 @@
                             <Border x:Name="Preview" Background="Black" CornerRadius="0,0,16,16" HorizontalAlignment="Center" VerticalAlignment="Top"
                                     Height="34" Padding="16,0" BorderBrush="#26262B" BorderThickness="1,0,1,1">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <h:Character x:Name="PreviewBuddy" Width="22" Height="19" Margin="0,0,10,0"/>
+                                    <h:Character x:Name="PreviewBuddy" Width="30" Height="22" Margin="0,0,10,0"/>
                                     <StackPanel x:Name="PreviewEyes" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
                                         <Border Width="7" Height="14" CornerRadius="3.5" Background="#ECECF1"/>
                                         <Border Width="7" Height="14" CornerRadius="3.5" Background="#ECECF1" Margin="5,0,0,0"/>

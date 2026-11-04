@@ -67,7 +67,10 @@ namespace Isle
             AppHost.Audio = new AudioService(Dispatcher);
             AppHost.Notifications = new NotificationService();
             AppHost.Voice = new VoiceService();
-            AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) Buddy.Cheer(); });
+            AppHost.Spectrum = new SpectrumService();
+            Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
+            AppHost.Media.TrackChanged += m => Edge.SpikeColor = DominantColor(m.Cover) ?? AccentColor();
+            AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) { Buddy.Cheer(); Edge.DropBead(); } });
             if (!s.FirstRunDone)
             {
                 // 4K без масштабирования Windows — всё мелкое, сразу делаем остров крупнее
@@ -150,7 +153,12 @@ namespace Isle
             };
             KeyDown += (_, e) => { if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; } };
 
-            Island.SizeChanged += (_, __) => UpdateClip();
+            Island.SizeChanged += (_, __) =>
+            {
+                UpdateClip();
+                Edge.Margin = new Thickness(24, Math.Max(0, Island.ActualHeight - 1), 24, 0);
+                Edge.CornerRadius = Island.CornerRadius.BottomLeft;
+            };
             // Подсказку «положу на полку» показываем только у свёрнутой чёлки: в открытой файл можно бросить на нужное место (ярлыки, полка)
             Island.DragEnter += (_, e) => { if (State != IslandState.Expanded && e.Data.GetDataPresent(DataFormats.FileDrop)) { DropHint.Visibility = Visibility.Visible; e.Effects = DragDropEffects.Link; } };
             Island.DragLeave += (_, __) => DropHint.Visibility = Visibility.Collapsed;
@@ -203,6 +211,7 @@ namespace Isle
         {
             foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice }) Win32.UnregisterHotKey(_hwnd, id);
             AppHost.Audio?.Dispose();
+            AppHost.Spectrum?.Dispose();
             base.OnClosed(e);
         }
 
@@ -514,6 +523,7 @@ namespace Isle
             catch { }
             byte a = (byte)Math.Round(255 * Math.Clamp(s.IslandOpacity, 0.5, 1.0));
             Island.Background = new SolidColorBrush(Color.FromArgb(a, 0, 0, 0));
+            Edge.Fill = Island.Background;
             IslandShadow.Opacity = s.IslandOpacity;
             Buddy.Visibility = s.Character == "pixel" ? Visibility.Visible : Visibility.Collapsed;
             Eyes.Visibility = s.Character == "eyes" ? Visibility.Visible : Visibility.Collapsed;
@@ -623,7 +633,7 @@ namespace Isle
         private void RenderToast(Toast t)
         {
             _currentToast = t;
-            if (t.Kind == ToastKind.Success) Buddy.Cheer();
+            if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
             ToastTitle.Text = t.Title;
             ToastSub.Text = t.Subtitle ?? "";
             ToastSub.Visibility = string.IsNullOrEmpty(t.Subtitle) ? Visibility.Collapsed : Visibility.Visible;
@@ -736,9 +746,57 @@ namespace Isle
             if (showBattery) BatteryMini.Text = (w.Charging ? "⚡" : "") + w.BatteryPercent + "%";
         }
 
+        private Color AccentColor()
+        {
+            try { return (Color)ColorConverter.ConvertFromString(AppSettings.Current.AccentHex); } catch { return Colors.White; }
+        }
+
+        /// <summary>Самый «живой» цвет обложки — им светятся всплески музыки на краю.</summary>
+        private static Color? DominantColor(System.Windows.Media.Imaging.BitmapSource cover)
+        {
+            if (cover == null) return null;
+            try
+            {
+                var small = new System.Windows.Media.Imaging.TransformedBitmap(cover, new ScaleTransform(24.0 / cover.PixelWidth, 24.0 / cover.PixelHeight));
+                var px = ScreenTools.Bgra(small, out int w, out int h);
+                double r = 0, g = 0, b = 0, wsum = 0;
+                for (int i = 0; i < px.Length; i += 4)
+                {
+                    double B = px[i], G = px[i + 1], R = px[i + 2];
+                    double max = Math.Max(R, Math.Max(G, B)), min = Math.Min(R, Math.Min(G, B));
+                    double sat = max <= 0 ? 0 : (max - min) / max;
+                    double weight = sat * sat * (max / 255.0) + 0.02;
+                    r += R * weight; g += G * weight; b += B * weight; wsum += weight;
+                }
+                if (wsum <= 0) return null;
+                var c = Color.FromRgb((byte)(r / wsum), (byte)(g / wsum), (byte)(b / wsum));
+                // слишком тёмный цвет на чёрном не видно — осветляем
+                double lum = 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+                if (lum < 110)
+                {
+                    double k = 110 / Math.Max(1, lum);
+                    c = Color.FromRgb((byte)Math.Min(255, c.R * k), (byte)Math.Min(255, c.G * k), (byte)Math.Min(255, c.B * k));
+                }
+                return c;
+            }
+            catch { return null; }
+        }
+
+        private int _specIdle;
+
         private void Animate()
         {
             CheckOutsideClick();
+
+            // спектр включаем только пока играет музыка и чёлка свёрнута
+            var md = AppHost.Media?.Current;
+            bool wantSpectrum = md != null && md.HasSession && md.IsPlaying && State != IslandState.Expanded && !_oledHidden && Scaler.Visibility == Visibility.Visible;
+            if (wantSpectrum) { _specIdle = 0; if (!AppHost.Spectrum.Running) AppHost.Spectrum.Start(); }
+            else if (AppHost.Spectrum.Running && ++_specIdle > 60) AppHost.Spectrum.Stop();
+            Edge.Active = State != IslandState.Expanded && !_oledHidden;
+            Edge.Away = IdleTime() > TimeSpan.FromMinutes(2);
+            Edge.Raining = AppHost.Weather != null && (AppHost.Weather.Code >= 51 && AppHost.Weather.Code <= 67 || AppHost.Weather.Code >= 80);
+
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
             if (Buddy.Visibility == Visibility.Visible)
             {
@@ -753,12 +811,22 @@ namespace Isle
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {
-                float peak = AppHost.Audio?.Peak ?? 0;
                 var bars = new[] { Bar0, Bar1, Bar2, Bar3 };
+                var spec = AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
+                float peak = AppHost.Audio?.Peak ?? 0;
                 for (int i = 0; i < bars.Length; i++)
                 {
-                    double k = 0.55 + _rnd.NextDouble() * 0.6;
-                    double target = 3 + Math.Min(13, peak * 22 * k);
+                    double level;
+                    if (spec != null)
+                    {
+                        // 4 полоски = 4 части спектра: басы → высокие
+                        int from = i * spec.Length / 4, to = (i + 1) * spec.Length / 4;
+                        double mx = 0;
+                        for (int b = from; b < to; b++) mx = Math.Max(mx, spec[b]);
+                        level = mx;
+                    }
+                    else level = peak * (0.55 + _rnd.NextDouble() * 0.6);
+                    double target = 3 + Math.Min(13, level * 14);
                     bars[i].Height = bars[i].Height + (target - bars[i].Height) * 0.55;
                 }
             }

@@ -29,6 +29,10 @@
                 </Border.Effect>
             </Border>
 
+            <!-- «Жидкий» нижний край: спектр музыки, тянется к курсору, капли -->
+            <h:LiquidEdge x:Name="Edge" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,33,24,0"
+                          Width="{Binding ActualWidth, ElementName=Island}"/>
+
             <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
                     Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
                     BorderBrush="#17171C" BorderThickness="1,0,1,1" SnapsToDevicePixels="True">
@@ -37,7 +41,7 @@
                     <Grid x:Name="CollapsedView" Margin="16,0">
                         <!-- покой: «глаза», время, погода -->
                         <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <h:Character x:Name="Buddy" Width="22" Height="19" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                            <h:Character x:Name="Buddy" Width="30" Height="22" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <StackPanel x:Name="Eyes" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border x:Name="EyeL" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" VerticalAlignment="Center"/>
                                 <Border x:Name="EyeR" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
