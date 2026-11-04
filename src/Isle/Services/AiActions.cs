@@ -11,7 +11,16 @@ namespace Isle.Services
         public string Name;
         public string Arg;
         /// <summary>Опасные действия выполняются только после нажатия «Выполнить».</summary>
-        public bool NeedsConfirm => Name == "cmd" || Name == "lock" || Name == "sleep";
+        public bool NeedsConfirm => Name == "cmd" || Name == "lock" || Name == "sleep" || (Name == "open" && IsRunnableFile(Arg));
+
+        /// <summary>Скрипт или программа по прямому пути (не по названию) — запускаем только после подтверждения.</summary>
+        private static bool IsRunnableFile(string arg)
+        {
+            var p = (arg ?? "").Trim().Trim('"', '«', '»');
+            if (!(p.Contains('\\') || p.Contains('/')) || p.Contains("://")) return false;
+            var ext = System.IO.Path.GetExtension(p).ToLowerInvariant();
+            return ext is ".exe" or ".bat" or ".cmd" or ".ps1" or ".vbs" or ".js" or ".jse" or ".wsf" or ".msi" or ".scr" or ".com" or ".lnk" or ".reg" or ".hta";
+        }
         public string Label => Name switch
         {
             "open" => "Открыть " + Arg,
@@ -104,6 +113,9 @@ namespace Isle.Services
                     case "media":
                         if (a.Arg.StartsWith("next")) AppHost.Media.Next();
                         else if (a.Arg.StartsWith("prev")) AppHost.Media.Previous();
+                        // «пауза» не должна включать музыку, если она уже на паузе (и наоборот)
+                        else if (a.Arg.StartsWith("pause") || a.Arg.StartsWith("stop")) AppHost.Media.Pause();
+                        else if (a.Arg.StartsWith("play")) AppHost.Media.Play();
                         else AppHost.Media.PlayPause();
                         return "✓ " + a.Label;
                     case "copy":
