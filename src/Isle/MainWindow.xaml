@@ -124,7 +124,7 @@
                             </Grid.ColumnDefinitions>
                             <Border x:Name="ToastIconBox" Width="34" Height="34" CornerRadius="17" Background="#141417" VerticalAlignment="Center">
                                 <Grid>
-                                    <Image x:Name="ToastImage" Stretch="UniformToFill"/>
+                                    <Image x:Name="ToastImage" Stretch="Uniform"/>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>

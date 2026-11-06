@@ -577,6 +577,14 @@ namespace Isle
                 ExpandedView.Effect = null;
                 Island.CornerRadius = new CornerRadius(0, 0, 18, 18);
                 DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
+                // Expand() останавливает таймер тоста. Верни текущую плашку загрузки
+                // после сворачивания, чтобы пользователь не терял её при выходе из меню.
+                if (_currentToast?.Kind == ToastKind.Download)
+                {
+                    var downloadToast = _currentToast;
+                    _currentToast = null;
+                    if (!_toasts.Any(t => t.ReplaceKey == downloadToast.ReplaceKey)) _toasts.Enqueue(downloadToast);
+                }
                 if (_toasts.Count > 0) { NextToast(); return; }
                 ShowCollapsedContent(false);
                 ScheduleOledHide(TimeSpan.FromSeconds(1.2));
@@ -1222,7 +1230,8 @@ namespace Isle
             if (t.Progress.HasValue) w = Math.Max(w, 280);
             if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
-            ToastImage.Clip = t.Image == null ? null : new EllipseGeometry(new Point(compact ? 13 : 18, compact ? 13 : 18), compact ? 13 : 18, compact ? 13 : 18);
+            double imageSize = compact ? 26 : 36;
+            ToastImage.Clip = t.Image == null ? null : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
             if (t.Progress.HasValue)
             {
                 double barW = w - 16 * 2 - 36 - 12;
@@ -1276,8 +1285,10 @@ namespace Isle
                     var steam = SteamDownloadService.ReadCurrent();
                     var steamCompleted = new List<SteamDownload>();
                     while (SteamDownloadService.TakeCompleted() is { } completed) steamCompleted.Add(completed);
+                    var steamPaused = new List<SteamDownload>();
+                    while (SteamDownloadService.TakePaused() is { } paused) steamPaused.Add(paused);
                     var browser = BrowserDownloadService.ReadSnapshot();
-                    return (steam, steamCompleted, browser);
+                    return (steam, steamCompleted, steamPaused, browser);
                 });
 
                 foreach (var completed in result.steamCompleted)
@@ -1300,6 +1311,19 @@ namespace Isle
                         Title = "Загрузка завершена",
                         Subtitle = completed.Browser + " · " + completed.FileName,
                         Icon = Icons.Check,
+                        Important = true,
+                        Duration = TimeSpan.FromSeconds(4)
+                    });
+
+                foreach (var paused in result.steamPaused)
+                    ToastBus.Show(new Toast
+                    {
+                        Kind = ToastKind.Info,
+                        Title = "Загрузка приостановлена",
+                        Subtitle = paused.Name + " · " + paused.ProgressText,
+                        Image = paused.Icon,
+                        FolderPath = paused.FolderPath,
+                        Icon = Icons.Bolt,
                         Important = true,
                         Duration = TimeSpan.FromSeconds(4)
                     });

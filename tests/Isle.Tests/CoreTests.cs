@@ -1,6 +1,7 @@
 using System.Linq;
 using System;
 using System.IO;
+using System.Text.Json;
 using Isle.Helpers;
 using Isle.Services;
 using Isle.Views;
@@ -8,6 +9,31 @@ using Xunit;
 
 namespace Isle.Tests
 {
+    public class WeatherForecastParsingTests
+    {
+        [Fact]
+        public void MetNorwaySymbolsAndForecastDetailsAreMapped()
+        {
+            var now = DateTimeOffset.Now;
+            string stamp1 = now.AddMinutes(-5).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            string stamp2 = now.AddHours(2).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            string json = "{\"properties\":{\"timeseries\":[" +
+                "{\"time\":\"" + stamp1 + "\",\"data\":{\"instant\":{\"details\":{\"air_temperature\":4,\"relative_humidity\":88,\"wind_speed\":3.2,\"wind_from_direction\":270}},\"next_1_hours\":{\"summary\":{\"symbol_code\":\"lightrain_day\"},\"details\":{\"precipitation_amount\":0.4,\"probability_of_precipitation\":70}}}}," +
+                "{\"time\":\"" + stamp2 + "\",\"data\":{\"instant\":{\"details\":{\"air_temperature\":1,\"relative_humidity\":90,\"wind_speed\":2,\"wind_from_direction\":280}},\"next_1_hours\":{\"summary\":{\"symbol_code\":\"snow_day\"},\"details\":{\"precipitation_amount\":0.8,\"probability_of_precipitation\":80}}}}]}}";
+            using var doc = JsonDocument.Parse(json);
+
+            var weather = WeatherService.ParseLocationForecast(doc.RootElement, "Москва");
+
+            Assert.Equal("Москва", weather.City);
+            Assert.Equal(61, weather.Code);
+            Assert.Equal(4, weather.Temp);
+            Assert.Equal(3.2, weather.Wind);
+            Assert.Equal(70, weather.Hours[0].PrecipitationProbability);
+            Assert.True(weather.NextSnowAt.HasValue);
+            Assert.Contains(weather.Days, d => d.Precip > 0);
+        }
+    }
+
     public class ReminderParserTests
     {
         // среда, 4 ноября 2026, 14:00
@@ -157,7 +183,13 @@ namespace Isle.Tests
         private static readonly DateTime PausedAt = new(2026, 11, 6, 16, 45, 0, DateTimeKind.Local);
 
         [Fact]
-        public void PausedUpdateUsesStagingPercentAndDropsStaleSpeed()
+        public void ProgressTextUsesSteamStyleIntegerPercentage()
+        {
+            Assert.Equal("10%", new SteamDownload { Progress = 0.109 }.ProgressText);
+        }
+
+        [Fact]
+        public void PausedUpdateIsNotKeptAsAnActiveDownloadPill()
         {
             var appId = 900000 + Random.Shared.Next(1, 99999);
             var root = CreateSteamRoot(appId);
@@ -166,11 +198,35 @@ namespace Isle.Tests
                 File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), PausedLog(appId));
                 var download = SteamDownloadService.ReadCurrent(root, PausedAt);
 
-                Assert.NotNull(download);
-                Assert.True(download.IsPaused);
-                Assert.Equal("16%", download.ProgressText);
-                Assert.Empty(download.SpeedText);
-                Assert.Empty(download.EtaText);
+                Assert.Null(download);
+                Assert.Null(SteamDownloadService.TakePaused());
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void PausingAnObservedDownloadEmitsOneNotification()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var logPath = Path.Combine(root, "logs", "content_log.txt");
+                File.WriteAllText(logPath, ActiveLog(appId));
+                Assert.NotNull(SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 40, DateTimeKind.Local)));
+
+                File.AppendAllText(logPath,
+                    $"[2026-11-06 16:44:05] AppID {appId} update canceled : Disabled (Suspended)\n" +
+                    $"[2026-11-06 16:44:05] AppID {appId} App update changed : Running Update,Stopping,\n" +
+                    $"[2026-11-06 16:44:05] AppID {appId} App update changed : None\n" +
+                    $"[2026-11-06 16:44:06] AppID {appId} state changed : Update Required,Fully Installed,Update Paused,Update Started,\n");
+
+                Assert.Null(SteamDownloadService.ReadCurrent(root, PausedAt));
+                var notification = SteamDownloadService.TakePaused();
+                Assert.NotNull(notification);
+                Assert.True(notification.IsPaused);
+                Assert.Equal("16%", notification.ProgressText);
+                Assert.Null(SteamDownloadService.TakePaused());
             }
             finally { Directory.Delete(root, true); }
         }
@@ -198,8 +254,25 @@ namespace Isle.Tests
 
                 Assert.NotNull(download);
                 Assert.Equal("16%", download.ProgressText);
+                Assert.NotEmpty(download.SpeedText);
+                Assert.NotNull(download.Remaining);
                 Assert.NotNull(download.Icon);
                 Assert.Equal(installFolder, download.FolderPath);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void LongRunningActiveDownloadDoesNotExpireAfterTenMinutes()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), ActiveLog(appId));
+                var download = SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 17, 0, 0, DateTimeKind.Local));
+                Assert.NotNull(download);
+                Assert.Equal("16%", download.ProgressText);
             }
             finally { Directory.Delete(root, true); }
         }
@@ -250,8 +323,8 @@ namespace Isle.Tests
             Directory.CreateDirectory(Path.Combine(root, "steamapps"));
             File.WriteAllText(Path.Combine(root, "steamapps", $"appmanifest_{appId}.acf"),
                 $"\"AppState\" {{\n\t\"appid\" \"{appId}\"\n\t\"name\" \"Test Game\"\n" +
-                "\t\"BytesToDownload\" \"1958392864\"\n\t\"BytesDownloaded\" \"429201552\"\n" +
-                "\t\"BytesToStage\" \"38428989932\"\n\t\"BytesStaged\" \"6066033337\"\n}\n");
+                "\t\"BytesToDownload\" \"1000\"\n\t\"BytesDownloaded\" \"220\"\n" +
+                "\t\"BytesToStage\" \"1000\"\n\t\"BytesStaged\" \"160\"\n}\n");
             return root;
         }
 

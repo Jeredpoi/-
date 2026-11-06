@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Isle.Services
 {
@@ -59,10 +61,18 @@ namespace Isle.Services
         public string Glyph => WeatherService.Glyph(Code, IsDay);
     }
 
-    /// <summary>Почасовой прогноз Open-Meteo — без ключа, включая снег и вероятность осадков.</summary>
+    /// <summary>Прогноз MET Norway Locationforecast с ограничением частоты запросов по их правилам.</summary>
     public static class WeatherService
     {
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+        private static readonly SemaphoreSlim ForecastLock = new(1, 1);
+        private static readonly Dictionary<string, ForecastCache> Forecasts = new(StringComparer.Ordinal);
+        private sealed record ForecastCache(WeatherNow Weather, DateTimeOffset RefreshAfter, DateTimeOffset? LastModified);
+
+        static WeatherService()
+        {
+            Http.DefaultRequestHeaders.UserAgent.ParseAdd("Isle/0.2 (+https://github.com/Jeredpoi/-)");
+        }
 
         public static async Task<(string name, double lat, double lon)?> GeocodeAsync(string city)
         {
@@ -76,91 +86,188 @@ namespace Isle.Services
         public static async Task<WeatherNow> LoadAsync(double lat, double lon, string city)
         {
             var inv = CultureInfo.InvariantCulture;
-            var url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat.ToString(inv) + "&longitude=" + lon.ToString(inv) +
-                      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation,is_day" +
-                      "&hourly=temperature_2m,weather_code,is_day,snowfall,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset" +
-                      "&wind_speed_unit=ms&timezone=auto&forecast_days=7";
-            using var doc = JsonDocument.Parse(await Http.GetStringAsync(url));
-            var root = doc.RootElement;
-            var cur = root.GetProperty("current");
-            var w = new WeatherNow
+            lat = Math.Round(lat, 4);
+            lon = Math.Round(lon, 4);
+            string key = lat.ToString("0.####", inv) + "," + lon.ToString("0.####", inv);
+            await ForecastLock.WaitAsync();
+            try
             {
-                City = city,
-                Temp = cur.GetProperty("temperature_2m").GetDouble(),
-                Feels = cur.GetProperty("apparent_temperature").GetDouble(),
-                Humidity = (int)cur.GetProperty("relative_humidity_2m").GetDouble(),
-                Code = cur.GetProperty("weather_code").GetInt32(),
-                Wind = cur.GetProperty("wind_speed_10m").GetDouble(),
-                WindDeg = cur.TryGetProperty("wind_direction_10m", out var wd) && wd.ValueKind == JsonValueKind.Number ? wd.GetDouble() : 0,
-                Precip = cur.GetProperty("precipitation").GetDouble(),
-                IsDay = cur.GetProperty("is_day").GetInt32() == 1,
-                ForecastNow = DateTime.Parse(cur.GetProperty("time").GetString(), inv),
+                var now = DateTimeOffset.UtcNow;
+                Forecasts.TryGetValue(key, out var cached);
+                if (cached != null && now < cached.RefreshAfter)
+                {
+                    cached.Weather.City = city;
+                    return cached.Weather;
+                }
+
+                var url = "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" + lat.ToString("0.####", inv) + "&lon=" + lon.ToString("0.####", inv);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (cached?.LastModified is { } lastModified) request.Headers.IfModifiedSince = lastModified;
+                using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                if (response.StatusCode == System.Net.HttpStatusCode.NotModified && cached != null)
+                {
+                    var renewed = response.Content.Headers.Expires ?? now + MinimumRefreshInterval(lat, lon);
+                    cached = cached with { RefreshAfter = Max(renewed, now + MinimumRefreshInterval(lat, lon)) };
+                    Forecasts[key] = cached;
+                    cached.Weather.City = city;
+                    return cached.Weather;
+                }
+                response.EnsureSuccessStatusCode();
+                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                var weather = ParseLocationForecast(doc.RootElement, city);
+                await LoadSunAsync(lat, lon, weather);
+
+                var minInterval = MinimumRefreshInterval(lat, lon);
+                var expires = response.Content.Headers.Expires ?? now;
+                var refreshAfter = Max(expires, now + minInterval);
+                var modified = response.Content.Headers.LastModified;
+                Forecasts[key] = new ForecastCache(weather, refreshAfter, modified);
+                return weather;
+            }
+            finally { ForecastLock.Release(); }
+        }
+
+        private sealed record ForecastPoint(DateTime At, double Temp, double Min, double Max, double Humidity, double Wind, double WindDeg, double Precip, int Probability, int Code, bool IsDay);
+
+        internal static WeatherNow ParseLocationForecast(JsonElement root, string city)
+        {
+            var inv = CultureInfo.InvariantCulture;
+            var timeseries = root.GetProperty("properties").GetProperty("timeseries");
+            var points = new List<ForecastPoint>(timeseries.GetArrayLength());
+            foreach (var item in timeseries.EnumerateArray())
+            {
+                var at = DateTimeOffset.Parse(item.GetProperty("time").GetString(), inv).ToLocalTime().DateTime;
+                var data = item.GetProperty("data");
+                var instant = data.GetProperty("instant").GetProperty("details");
+                string symbol = GetSymbol(data);
+                var code = CodeForSymbol(symbol);
+                var period = FindPeriod(data);
+                var details = period.ValueKind == JsonValueKind.Object && period.TryGetProperty("details", out var d) ? d : default;
+                double precip = NumberOr(details, "precipitation_amount", 0);
+                int probability = (int)Math.Round(NumberOr(details, "probability_of_precipitation", 0));
+                double temperature = NumberOr(instant, "air_temperature", 0);
+                points.Add(new ForecastPoint(at,
+                    temperature, NumberOr(details, "air_temperature_min", temperature), NumberOr(details, "air_temperature_max", temperature), NumberOr(instant, "relative_humidity", 0),
+                    NumberOr(instant, "wind_speed", 0), NumberOr(instant, "wind_from_direction", 0),
+                    precip, probability, code, IsDaySymbol(symbol)));
+            }
+            if (points.Count == 0) throw new InvalidOperationException("MET Norway returned an empty forecast.");
+
+            var now = DateTime.Now;
+            var current = points.OrderBy(p => Math.Abs((p.At - now).TotalMinutes)).First();
+            var weather = new WeatherNow
+            {
+                City = city, Temp = current.Temp, Feels = current.Temp, Humidity = (int)Math.Round(current.Humidity),
+                Code = current.Code, Wind = current.Wind, WindDeg = current.WindDeg, Precip = current.Precip,
+                IsDay = current.IsDay, ForecastNow = now
             };
 
-            var hourly = root.GetProperty("hourly");
-            var ht = hourly.GetProperty("time");
-            var htemp = hourly.GetProperty("temperature_2m");
-            var hcode = hourly.GetProperty("weather_code");
-            var hday = hourly.GetProperty("is_day");
-            var hsnow = hourly.GetProperty("snowfall");
-            var hprob = hourly.GetProperty("precipitation_probability");
-            var nowHour = w.ForecastNow;
-            int added = 0;
-            for (int i = 0; i < ht.GetArrayLength(); i++)
+            var future = points.Where(p => p.At >= now.AddMinutes(-60)).ToList();
+            if (future.Count == 0) future = points.Take(1).ToList();
+            for (int i = 0; i < future.Count; i++)
             {
-                var t = DateTime.Parse(ht[i].GetString(), inv);
-                if (t.AddHours(1) <= nowHour) continue;
-                var snow = hsnow[i].GetDouble();
-                var code = hcode[i].GetInt32();
-                var probability = hprob[i].ValueKind == JsonValueKind.Number ? hprob[i].GetInt32() : 0;
-                if (!w.NextSnowAt.HasValue && t > nowHour && (snow > 0 || IsSnow(code))) w.NextSnowAt = t;
-                if (added >= 8) continue;
-                w.Hours.Add(new HourWeather
+                var point = future[i];
+                if (!weather.NextSnowAt.HasValue && point.At > now && IsSnow(point.Code)) weather.NextSnowAt = point.At;
+                if (weather.Hours.Count >= 8) continue;
+                weather.Hours.Add(new HourWeather
                 {
-                    Time = added == 0 ? "Сейчас" : t.ToString("HH:mm"),
-                    Temp = Math.Round(htemp[i].GetDouble()) + "°",
-                    Icon = Glyph(code, hday[i].GetInt32() == 1),
-                    At = t,
-                    Snowfall = snow,
-                    PrecipitationProbability = probability
+                    Time = weather.Hours.Count == 0 ? "Сейчас" : point.At.ToString("HH:mm"),
+                    Temp = Math.Round(point.Temp) + "°", Icon = Glyph(point.Code, point.IsDay), At = point.At,
+                    Snowfall = IsSnow(point.Code) ? point.Precip : 0, PrecipitationProbability = point.Probability
                 });
-                added++;
             }
 
-            var daily = root.GetProperty("daily");
-            var dt = daily.GetProperty("time");
-            double gMin = double.MaxValue, gMax = double.MinValue;
             var ru = new CultureInfo("ru-RU");
-            for (int i = 0; i < dt.GetArrayLength(); i++)
+            var days = points.GroupBy(p => p.At.Date).Where(g => g.Key >= now.Date).Take(7).ToList();
+            double globalMin = days.Min(g => g.Min(p => p.Min));
+            double globalMax = days.Max(g => g.Max(p => p.Max));
+            const double barTotal = 160;
+            foreach (var group in days)
             {
-                var d = DateTime.Parse(dt[i].GetString(), inv);
+                var samples = group.ToList();
+                var noon = samples.OrderBy(p => Math.Abs((p.At.Hour + p.At.Minute / 60.0) - 13)).First();
                 var day = new DayWeather
                 {
-                    Name = i == 0 ? "Сегодня" : ru.TextInfo.ToTitleCase(d.ToString("ddd", ru)),
-                    Icon = Glyph(daily.GetProperty("weather_code")[i].GetInt32(), true),
-                    Min = daily.GetProperty("temperature_2m_min")[i].GetDouble(),
-                    Max = daily.GetProperty("temperature_2m_max")[i].GetDouble(),
-                    Precip = daily.GetProperty("precipitation_sum")[i].GetDouble(),
+                    Name = group.Key == now.Date ? "Сегодня" : ru.TextInfo.ToTitleCase(group.Key.ToString("ddd", ru)),
+                    Icon = Glyph(noon.Code, noon.IsDay), Min = samples.Min(p => p.Temp), Max = samples.Max(p => p.Temp),
+                    Precip = samples.Sum(p => Math.Max(0, p.Precip))
                 };
-                gMin = Math.Min(gMin, day.Min);
-                gMax = Math.Max(gMax, day.Max);
-                w.Days.Add(day);
-                if (i == 0)
-                {
-                    w.TodayMin = day.Min; w.TodayMax = day.Max;
-                    w.Sunrise = DateTime.Parse(daily.GetProperty("sunrise")[i].GetString(), inv);
-                    w.Sunset = DateTime.Parse(daily.GetProperty("sunset")[i].GetString(), inv);
-                }
+                day.Min = samples.Min(p => p.Min);
+                day.Max = samples.Max(p => p.Max);
+                day.BarLeft = (day.Min - globalMin) / Math.Max(1, globalMax - globalMin) * barTotal;
+                day.BarWidth = Math.Max(6, (day.Max - day.Min) / Math.Max(1, globalMax - globalMin) * barTotal);
+                weather.Days.Add(day);
+                if (group.Key == now.Date) { weather.TodayMin = day.Min; weather.TodayMax = day.Max; }
             }
-            double span = Math.Max(1, gMax - gMin);
-            const double barTotal = 160;
-            foreach (var d in w.Days)
-            {
-                d.BarLeft = (d.Min - gMin) / span * barTotal;
-                d.BarWidth = Math.Max(6, (d.Max - d.Min) / span * barTotal);
-            }
-            return w;
+            return weather;
         }
+
+        private static JsonElement FindPeriod(JsonElement data)
+        {
+            foreach (var key in new[] { "next_1_hours", "next_6_hours", "next_12_hours" })
+                if (data.TryGetProperty(key, out var period)) return period;
+            return default;
+        }
+
+        private static string GetSymbol(JsonElement data)
+        {
+            var period = FindPeriod(data);
+            return period.ValueKind == JsonValueKind.Object && period.TryGetProperty("summary", out var summary) && summary.TryGetProperty("symbol_code", out var symbol)
+                ? symbol.GetString() ?? "" : "";
+        }
+
+        private static double NumberOr(JsonElement element, string name, double fallback) =>
+            element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : fallback;
+
+        private static int CodeForSymbol(string symbol)
+        {
+            var baseName = symbol.Split('_')[0].ToLowerInvariant();
+            if (baseName.Contains("thunder") && baseName.Contains("hail")) return 99;
+            if (baseName.Contains("thunder")) return 95;
+            if (baseName.Contains("hail")) return 96;
+            if (baseName.Contains("snowshowers")) return 85;
+            if (baseName.Contains("heavysnow")) return 75;
+            if (baseName.Contains("sleet")) return 67;
+            if (baseName.Contains("snow")) return 73;
+            if (baseName.Contains("rainshowers") || baseName.Contains("showers")) return 80;
+            if (baseName.Contains("heavyrain")) return 65;
+            if (baseName.Contains("rain") || baseName.Contains("drizzle")) return 61;
+            if (baseName.Contains("fog")) return 45;
+            if (baseName.Contains("partlycloudy")) return 2;
+            if (baseName.Contains("cloudy")) return 3;
+            if (baseName.Contains("fair")) return 1;
+            if (baseName.Contains("clearsky")) return 0;
+            return 3;
+        }
+
+        private static bool IsDaySymbol(string symbol) => symbol.Contains("_day", StringComparison.OrdinalIgnoreCase) || symbol.Contains("polartwilight", StringComparison.OrdinalIgnoreCase);
+
+        private static async Task LoadSunAsync(double lat, double lon, WeatherNow weather)
+        {
+            try
+            {
+                var offset = TimeZoneInfo.Local.GetUtcOffset(DateTime.Now);
+                string offsetText = (offset < TimeSpan.Zero ? "-" : "+") + offset.Duration().ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+                string date = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                string url = "https://api.met.no/weatherapi/sunrise/3.0/sun?lat=" + lat.ToString("0.####", CultureInfo.InvariantCulture) +
+                    "&lon=" + lon.ToString("0.####", CultureInfo.InvariantCulture) + "&date=" + date + "&offset=" + Uri.EscapeDataString(offsetText);
+                using var doc = JsonDocument.Parse(await Http.GetStringAsync(url));
+                var properties = doc.RootElement.GetProperty("properties");
+                if (properties.TryGetProperty("sunrise", out var rise) && rise.TryGetProperty("time", out var riseTime) && riseTime.ValueKind == JsonValueKind.String)
+                    weather.Sunrise = DateTimeOffset.Parse(riseTime.GetString(), CultureInfo.InvariantCulture).LocalDateTime;
+                if (properties.TryGetProperty("sunset", out var set) && set.TryGetProperty("time", out var setTime) && setTime.ValueKind == JsonValueKind.String)
+                    weather.Sunset = DateTimeOffset.Parse(setTime.GetString(), CultureInfo.InvariantCulture).LocalDateTime;
+            }
+            catch { }
+        }
+
+        private static TimeSpan MinimumRefreshInterval(double lat, double lon)
+        {
+            bool nordic = (lat >= 54 && lat <= 72 && lon >= 4 && lon <= 32) || (lat >= 63 && lat <= 67 && lon >= -25 && lon <= -13);
+            return TimeSpan.FromMinutes(nordic ? 30 : 180);
+        }
+
+        private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 
         private static bool IsSnow(int code) => code is 71 or 73 or 75 or 77 or 85 or 86;
 

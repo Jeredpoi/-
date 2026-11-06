@@ -490,7 +490,7 @@
                                 <Button Grid.Column="1" Style="{StaticResource Primary}" Content="Найти" Margin="8,0,0,0" Padding="16,8" Click="OnCity"/>
                             </Grid>
                             <TextBlock x:Name="CityStatus" Style="{StaticResource RowNote}"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Данные Open-Meteo, личный API-ключ не нужен. Предупреждение о снеге строится по почасовому прогнозу."/>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Прогноз MET Norway. Снег и осадки определяются по почасовым данным; обновление учитывает лимиты сервиса."/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

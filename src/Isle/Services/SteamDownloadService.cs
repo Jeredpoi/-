@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using System.Net.NetworkInformation;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -21,8 +22,10 @@ namespace Isle.Services
         public ImageSource Icon { get; init; }
         public string FolderPath { get; init; }
         public bool IsPaused { get; init; }
-        public string ProgressText => (int)Math.Round(Progress * 100) + "%";
-        public string SpeedText => BytesPerSecond > 0 ? FormatBytes(BytesPerSecond) + "/с" : "";
+        public bool IsEstimatedSpeed { get; init; }
+        // Steam presents completed percent as an integer floor, so don't round 10.6% up to 11%.
+        public string ProgressText => (int)Math.Floor(Math.Clamp(Progress, 0, 1) * 100) + "%";
+        public string SpeedText => BytesPerSecond > 0 ? (IsEstimatedSpeed ? "~" : "") + FormatBytes(BytesPerSecond) + "/с" : "";
         public string EtaText => Remaining.HasValue ? "~" + FormatTime(Remaining.Value) : "";
 
         private static string FormatBytes(double value) => value >= 1048576
@@ -46,8 +49,10 @@ namespace Isle.Services
         private static readonly Dictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<int, (long Bytes, DateTime At, double Rate)> DownloadSamples = new();
+        private static readonly Dictionary<string, (long Bytes, DateTime At)> NetworkSamples = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<int> ObservedActive = new();
         private static readonly ConcurrentQueue<SteamDownload> Completed = new();
+        private static readonly ConcurrentQueue<SteamDownload> Paused = new();
 
         private sealed class AppState
         {
@@ -72,7 +77,20 @@ namespace Isle.Services
             return Completed.TryDequeue(out var download) ? download : null;
         }
 
-        public static SteamDownload ReadCurrent() => ReadCurrent(FindSteamRoot(), DateTime.Now);
+        public static SteamDownload TakePaused()
+        {
+            return Paused.TryDequeue(out var download) ? download : null;
+        }
+
+        public static SteamDownload ReadCurrent()
+        {
+            try
+            {
+                if (System.Diagnostics.Process.GetProcessesByName("steam").Length == 0) return null;
+            }
+            catch { return null; }
+            return ReadCurrent(FindSteamRoot(), DateTime.Now);
+        }
 
         internal static SteamDownload ReadCurrent(string root, DateTime now)
         {
@@ -164,7 +182,23 @@ namespace Isle.Services
                 foreach (var state in states.Values)
                 {
                     if (state.Active && !state.Paused && !state.Cancelled) ObservedActive.Add(state.Id);
-                    else if (state.Paused || state.Cancelled) ObservedActive.Remove(state.Id);
+                    else if (state.Paused)
+                    {
+                        if (ObservedActive.Remove(state.Id))
+                        {
+                            var paused = ReadManifestProgress(root, state.Id);
+                            long done = paused?.Staged ?? 0, total = paused?.StageTotal ?? 0;
+                            Paused.Enqueue(new SteamDownload
+                            {
+                                Name = !string.IsNullOrWhiteSpace(paused?.Name) ? paused.Name : FindAppName(root, state.Id) ?? "Steam · App " + state.Id,
+                                Progress = total > 0 ? Math.Clamp((double)done / total, 0, 1) : 0,
+                                Icon = FindAppIcon(root, state.Id),
+                                FolderPath = paused == null ? null : GetInstallFolder(paused),
+                                IsPaused = true
+                            });
+                        }
+                    }
+                    else if (state.Cancelled) ObservedActive.Remove(state.Id);
                     else if (state.Finished && ObservedActive.Remove(state.Id))
                     {
                         var finished = ReadManifestProgress(root, state.Id);
@@ -178,21 +212,30 @@ namespace Isle.Services
                     }
                 }
 
-                var current = states.Values.Where(x => (x.Active || x.Paused) && !x.Cancelled && !x.Finished)
+                var current = states.Values.Where(x => x.Active && !x.Paused && !x.Cancelled && !x.Finished)
                     .OrderByDescending(x => x.Updated).FirstOrDefault();
-                if (current == null || current.Updated == DateTime.MinValue || now - current.Updated > TimeSpan.FromMinutes(10)) return null;
+                if (current == null || current.Updated == DateTime.MinValue) return null;
                 var samples = rates.Where(x => x.At >= current.StartedAt && x.At <= now).OrderBy(x => x.At).ToList();
                 var manifest = ReadManifestProgress(root, current.Id);
                 var rateBytes = !current.Paused ? GetManifestRate(current.Id, manifest?.Downloaded ?? 0, now) : 0;
-                if (rateBytes <= 0 && !current.Paused && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(15))
+                bool estimatedSpeed = false;
+                if (rateBytes <= 0 && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90))
+                {
                     rateBytes = samples[^1].BytesPerSecond;
-                var useStage = current.Paused || current.Staging || (!current.Downloading && manifest?.Staged > 0);
+                    estimatedSpeed = rateBytes > 0;
+                }
+                if (rateBytes <= 0 && current.Downloading)
+                {
+                    rateBytes = GetSystemReceiveRate(now);
+                    estimatedSpeed = rateBytes > 0;
+                }
+                var useStage = current.Staging || (!current.Downloading && manifest?.Staged > 0);
                 long progressDone = useStage ? manifest?.Staged ?? 0 : manifest?.Downloaded ?? current.Done;
                 long progressTotal = useStage ? manifest?.StageTotal ?? 0 : manifest?.DownloadTotal ?? current.Total;
                 var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
                 var remainingBytes = Math.Max(0, progressTotal - progressDone);
                 var downloadRemaining = Math.Max(0, (manifest?.DownloadTotal ?? current.Total) - (manifest?.Downloaded ?? current.Done));
-                var remaining = rateBytes > 0 && !current.Paused
+                var remaining = rateBytes > 0 && (!useStage || downloadRemaining > 0)
                     ? TimeSpan.FromSeconds((useStage ? downloadRemaining : remainingBytes) / rateBytes)
                     : (TimeSpan?)null;
                 return new SteamDownload
@@ -200,10 +243,11 @@ namespace Isle.Services
                     Name = !string.IsNullOrWhiteSpace(manifest?.Name) ? manifest.Name : FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
                     Progress = progress,
                     BytesPerSecond = rateBytes,
+                    IsEstimatedSpeed = estimatedSpeed,
                     Remaining = remaining,
                     Icon = FindAppIcon(root, current.Id),
                     FolderPath = manifest == null ? null : GetInstallFolder(manifest),
-                    IsPaused = current.Paused
+                    IsPaused = false
                 };
             }
             catch { return null; }
@@ -319,6 +363,29 @@ namespace Isle.Services
             }
             DownloadSamples[appId] = (downloaded, now, 0);
             return 0;
+        }
+
+        /// <summary>При отсутствии свежей Steam-выборки оценивает входящий трафик активного скачивания по сетевым счётчикам Windows.</summary>
+        private static double GetSystemReceiveRate(DateTime now)
+        {
+            double bestRate = 0;
+            try
+            {
+                foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (network.OperationalStatus != OperationalStatus.Up || network.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    long bytes = network.GetIPStatistics().BytesReceived;
+                    if (NetworkSamples.TryGetValue(network.Id, out var previous))
+                    {
+                        double seconds = (now - previous.At).TotalSeconds;
+                        if (bytes >= previous.Bytes && seconds >= 0.5 && seconds <= 15)
+                            bestRate = Math.Max(bestRate, (bytes - previous.Bytes) / seconds);
+                    }
+                    NetworkSamples[network.Id] = (bytes, now);
+                }
+            }
+            catch { return 0; }
+            return bestRate;
         }
 
         private static ImageSource FindAppIcon(string root, int appId)
