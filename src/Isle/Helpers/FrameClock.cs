@@ -57,7 +57,11 @@ namespace Isle.Helpers
                 foreach (Action<double> handler in handlers)
                 {
                     try { handler(dt); }
-                    catch (Exception ex) { App.Trace("ошибка кадра анимации: " + ex.Message); }
+                    catch (Exception ex)
+                    {
+                        App.Trace("анимация отключена после ошибки кадра: " + ex.Message);
+                        Tick -= handler;
+                    }
                 }
             };
         }
