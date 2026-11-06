@@ -27,6 +27,7 @@ namespace Isle
         private readonly List<int> _registeredHotkeys = new();
         private readonly Dictionary<string, FrameworkElement> _views = new();
         private readonly Queue<Toast> _toasts = new();
+        private Helpers.Character[] _characters;
         private Toast _currentToast;
         private readonly DispatcherTimer _toastTimer = new();
         private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -56,6 +57,7 @@ namespace Isle
         public MainWindow()
         {
             InitializeComponent();
+            _characters = new[] { Buddy, BuddyMedia, BuddyTimer };
             // пока видна подсказка — не поднимаем остров поверх неё (иначе она «уходит за чёлку»)
             AddHandler(ToolTipService.ToolTipOpeningEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.Now.AddSeconds(8)), true);
             AddHandler(ToolTipService.ToolTipClosingEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.MinValue), true);
@@ -1039,7 +1041,7 @@ namespace Isle
             brush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0x5A, 0x14, 0x18), Color.FromRgb(0x2A, 0x2A, 0x30), TimeSpan.FromMilliseconds(520))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
             ToastIcon.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(260)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
-            foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) b.Mood = Helpers.Mood.Attention;
+        foreach (var b in _characters) b.Mood = Helpers.Mood.Attention;
         }
 
         private void StopAlarmPulse()
@@ -1565,7 +1567,8 @@ namespace Isle
             else if (AppHost.Spectrum.Running && ++_specIdle > 60) AppHost.Spectrum.Stop();
             Edge.Active = State != IslandState.Expanded && !_oledHidden;
             Helpers.FrameClock.Hidden = _oledHidden; // спрятанный остров не рисуем — экономим процессор
-            Edge.Away = IdleTime() > TimeSpan.FromMinutes(2);
+            var idle = IdleTime();
+            Edge.Away = idle > TimeSpan.FromMinutes(2);
             Edge.Raining = AppHost.Weather != null && (AppHost.Weather.Code >= 51 && AppHost.Weather.Code <= 67 || AppHost.Weather.Code >= 80);
 
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
@@ -1585,7 +1588,6 @@ namespace Isle
                 }
                 else if (playing) beat = AppHost.Audio?.Peak ?? 0;
                 bool snowing = AppHost.Weather != null && (AppHost.Weather.Code >= 71 && AppHost.Weather.Code <= 77 || AppHost.Weather.Code == 85 || AppHost.Weather.Code == 86);
-                var idle = IdleTime();
                 UpdateWorking(idle);
                 // ночью (23:00–6:00) Клоди хочет спать: засыпает уже через минуту без тебя, а пока ты здесь — зевает
                 int hour = DateTime.Now.Hour;
@@ -1598,7 +1600,7 @@ namespace Isle
                     : night ? Helpers.Mood.Drowsy
                     : Helpers.Mood.Idle;
                 var outfit = OutfitForWeather();
-                foreach (var b in new[] { Buddy, BuddyMedia, BuddyTimer }) { b.Beat = beat; b.Bpm = bpm; b.Energy = energy; b.Mood = mood; b.Outfit = outfit; b.Night = night; b.Snowing = snowing; }
+                foreach (var b in _characters) { b.Beat = beat; b.Bpm = bpm; b.Energy = energy; b.Mood = mood; b.Outfit = outfit; b.Night = night; b.Snowing = snowing; }
             }
             if (MediaRow.Visibility == Visibility.Visible && CollapsedView.Visibility == Visibility.Visible)
             {

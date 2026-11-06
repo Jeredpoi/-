@@ -16,6 +16,15 @@ namespace Isle.Helpers
         private static double _last;
         private static int _subscribers;
         private static event Action<double> _tick;
+        private static Action<double>[] _handlers = Array.Empty<Action<double>>();
+
+        private static void RefreshHandlers()
+        {
+            var invocationList = _tick?.GetInvocationList();
+            _handlers = invocationList == null
+                ? Array.Empty<Action<double>>()
+                : Array.ConvertAll(invocationList, handler => (Action<double>)handler);
+        }
 
         /// <summary>Остров спрятан (OLED) — рисовать незачем, анимации стоят.</summary>
         public static bool Hidden { get; set; }
@@ -30,6 +39,7 @@ namespace Isle.Helpers
                 _tick += value;
                 int added = (_tick?.GetInvocationList().Length ?? 0) - before;
                 if (added <= 0) return;
+                RefreshHandlers();
                 _subscribers += added;
                 if (_subscribers == added) { _last = Watch.Elapsed.TotalSeconds; Timer.Start(); }
             }
@@ -40,6 +50,7 @@ namespace Isle.Helpers
                 _tick -= value;
                 int removed = before - (_tick?.GetInvocationList().Length ?? 0);
                 if (removed <= 0) return;
+                RefreshHandlers();
                 _subscribers = Math.Max(0, _subscribers - removed);
                 if (_subscribers == 0) Timer.Stop();
             }
@@ -52,8 +63,7 @@ namespace Isle.Helpers
                 double now = Watch.Elapsed.TotalSeconds;
                 double dt = Math.Clamp(now - _last, 0, 0.1);
                 _last = now;
-                var handlers = _tick?.GetInvocationList();
-                if (handlers == null) return;
+                var handlers = _handlers;
                 foreach (Action<double> handler in handlers)
                 {
                     try { handler(dt); }
