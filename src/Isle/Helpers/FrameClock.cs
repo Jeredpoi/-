@@ -23,8 +23,26 @@ namespace Isle.Helpers
         /// <summary>Подписка: в обработчик приходит время кадра в секундах (не больше 0,1 — после зависаний без скачков).</summary>
         public static event Action<double> Tick
         {
-            add { _tick += value; if (++_subscribers == 1) { _last = Watch.Elapsed.TotalSeconds; Timer.Start(); } }
-            remove { _tick -= value; if (--_subscribers <= 0) { _subscribers = 0; Timer.Stop(); } }
+            add
+            {
+                if (value == null) return;
+                int before = _tick?.GetInvocationList().Length ?? 0;
+                _tick += value;
+                int added = (_tick?.GetInvocationList().Length ?? 0) - before;
+                if (added <= 0) return;
+                _subscribers += added;
+                if (_subscribers == added) { _last = Watch.Elapsed.TotalSeconds; Timer.Start(); }
+            }
+            remove
+            {
+                if (value == null) return;
+                int before = _tick?.GetInvocationList().Length ?? 0;
+                _tick -= value;
+                int removed = before - (_tick?.GetInvocationList().Length ?? 0);
+                if (removed <= 0) return;
+                _subscribers = Math.Max(0, _subscribers - removed);
+                if (_subscribers == 0) Timer.Stop();
+            }
         }
 
         static FrameClock()
@@ -34,7 +52,13 @@ namespace Isle.Helpers
                 double now = Watch.Elapsed.TotalSeconds;
                 double dt = Math.Clamp(now - _last, 0, 0.1);
                 _last = now;
-                _tick?.Invoke(dt);
+                var handlers = _tick?.GetInvocationList();
+                if (handlers == null) return;
+                foreach (Action<double> handler in handlers)
+                {
+                    try { handler(dt); }
+                    catch (Exception ex) { App.Trace("ошибка кадра анимации: " + ex.Message); }
+                }
             };
         }
     }
