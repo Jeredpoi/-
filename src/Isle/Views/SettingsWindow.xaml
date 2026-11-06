@@ -490,7 +490,7 @@
                                 <Button Grid.Column="1" Style="{StaticResource Primary}" Content="Найти" Margin="8,0,0,0" Padding="16,8" Click="OnCity"/>
                             </Grid>
                             <TextBlock x:Name="CityStatus" Style="{StaticResource RowNote}"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Данные Open-Meteo — бесплатно и без ключа."/>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Данные Open-Meteo, личный API-ключ не нужен. Предупреждение о снеге строится по почасовому прогнозу."/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -570,6 +570,7 @@
                 <!-- ============ КЛАВИШИ ============ -->
                 <StackPanel x:Name="SecKeys" Visibility="Collapsed">
                     <TextBlock Style="{StaticResource H1}" Text="Клавиши"/>
+                    <TextBlock Style="{StaticResource RowNote}" Margin="0,0,0,10" Text="Нажми на сочетание, затем введи новое. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если глобальную комбинацию заняла Windows или другое приложение."/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,8" x:Name="KeysList"/>
                     </Border>

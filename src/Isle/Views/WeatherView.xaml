@@ -22,6 +22,7 @@
                     <TextBlock x:Name="Temp" Text="—" FontSize="50" FontWeight="SemiBold" Margin="10,0,0,0"/>
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium"/>
+                <TextBlock DockPanel.Dock="Top" x:Name="Snow" FontSize="11" Foreground="{DynamicResource Accent}" Margin="0,3,0,0"/>
                 <TextBlock DockPanel.Dock="Top" x:Name="Feels" FontSize="11" Foreground="#A1A1AB" Margin="0,2,0,0"/>
                 <TextBlock DockPanel.Dock="Bottom" x:Name="Sun" FontSize="11" Foreground="#A1A1AB" Margin="0,8,0,0"/>
                 <UniformGrid DockPanel.Dock="Bottom" Columns="3" VerticalAlignment="Bottom">

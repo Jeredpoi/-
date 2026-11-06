@@ -109,6 +109,10 @@
                                 <TextBlock Text="Таймер" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="7,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock x:Name="MiniTimer" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                            <Button x:Name="TimerCancel" HorizontalAlignment="Right" Width="24" Height="24" Padding="0" Margin="0,0,56,0"
+                                    Style="{StaticResource Ghost}" Click="OnTimerCancel" ToolTip="Отменить таймер" Visibility="Collapsed">
+                                <h:Icon Kind="Close" Width="11" Height="11" Foreground="{DynamicResource Muted}"/>
+                            </Button>
                         </Grid>
 
                         <!-- всплывашка -->
@@ -121,16 +125,27 @@
                                 <Grid>
                                     <Image x:Name="ToastImage" Stretch="UniformToFill"/>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
+                                    <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
+                                    <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>
                                 </Grid>
                             </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
-                                <TextBlock x:Name="ToastTitle" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="ToastSub" FontSize="12" Foreground="#B9B9C3" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                                <Grid x:Name="ToastBar" Height="4" Margin="0,4,0,0" Visibility="Collapsed">
+                            <Grid Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="ToastTitle" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ToastSpeed" Grid.Column="1" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="10,0,0,0"/>
+                                </Grid>
+                                <Grid Grid.Row="1" Margin="0,2,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="ToastSub" FontSize="12" Foreground="#B9B9C3" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="#B9B9C3" Margin="10,0,0,0"/>
+                                </Grid>
+                                <Grid x:Name="ToastBar" Grid.Row="2" Height="4" Margin="0,4,0,0" Visibility="Collapsed">
                                     <Border CornerRadius="2" Background="{StaticResource Track}"/>
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
                                 </Grid>
-                            </StackPanel>
+                            </Grid>
                         </Grid>
                     </Grid>
 

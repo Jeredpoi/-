@@ -36,6 +36,9 @@ namespace Isle
 
             if (SwitchToInstalledCopy()) { Shutdown(); return; }
 
+            try { SystemControls.RepairAutostartPath(); }
+            catch (Exception ex) { Log("autostart repair: " + ex.Message); }
+
             DispatcherUnhandledException += OnError;
             AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject?.ToString());
             base.OnStartup(e);

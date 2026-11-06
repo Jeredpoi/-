@@ -30,6 +30,7 @@ namespace Isle.Views
             Glyph.Text = w.Glyph;
             Temp.Text = Math.Round(w.Temp) + "°";
             Desc.Text = w.Description;
+            Snow.Text = w.SnowForecast;
             Feels.Text = "Ощущается как " + Math.Round(w.Feels) + "° · " + Math.Round(w.TodayMin) + "°…" + Math.Round(w.TodayMax) + "°";
             Wind.Text = w.Wind.ToString("0.#", CultureInfo.CurrentCulture) + " м/с " + w.WindFrom;
             Hum.Text = w.Humidity + "%";

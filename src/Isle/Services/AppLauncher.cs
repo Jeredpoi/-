@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Microsoft.Win32;
+using Isle.Native;
 
 namespace Isle.Services
 {
@@ -31,7 +33,8 @@ namespace Isle.Services
             ["спотифай"] = "spotify", ["spotify"] = "spotify", ["стим"] = "steam", ["steam"] = "steam",
             ["хром"] = "chrome", ["chrome"] = "chrome", ["гугл хром"] = "chrome", ["edge"] = "msedge", ["эдж"] = "msedge",
             ["яндекс"] = "browser", ["яндекс браузер"] = "browser", ["firefox"] = "firefox", ["фаерфокс"] = "firefox",
-            ["вконтакте"] = "https://vk.com", ["вк"] = "https://vk.com", ["ютуб"] = "https://youtube.com", ["youtube"] = "https://youtube.com",
+            ["вконтакте"] = "https://vk.com", ["вк"] = "https://vk.com", ["vk"] = "https://vk.com", ["vk.com"] = "https://vk.com",
+            ["ютуб"] = "https://youtube.com", ["youtube"] = "https://youtube.com",
         };
 
         /// <summary>Специальные места установки, которые не всегда видны через меню «Пуск».</summary>
@@ -53,6 +56,10 @@ namespace Isle.Services
             what = (what ?? "").Trim().Trim('"', '«', '»', '.');
             if (what.Length == 0) return false;
             var key = Aliases.TryGetValue(what, out var alias) ? alias : what;
+
+            // If VK is already the active tab in a browser window, switch to that window
+            // instead of asking the default browser to create another tab.
+            if ((key.Equals("https://vk.com", StringComparison.OrdinalIgnoreCase) || key.Equals("http://vk.com", StringComparison.OrdinalIgnoreCase)) && FocusExistingVk()) return true;
 
             // сайты и протоколы
             if (key.Contains("://") || (key.EndsWith(":") && !key.Contains('\\')) || key.StartsWith("ms-"))
@@ -91,7 +98,81 @@ namespace Isle.Services
             // ярлыки меню «Пуск»
             var lnk = FindShortcut(name);
             if (lnk != null) return lnk;
+            var uninstall = FindInstalledApplication(name);
+            if (uninstall != null) return uninstall;
             return null;
+        }
+
+        private static string FindInstalledApplication(string name)
+        {
+            var needles = new List<string> { name };
+            if (name.Equals("obs", StringComparison.OrdinalIgnoreCase))
+                needles.AddRange(new[] { "obs studio", "open broadcaster software" });
+            foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                try
+                {
+                    using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                    using var uninstall = baseKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall");
+                    foreach (var subName in uninstall?.GetSubKeyNames() ?? Array.Empty<string>())
+                    {
+                        using var app = uninstall.OpenSubKey(subName);
+                        var display = app?.GetValue("DisplayName") as string;
+                        if (string.IsNullOrWhiteSpace(display) || !needles.Any(n => display.Contains(n, StringComparison.OrdinalIgnoreCase))) continue;
+                        var icon = app.GetValue("DisplayIcon") as string;
+                        if (!string.IsNullOrWhiteSpace(icon))
+                        {
+                            icon = Environment.ExpandEnvironmentVariables(icon.Trim().Trim('"'));
+                            int comma = icon.LastIndexOf(',');
+                            if (comma > 2 && int.TryParse(icon.Substring(comma + 1), out _)) icon = icon.Substring(0, comma).Trim('"');
+                            if (File.Exists(icon)) return icon;
+                        }
+                        var install = app.GetValue("InstallLocation") as string;
+                        if (string.IsNullOrWhiteSpace(install) || !Directory.Exists(install)) continue;
+                        var direct = Directory.EnumerateFiles(install, "*.exe", SearchOption.TopDirectoryOnly)
+                            .FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Contains(name, StringComparison.OrdinalIgnoreCase));
+                        if (direct != null) return direct;
+                        // OBS has a stable subfolder layout even when the user selected a custom root.
+                        if (name.Equals("obs", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var obs = Directory.EnumerateFiles(install, "obs64.exe", SearchOption.AllDirectories).FirstOrDefault();
+                            if (obs != null) return obs;
+                        }
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private static bool FocusExistingVk()
+        {
+            var browsers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "chrome", "msedge", "firefox", "opera", "opera_gx", "browser", "yandex", "vivaldi" };
+            IntPtr found = IntPtr.Zero;
+            Win32.EnumWindows((hwnd, _) =>
+            {
+                if (!Win32.IsWindowVisible(hwnd)) return true;
+                Win32.GetWindowThreadProcessId(hwnd, out uint pid);
+                try
+                {
+                    var process = Process.GetProcessById((int)pid);
+                    if (!browsers.Contains(process.ProcessName)) return true;
+                    var title = new StringBuilder(512);
+                    Win32.GetWindowText(hwnd, title, title.Capacity);
+                    var text = title.ToString();
+                    if (text.Contains("ВКонтакте", StringComparison.OrdinalIgnoreCase) || text.Contains("vk.com", StringComparison.OrdinalIgnoreCase)
+                        || text.StartsWith("VK", StringComparison.OrdinalIgnoreCase) || text.Contains(" - VK", StringComparison.OrdinalIgnoreCase))
+                    { found = hwnd; return false; }
+                }
+                catch { }
+                return true;
+            }, IntPtr.Zero);
+            if (found == IntPtr.Zero) return false;
+            Win32.ShowWindow(found, 9);
+            Win32.ForceForeground(found);
+            return Win32.GetForegroundWindow() == found;
         }
 
         private static string FindShortcut(string name)

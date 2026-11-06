@@ -23,6 +23,7 @@ namespace Isle
 
         private HwndSource _src;
         private IntPtr _hwnd;
+        private readonly List<int> _registeredHotkeys = new();
         private readonly Dictionary<string, FrameworkElement> _views = new();
         private readonly Queue<Toast> _toasts = new();
         private Toast _currentToast;
@@ -32,6 +33,7 @@ namespace Isle
         private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
+        private readonly DispatcherTimer _steamTimer = new() { Interval = TimeSpan.FromSeconds(2) };
         private readonly Random _rnd = new();
         private DateTime _nextBlink = DateTime.Now.AddSeconds(3);
         private bool _oledHidden;
@@ -137,7 +139,7 @@ namespace Isle
                 _hoverGrown = false;
                 if (State == IslandState.Collapsed) ShowCollapsedContent(false);
             };
-            _hoverOpen.Tick += (_, __) => { _hoverOpen.Stop(); if (State != IslandState.Expanded && Island.IsMouseOver) Expand(null); };
+            _hoverOpen.Tick += (_, __) => { _hoverOpen.Stop(); if (State != IslandState.Expanded && Island.IsMouseOver && !TimerRow.IsMouseOver) Expand(null); };
             _leaveClose.Tick += (_, __) =>
             {
                 if (CursorNearIsland(14) || SuppressAutoCollapse || CursorOverOurPopup()) return; // ещё рядом или в нашем меню — ждём
@@ -146,6 +148,7 @@ namespace Isle
             };
             _oledHide.Tick += (_, __) => { _oledHide.Stop(); TryOledHide(); };
             _weatherTimer.Tick += async (_, __) => await RefreshWeather();
+            _steamTimer.Tick += (_, __) => RefreshSteamDownload();
 
             Island.MouseEnter += (_, __) =>
             {
@@ -154,7 +157,7 @@ namespace Isle
                 _ungrow.Stop();
                 if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
                 bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
-                if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer) _hoverOpen.Start();
+                if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer && !TimerRow.IsMouseOver) _hoverOpen.Start();
             };
             Island.MouseLeave += (_, __) =>
             {
@@ -188,7 +191,7 @@ namespace Isle
             KeyDown += (_, e) =>
             {
                 if (e.Key == Key.Escape && AlarmService.Ringing) { AlarmService.Stop(); e.Handled = true; return; }
-                if (e.Key == Key.Escape && State == IslandState.Expanded) { Collapse(); e.Handled = true; }
+                if (MatchesCollapseHotkey(e) && State == IslandState.Expanded) { Collapse(); e.Handled = true; }
             };
             // таймер в свёрнутой чёлке: правый клик — отменить, средний — пауза/продолжить
             TimerRow.MouseRightButtonUp += (_, e) =>
@@ -204,7 +207,7 @@ namespace Isle
                 e.Handled = true;
             };
             TimerRow.Background = Brushes.Transparent; // чтобы клик ловился по всей строке
-            TimerRow.ToolTip = "Клик — открыть · правый клик — отменить таймер · колесо — пауза";
+            TimerRow.ToolTip = "Клик — открыть · кнопка × — отменить · средняя кнопка мыши — пауза";
 
             Island.SizeChanged += (_, __) =>
             {
@@ -235,6 +238,8 @@ namespace Isle
                 await AppHost.Media.InitAsync();
                 _ = AppHost.Notifications.StartAsync();
                 _weatherTimer.Start();
+                _steamTimer.Start();
+                RefreshSteamDownload();
                 await RefreshWeather();
                 ApplyOledMode();
                 UpdateService.StartAutoCheck();
@@ -273,17 +278,109 @@ namespace Isle
             ApplyCaptureVisibility();
             AppHost.Clipboard.Attach(_src);
 
-            Win32.RegisterHotKey(_hwnd, HkToggle, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x20);   // Ctrl+Alt+Space
-            Win32.RegisterHotKey(_hwnd, HkCommand, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x4B);  // Ctrl+Alt+K
-            Win32.RegisterHotKey(_hwnd, HkClipboard, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x56); // Ctrl+Alt+V
-            Win32.RegisterHotKey(_hwnd, HkShot, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x53);     // Ctrl+Alt+S
-            Win32.RegisterHotKey(_hwnd, HkVoice, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x44);    // Ctrl+Alt+D
-            Win32.RegisterHotKey(_hwnd, HkVoiceCmd, Win32.MOD_CONTROL | Win32.MOD_ALT | Win32.MOD_NOREPEAT, 0x41); // Ctrl+Alt+A
+            ApplyHotkeys();
+        }
+
+        private sealed record HotkeySpec(int Id, string Name, string Value);
+
+        private static List<HotkeySpec> HotkeySpecs(AppSettings s) => new()
+        {
+            new(HkToggle, "island", s.Hotkey), new(HkCommand, "command", s.HotkeyCommand),
+            new(HkClipboard, "clipboard", s.HotkeyClipboard), new(HkShot, "screenshot", s.HotkeyScreenshot),
+            new(HkVoice, "voice", s.HotkeyVoice), new(HkVoiceCmd, "voiceCommand", s.HotkeyVoiceCommand),
+            new(0, "collapse", s.HotkeyCollapse)
+        };
+
+        private void ApplyHotkeys()
+        {
+            foreach (var id in _registeredHotkeys) Win32.UnregisterHotKey(_hwnd, id);
+            _registeredHotkeys.Clear();
+            foreach (var spec in HotkeySpecs(AppSettings.Current))
+                if (spec.Id != 0 && TryParseHotkey(spec.Value, out uint modifiers, out uint key) && Win32.RegisterHotKey(_hwnd, spec.Id, modifiers | Win32.MOD_NOREPEAT, key))
+                    _registeredHotkeys.Add(spec.Id);
+        }
+
+        public bool TrySetHotkey(string name, string gesture, out string error)
+        {
+            error = null;
+            if (!TryParseHotkey(gesture, out uint mods, out uint key, name == "collapse"))
+            { error = name == "collapse" ? "Выбери клавишу или сочетание клавиш." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
+            var settings = AppSettings.Current;
+            var bindings = HotkeySpecs(settings);
+            foreach (var b in bindings.Where(b => b.Name != name))
+                if (TryParseHotkey(b.Value, out uint otherMods, out uint otherKey, b.Name == "collapse") && mods == otherMods && key == otherKey)
+                { error = "Это сочетание уже назначено: " + b.Value; return false; }
+
+            var spec = bindings.FirstOrDefault(b => b.Name == name);
+            if (spec == null) { error = "Неизвестная команда."; return false; }
+            string old = spec.Value;
+            SetHotkeyValue(settings, name, gesture);
+            if (spec.Id == 0) { settings.Save(); return true; }
+            ApplyHotkeys();
+            if (!_registeredHotkeys.Contains(spec.Id))
+            {
+                SetHotkeyValue(settings, name, old);
+                ApplyHotkeys();
+                error = "Windows не смог зарегистрировать это сочетание. Возможно, его заняло другое приложение.";
+                return false;
+            }
+            settings.Save();
+            return true;
+        }
+
+        private static void SetHotkeyValue(AppSettings s, string name, string value)
+        {
+            switch (name)
+            {
+                case "island": s.Hotkey = value; break;
+                case "command": s.HotkeyCommand = value; break;
+                case "clipboard": s.HotkeyClipboard = value; break;
+                case "screenshot": s.HotkeyScreenshot = value; break;
+                case "voice": s.HotkeyVoice = value; break;
+                case "voiceCommand": s.HotkeyVoiceCommand = value; break;
+                case "collapse": s.HotkeyCollapse = value; break;
+            }
+        }
+
+        private static bool TryParseHotkey(string gesture, out uint modifiers, out uint key, bool allowNoModifier = false)
+        {
+            modifiers = 0; key = 0;
+            if (string.IsNullOrWhiteSpace(gesture)) return false;
+            var parts = gesture.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < (allowNoModifier ? 1 : 2)) return false;
+            Key parsed = Key.None;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                switch (parts[i].ToLowerInvariant())
+                {
+                    case "ctrl": case "control": modifiers |= Win32.MOD_CONTROL; continue;
+                    case "alt": modifiers |= Win32.MOD_ALT; continue;
+                    case "shift": modifiers |= Win32.MOD_SHIFT; continue;
+                    case "win": case "windows": modifiers |= Win32.MOD_WIN; continue;
+                }
+                if (parsed != Key.None || !Enum.TryParse(parts[i], true, out parsed) || parsed == Key.None || parsed == Key.System) return false;
+            }
+            if (parsed == Key.None || (!allowNoModifier && modifiers == 0)) return false;
+            key = (uint)KeyInterop.VirtualKeyFromKey(parsed);
+            return key is > 0 and <= 0xFF;
+        }
+
+        private static bool MatchesCollapseHotkey(KeyEventArgs e)
+        {
+            if (!TryParseHotkey(AppSettings.Current.HotkeyCollapse, out uint required, out uint key, true)) return false;
+            var pressed = e.Key == Key.System ? e.SystemKey : e.Key;
+            uint actual = 0;
+            var modifiers = Keyboard.Modifiers;
+            if (modifiers.HasFlag(ModifierKeys.Control)) actual |= Win32.MOD_CONTROL;
+            if (modifiers.HasFlag(ModifierKeys.Alt)) actual |= Win32.MOD_ALT;
+            if (modifiers.HasFlag(ModifierKeys.Shift)) actual |= Win32.MOD_SHIFT;
+            if (modifiers.HasFlag(ModifierKeys.Windows)) actual |= Win32.MOD_WIN;
+            return key == (uint)KeyInterop.VirtualKeyFromKey(pressed) && required == actual;
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            foreach (var id in new[] { HkToggle, HkCommand, HkClipboard, HkShot, HkVoice, HkVoiceCmd }) Win32.UnregisterHotKey(_hwnd, id);
+            foreach (var id in _registeredHotkeys) Win32.UnregisterHotKey(_hwnd, id);
             AppHost.Audio?.Dispose();
             AppHost.Spectrum?.Dispose();
             base.OnClosed(e);
@@ -1022,6 +1119,19 @@ namespace Isle
         {
             if (t.Kind == ToastKind.Alarm && State == IslandState.Expanded && !_pinned) Collapse(); // будильник важнее открытой панели
             if (State == IslandState.Expanded && !t.Important) return;
+            if (_currentToast?.Kind == ToastKind.Download && t.Kind != ToastKind.Download)
+            {
+                if (t.ReplaceKey != null)
+                {
+                    var queued = _toasts.Where(x => x.ReplaceKey != t.ReplaceKey).ToList();
+                    _toasts.Clear();
+                    foreach (var x in queued) _toasts.Enqueue(x);
+                }
+                _toasts.Enqueue(t);
+                _toastTimer.Stop();
+                NextToast();
+                return;
+            }
             if (t.ReplaceKey != null && _currentToast?.ReplaceKey == t.ReplaceKey)
             {
                 RenderToast(t);
@@ -1086,14 +1196,22 @@ namespace Isle
             ToastTitle.Text = t.Title;
             ToastSub.Text = t.Subtitle ?? "";
             ToastSub.Visibility = string.IsNullOrEmpty(t.Subtitle) ? Visibility.Collapsed : Visibility.Visible;
+            ToastSpeed.Text = t.SpeedText ?? "";
+            ToastSpeed.Visibility = string.IsNullOrEmpty(t.SpeedText) ? Visibility.Collapsed : Visibility.Visible;
+            ToastEta.Text = t.EtaText ?? "";
+            ToastEta.Visibility = string.IsNullOrEmpty(t.EtaText) ? Visibility.Collapsed : Visibility.Visible;
             ToastIcon.Data = t.Icon;
             ToastIcon.Foreground = t.Icon == Icons.Pipette ? new SolidColorBrush(t.Accent) : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
             ToastIcon.Visibility = t.Image == null ? Visibility.Visible : Visibility.Collapsed;
-            bool compact = string.IsNullOrEmpty(t.Subtitle) && !t.Progress.HasValue;
+            bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
+            ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
+            ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
+            ToastRing.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
+            bool compact = string.IsNullOrEmpty(t.Subtitle) && string.IsNullOrEmpty(t.SpeedText) && !t.Progress.HasValue;
             ToastIconBox.Width = ToastIconBox.Height = compact ? 26 : 36;
             ToastIconBox.CornerRadius = new CornerRadius(compact ? 13 : 18);
-            ToastBar.Visibility = t.Progress.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
 
             double textLen = Math.Max(t.Title.Length, (t.Subtitle ?? "").Length);
             double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
@@ -1106,6 +1224,45 @@ namespace Isle
             }
             AnimateSize(w, h, 360);
         }
+
+        private static Geometry ProgressArc(double progress, double cx, double cy, double radius)
+        {
+            if (progress <= 0) return Geometry.Empty;
+            progress = Math.Min(progress, 0.9999);
+            double angle = progress * Math.PI * 2;
+            var start = new Point(cx, cy - radius);
+            var end = new Point(cx + radius * Math.Sin(angle), cy - radius * Math.Cos(angle));
+            var figure = new PathFigure { StartPoint = start, IsClosed = false };
+            figure.Segments.Add(new ArcSegment(end, new Size(radius, radius), 0, progress > 0.5, SweepDirection.Clockwise, true));
+            return new PathGeometry(new[] { figure });
+        }
+
+        private void OnTimerCancel(object sender, RoutedEventArgs e)
+        {
+            AppHost.Timer.Reset();
+            ToastBus.Show(new Toast { Title = "Таймер отменён", Icon = Icons.Timer, Duration = TimeSpan.FromSeconds(2) });
+            e.Handled = true;
+        }
+
+        private void RefreshSteamDownload()
+        {
+            var d = SteamDownloadService.ReadCurrent();
+            if (d == null) return;
+            ToastBus.Show(new Toast
+            {
+                Kind = ToastKind.Download,
+                Title = d.Name,
+                Subtitle = d.ProgressText,
+                SpeedText = d.SpeedText,
+                EtaText = d.EtaText,
+                Image = d.Icon,
+                Icon = Icons.Bolt,
+                Progress = d.Progress,
+                ReplaceKey = "steam-download",
+                Duration = TimeSpan.FromSeconds(3)
+            });
+        }
+        private DateTime? _lastSnowAlert;
 
         // ===================== OLED-режим =====================
 
@@ -1198,6 +1355,7 @@ namespace Isle
             {
                 MiniTimer.Text = (AppHost.Timer.Paused ? "пауза · " : "") + TimerService.Format(AppHost.Timer.Left);
                 MediaTimer.Text = (AppHost.Timer.Paused ? "❚❚ " : "") + TimerService.Format(AppHost.Timer.Left);
+                TimerCancel.Visibility = AppHost.Timer.Running || AppHost.Timer.Paused ? Visibility.Visible : Visibility.Collapsed;
             }
             var w = AppHost.Watchers;
             bool showBattery = w != null && w.HasBattery && w.BatteryPercent >= 0;
@@ -1369,7 +1527,14 @@ namespace Isle
             try
             {
                 var s = AppSettings.Current;
-                AppHost.SetWeather(await WeatherService.LoadAsync(s.Latitude, s.Longitude, s.City));
+                var weather = await WeatherService.LoadAsync(s.Latitude, s.Longitude, s.City);
+                AppHost.SetWeather(weather);
+                if (weather.NextSnowAt is DateTime snow && snow > weather.ForecastNow && snow <= weather.ForecastNow.AddHours(1)
+                    && (!_lastSnowAlert.HasValue || _lastSnowAlert.Value != snow))
+                {
+                    _lastSnowAlert = snow;
+                    ToastBus.Show(new Toast { Title = "Снег начнётся около " + snow.ToString("HH:mm"), Subtitle = weather.City, Icon = Icons.Snow, Duration = TimeSpan.FromSeconds(5) });
+                }
             }
             catch (Exception ex) { App.Log("weather: " + ex.Message); }
         }

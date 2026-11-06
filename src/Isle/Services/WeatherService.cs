@@ -7,7 +7,15 @@ using System.Threading.Tasks;
 
 namespace Isle.Services
 {
-    public class HourWeather { public string Time { get; set; } public string Temp { get; set; } public string Icon { get; set; } }
+    public class HourWeather
+    {
+        public string Time { get; set; }
+        public string Temp { get; set; }
+        public string Icon { get; set; }
+        public DateTime At { get; set; }
+        public double Snowfall { get; set; }
+        public int PrecipitationProbability { get; set; }
+    }
 
     public class DayWeather
     {
@@ -33,13 +41,25 @@ namespace Isle.Services
         public int Humidity, Code;
         public bool IsDay = true;
         public DateTime Sunrise, Sunset;
+        public DateTime ForecastNow;
+        public DateTime? NextSnowAt;
+        public string SnowForecast
+        {
+            get
+            {
+                if (!NextSnowAt.HasValue) return "Снег в прогнозе не ожидается";
+                var day = NextSnowAt.Value.Date - ForecastNow.Date;
+                var when = day == TimeSpan.Zero ? "сегодня" : day == TimeSpan.FromDays(1) ? "завтра" : NextSnowAt.Value.ToString("dd.MM");
+                return "Снег ожидается " + when + " около " + NextSnowAt.Value.ToString("HH:mm");
+            }
+        }
         public List<HourWeather> Hours = new();
         public List<DayWeather> Days = new();
         public string Description => WeatherService.Describe(Code);
         public string Glyph => WeatherService.Glyph(Code, IsDay);
     }
 
-    /// <summary>Погода от Open-Meteo — бесплатно и без ключа.</summary>
+    /// <summary>Почасовой прогноз Open-Meteo — без ключа, включая снег и вероятность осадков.</summary>
     public static class WeatherService
     {
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -58,7 +78,7 @@ namespace Isle.Services
             var inv = CultureInfo.InvariantCulture;
             var url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat.ToString(inv) + "&longitude=" + lon.ToString(inv) +
                       "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation,is_day" +
-                      "&hourly=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset" +
+                      "&hourly=temperature_2m,weather_code,is_day,snowfall,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset" +
                       "&wind_speed_unit=ms&timezone=auto&forecast_days=7";
             using var doc = JsonDocument.Parse(await Http.GetStringAsync(url));
             var root = doc.RootElement;
@@ -74,6 +94,7 @@ namespace Isle.Services
                 WindDeg = cur.TryGetProperty("wind_direction_10m", out var wd) && wd.ValueKind == JsonValueKind.Number ? wd.GetDouble() : 0,
                 Precip = cur.GetProperty("precipitation").GetDouble(),
                 IsDay = cur.GetProperty("is_day").GetInt32() == 1,
+                ForecastNow = DateTime.Parse(cur.GetProperty("time").GetString(), inv),
             };
 
             var hourly = root.GetProperty("hourly");
@@ -81,17 +102,27 @@ namespace Isle.Services
             var htemp = hourly.GetProperty("temperature_2m");
             var hcode = hourly.GetProperty("weather_code");
             var hday = hourly.GetProperty("is_day");
-            var nowHour = DateTime.Now;
+            var hsnow = hourly.GetProperty("snowfall");
+            var hprob = hourly.GetProperty("precipitation_probability");
+            var nowHour = w.ForecastNow;
             int added = 0;
-            for (int i = 0; i < ht.GetArrayLength() && added < 8; i++)
+            for (int i = 0; i < ht.GetArrayLength(); i++)
             {
                 var t = DateTime.Parse(ht[i].GetString(), inv);
                 if (t.AddHours(1) <= nowHour) continue;
+                var snow = hsnow[i].GetDouble();
+                var code = hcode[i].GetInt32();
+                var probability = hprob[i].ValueKind == JsonValueKind.Number ? hprob[i].GetInt32() : 0;
+                if (!w.NextSnowAt.HasValue && t > nowHour && (snow > 0 || IsSnow(code))) w.NextSnowAt = t;
+                if (added >= 8) continue;
                 w.Hours.Add(new HourWeather
                 {
                     Time = added == 0 ? "Сейчас" : t.ToString("HH:mm"),
                     Temp = Math.Round(htemp[i].GetDouble()) + "°",
-                    Icon = Glyph(hcode[i].GetInt32(), hday[i].GetInt32() == 1)
+                    Icon = Glyph(code, hday[i].GetInt32() == 1),
+                    At = t,
+                    Snowfall = snow,
+                    PrecipitationProbability = probability
                 });
                 added++;
             }
@@ -130,6 +161,8 @@ namespace Isle.Services
             }
             return w;
         }
+
+        private static bool IsSnow(int code) => code is 71 or 73 or 75 or 77 or 85 or 86;
 
         public static string Describe(int c) => c switch
         {
