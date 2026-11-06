@@ -1211,7 +1211,9 @@ namespace Isle
             ToastEta.Text = t.EtaText ?? "";
             ToastEta.Visibility = string.IsNullOrEmpty(t.EtaText) ? Visibility.Collapsed : Visibility.Visible;
             ToastIcon.Data = t.Icon;
-            ToastIcon.Foreground = t.Icon == Icons.Pipette ? new SolidColorBrush(t.Accent) : (Brush)FindResource("Fg");
+            ToastIcon.Foreground = t.Icon == Icons.Pipette || t.Icon == Icons.Shield
+                ? new SolidColorBrush(t.Accent)
+                : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
             ToastIcon.Visibility = t.Image == null ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
