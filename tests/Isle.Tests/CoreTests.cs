@@ -176,6 +176,35 @@ namespace Isle.Tests
         }
 
         [Fact]
+        public void ActiveUpdateShowsFileUpdatePercentAndLoadsSteamArtworkAndFolder()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var installFolder = Path.Combine(root, "steamapps", "common", "Test Game Folder");
+                Directory.CreateDirectory(installFolder);
+                var artFolder = Path.Combine(root, "appcache", "librarycache", appId.ToString());
+                Directory.CreateDirectory(artFolder);
+                File.WriteAllBytes(Path.Combine(artFolder, "library_header.jpg"), Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII="));
+                var manifestPath = Path.Combine(root, "steamapps", $"appmanifest_{appId}.acf");
+                File.AppendAllText(manifestPath, "");
+                var manifest = File.ReadAllText(manifestPath).Replace("\"name\" \"Test Game\"", "\"name\" \"Test Game\"\n\t\"installdir\" \"Test Game Folder\"");
+                File.WriteAllText(manifestPath, manifest);
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), ActiveLog(appId));
+
+                var download = SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 36, DateTimeKind.Local));
+
+                Assert.NotNull(download);
+                Assert.Equal("16%", download.ProgressText);
+                Assert.NotNull(download.Icon);
+                Assert.Equal(installFolder, download.FolderPath);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
         public void UserCancelledUpdateIsNoLongerShown()
         {
             var appId = 900000 + Random.Shared.Next(1, 99999);

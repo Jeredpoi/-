@@ -1222,6 +1222,7 @@ namespace Isle
             if (t.Progress.HasValue) w = Math.Max(w, 280);
             if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
+            ToastImage.Clip = t.Image == null ? null : new EllipseGeometry(new Point(compact ? 13 : 18, compact ? 13 : 18), compact ? 13 : 18, compact ? 13 : 18);
             if (t.Progress.HasValue)
             {
                 double barW = w - 16 * 2 - 36 - 12;
@@ -1233,7 +1234,10 @@ namespace Isle
         private void OnToastFolder(object sender, RoutedEventArgs e)
         {
             if (ToastFolderButton.Tag is string folder && Directory.Exists(folder))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", folder) { UseShellExecute = true });
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true }); }
+                catch (Exception ex) { App.Trace("не удалось открыть папку игры: " + ex.Message); }
+            }
             e.Handled = true;
         }
 
