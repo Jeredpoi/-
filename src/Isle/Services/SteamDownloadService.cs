@@ -45,6 +45,7 @@ namespace Isle.Services
         private static readonly Regex RateLine = new(@"Current download rate:\s*([\d.,]+)\s*Mbps", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Dictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<int, (long Bytes, DateTime At, double Rate)> DownloadSamples = new();
         private static readonly HashSet<int> ObservedActive = new();
         private static readonly ConcurrentQueue<SteamDownload> Completed = new();
 
@@ -181,14 +182,19 @@ namespace Isle.Services
                     .OrderByDescending(x => x.Updated).FirstOrDefault();
                 if (current == null || current.Updated == DateTime.MinValue || now - current.Updated > TimeSpan.FromMinutes(10)) return null;
                 var samples = rates.Where(x => x.At >= current.StartedAt && x.At <= now).OrderBy(x => x.At).ToList();
-                var rateBytes = !current.Paused && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90) ? samples[^1].BytesPerSecond : 0;
                 var manifest = ReadManifestProgress(root, current.Id);
-                var useStage = current.Paused || (!current.Downloading && current.Staging) || (rateBytes <= 0 && current.Staging);
+                var rateBytes = !current.Paused ? GetManifestRate(current.Id, manifest?.Downloaded ?? 0, now) : 0;
+                if (rateBytes <= 0 && !current.Paused && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(15))
+                    rateBytes = samples[^1].BytesPerSecond;
+                var useStage = current.Paused || current.Staging || (!current.Downloading && manifest?.Staged > 0);
                 long progressDone = useStage ? manifest?.Staged ?? 0 : manifest?.Downloaded ?? current.Done;
                 long progressTotal = useStage ? manifest?.StageTotal ?? 0 : manifest?.DownloadTotal ?? current.Total;
                 var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
                 var remainingBytes = Math.Max(0, progressTotal - progressDone);
-                var remaining = rateBytes > 0 && !useStage ? TimeSpan.FromSeconds(remainingBytes / rateBytes) : (TimeSpan?)null;
+                var downloadRemaining = Math.Max(0, (manifest?.DownloadTotal ?? current.Total) - (manifest?.Downloaded ?? current.Done));
+                var remaining = rateBytes > 0 && !current.Paused
+                    ? TimeSpan.FromSeconds((useStage ? downloadRemaining : remainingBytes) / rateBytes)
+                    : (TimeSpan?)null;
                 return new SteamDownload
                 {
                     Name = !string.IsNullOrWhiteSpace(manifest?.Name) ? manifest.Name : FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
@@ -296,16 +302,36 @@ namespace Isle.Services
             return match.Success && long.TryParse(match.Groups[1].Value, out var value) ? Math.Max(0, value) : 0;
         }
 
+        private static double GetManifestRate(int appId, long downloaded, DateTime now)
+        {
+            if (downloaded <= 0) return 0;
+            if (DownloadSamples.TryGetValue(appId, out var previous))
+            {
+                var elapsed = (now - previous.At).TotalSeconds;
+                if (downloaded > previous.Bytes && elapsed >= 0.5 && elapsed <= 20)
+                {
+                    var rate = (downloaded - previous.Bytes) / elapsed;
+                    DownloadSamples[appId] = (downloaded, now, rate);
+                    return rate;
+                }
+                if (downloaded == previous.Bytes && (now - previous.At).TotalSeconds <= 12)
+                    return previous.Rate;
+            }
+            DownloadSamples[appId] = (downloaded, now, 0);
+            return 0;
+        }
+
         private static ImageSource FindAppIcon(string root, int appId)
         {
             string cacheKey = root + "|" + appId;
             if (IconCache.TryGetValue(cacheKey, out var cached)) return cached;
             foreach (var library in Libraries(root))
             {
-                foreach (var cache in new[] { Path.Combine(library, "steamapps", "librarycache"), Path.Combine(library, "appcache", "librarycache") })
-                foreach (var file in new[] { appId + "_header.jpg", appId + "_library_600x900.jpg", appId + "_logo.png" })
+                var caches = new[] { Path.Combine(library, "steamapps", "librarycache"), Path.Combine(library, "appcache", "librarycache") };
+                var files = new[] { appId + "_header.jpg", appId + "_library_600x900.jpg", appId + "_logo.png", "library_600x900.jpg", "library_header.jpg", "logo.png", "header.jpg" };
+                foreach (var cache in caches)
+                foreach (var path in files.SelectMany(file => new[] { Path.Combine(cache, file), Path.Combine(cache, appId.ToString(CultureInfo.InvariantCulture), file) }))
                 {
-                    var path = Path.Combine(cache, file);
                     if (!File.Exists(path)) continue;
                     try
                     {
