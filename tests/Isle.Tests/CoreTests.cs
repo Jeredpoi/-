@@ -497,6 +497,7 @@ namespace Isle.Tests
         [InlineData("1 сек", 1)]
         [InlineData("90 sec", 90)]
         [InlineData("1:30", 90)]
+        [InlineData("90:00", 5400)]
         [InlineData("2м", 120)]
         [InlineData("1ч 20м", 4800)]
         [InlineData("1.5ч", 5400)]
@@ -506,6 +507,29 @@ namespace Isle.Tests
         [InlineData("")]
         [InlineData("abc")]
         [InlineData("0")]
+        [InlineData("1:90")]
+        [InlineData("1:30:90")]
+        [InlineData("24:00:00")]
+        [InlineData("999999999999999999999:00")]
+        [InlineData("5 bananas")]
         public void Rejects(string text) => Assert.Null(TimerService.ParseDuration(text));
+    }
+
+    public class BrowserDownloadCompletionTests
+    {
+        [Fact]
+        public void QuickDownloadThatFinishedBetweenPollsStillNotifies() =>
+            Assert.True(BrowserDownloadService.ShouldNotifyCompletion(false,
+                new DateTime(2026, 11, 6, 12, 0, 2), new DateTime(2026, 11, 6, 12, 0, 0)));
+
+        [Fact]
+        public void OldHistoryDoesNotLookLikeANewCompletion() =>
+            Assert.False(BrowserDownloadService.ShouldNotifyCompletion(false,
+                new DateTime(2026, 11, 6, 11, 59, 59), new DateTime(2026, 11, 6, 12, 0, 0)));
+
+        [Fact]
+        public void PreviouslyObservedDownloadNotifiesEvenWithoutEndTimestamp() =>
+            Assert.True(BrowserDownloadService.ShouldNotifyCompletion(true, DateTime.MinValue,
+                new DateTime(2026, 11, 6, 12, 0, 0)));
     }
 }

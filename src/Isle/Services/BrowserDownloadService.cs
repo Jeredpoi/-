@@ -44,12 +44,15 @@ namespace Isle.Services
     public static class BrowserDownloadService
     {
         private sealed record Profile(string Browser, string HistoryPath);
-        private sealed record Row(string Key, string Browser, string Path, long Received, long Total, int State, long StartTime);
+        private sealed record Row(string Key, string Browser, string Path, long Received, long Total, int State, long StartTime, long EndTime);
         private sealed record Sample(long Bytes, DateTime At);
 
         private static readonly object Gate = new();
         private static readonly Dictionary<string, Sample> Samples = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, DateTime> ObservedActive = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> NotifiedCompleted = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Queue<string> NotifiedOrder = new();
+        private static readonly DateTime SessionStartedAt = DateTime.Now;
 
         public static BrowserDownloadSnapshot ReadSnapshot()
         {
@@ -72,8 +75,18 @@ namespace Isle.Services
                         }
 
                         Samples.Remove(row.Key);
-                        if (row.State == 1 && ObservedActive.Remove(row.Key)) completed.Add(row);
-                        else ObservedActive.Remove(row.Key);
+                        bool wasObservedActive = ObservedActive.Remove(row.Key);
+                        if (row.State == 1)
+                        {
+                            bool firstSeen = NotifiedCompleted.Add(row.Key);
+                            if (firstSeen)
+                            {
+                                NotifiedOrder.Enqueue(row.Key);
+                                while (NotifiedOrder.Count > 4096) NotifiedCompleted.Remove(NotifiedOrder.Dequeue());
+                            }
+                            if (firstSeen && ShouldNotifyCompletion(wasObservedActive, FromWebKitTime(row.EndTime), SessionStartedAt))
+                                completed.Add(row);
+                        }
                     }
                 }
 
@@ -195,11 +208,12 @@ namespace Isle.Services
                 if (pathColumns.Length == 0) return false;
                 string pathExpression = "COALESCE(" + string.Join(", ", pathColumns.Select(c => "NULLIF(\"" + c + "\", '')")) + ", '')";
                 string startColumn = columns.Contains("start_time") ? "start_time" : "id";
+                string endColumn = columns.Contains("end_time") ? "end_time" : "0";
                 string totalColumn = columns.Contains("total_bytes") ? "total_bytes" : "0";
 
                 using var command = connection.CreateCommand();
                 command.CommandTimeout = 1;
-                command.CommandText = $"SELECT id, {pathExpression}, received_bytes, {totalColumn}, state, {startColumn} FROM downloads ORDER BY id DESC LIMIT 200";
+                command.CommandText = $"SELECT id, {pathExpression}, received_bytes, {totalColumn}, state, {startColumn}, {endColumn} FROM downloads ORDER BY id DESC LIMIT 200";
                 using var result = command.ExecuteReader();
                 while (result.Read())
                 {
@@ -209,8 +223,9 @@ namespace Isle.Services
                     long total = Math.Max(0, ReadLong(result, 3));
                     int state = (int)ReadLong(result, 4);
                     long start = Math.Max(0, ReadLong(result, 5));
+                    long end = Math.Max(0, ReadLong(result, 6));
                     string key = profile.HistoryPath + "|" + id.ToString(CultureInfo.InvariantCulture);
-                    rows.Add(new Row(key, profile.Browser, path, received, total, state, start));
+                    rows.Add(new Row(key, profile.Browser, path, received, total, state, start, end));
                 }
                 return true;
             }
@@ -223,6 +238,9 @@ namespace Isle.Services
             try { return reader.GetInt64(ordinal); }
             catch { return long.TryParse(reader.GetValue(ordinal)?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0; }
         }
+
+        internal static bool ShouldNotifyCompletion(bool wasObservedActive, DateTime completedAt, DateTime sessionStartedAt) =>
+            wasObservedActive || (completedAt != DateTime.MinValue && completedAt >= sessionStartedAt);
 
         private static DateTime FromWebKitTime(long microseconds)
         {
