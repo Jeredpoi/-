@@ -67,7 +67,9 @@ namespace Isle.Views
             bool rain = IsRain(weather.Code) || IsThunder(weather.Code);
             bool cloudy = IsCloudy(weather.Code) || snow || rain;
 
-            if (weather.Code == 0 || weather.Code is 1 or 2)
+            // Open-Meteo uses the same cloud codes for day and night. Only draw
+            // the sun when the forecast explicitly says this is daytime.
+            if (weather.IsDay && (weather.Code == 0 || weather.Code is 1 or 2))
                 AddSun(width, cloudy ? 0.72 : 1.0);
             if (cloudy) AddCloud(width, weather.Code);
             if (snow) AddSnow(width, height);
@@ -91,23 +93,17 @@ namespace Isle.Views
 
         private void AddCloud(double width, int code)
         {
-            var cloud = new Canvas { Width = 130, Height = 64, Opacity = code >= 95 ? 0.52 : 0.7, RenderTransform = new TranslateTransform() };
-            var color = code >= 95 ? Color.FromArgb(150, 0xC6, 0xC8, 0xD9) : Color.FromArgb(176, 0xE6, 0xF1, 0xFA);
-            AddCloudLobe(cloud, 42, 4, 50, 43, color);
-            AddCloudLobe(cloud, 11, 20, 56, 39, color);
-            AddCloudLobe(cloud, 65, 18, 54, 40, color);
-            var baseCloud = new Border { Width = 112, Height = 28, CornerRadius = new CornerRadius(14), Background = new SolidColorBrush(color) };
-            Canvas.SetLeft(baseCloud, 9); Canvas.SetTop(baseCloud, 34); cloud.Children.Add(baseCloud);
+            var color = code >= 95 ? Color.FromRgb(0xC6, 0xC8, 0xD9) : Color.FromRgb(0xE6, 0xF1, 0xFA);
+            // One continuous silhouette avoids visible seams between translucent lobes.
+            var cloud = new System.Windows.Shapes.Path
+            {
+                Width = 130, Height = 64, Opacity = 0.92,
+                Stretch = Stretch.Fill,
+                Fill = new SolidColorBrush(color),
+                Data = Geometry.Parse("M 16,54 C 7,54 2,47 2,39 C 2,31 8,25 16,24 C 19,11 30,4 43,4 C 55,4 64,11 68,22 C 72,18 78,16 84,16 C 97,16 107,25 109,37 C 120,37 128,44 128,53 C 128,61 122,64 113,64 L 17,64 C 8,64 3,60 3,55 Z")
+            };
             Canvas.SetLeft(cloud, Math.Max(8, width - 142)); Canvas.SetTop(cloud, 24);
             WeatherFx.Children.Add(cloud);
-            var drift = new DoubleAnimation(-5, 5, TimeSpan.FromSeconds(7)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
-            ((TranslateTransform)cloud.RenderTransform).BeginAnimation(TranslateTransform.XProperty, drift);
-        }
-
-        private static void AddCloudLobe(Canvas cloud, double x, double y, double w, double h, Color color)
-        {
-            var lobe = new Ellipse { Width = w, Height = h, Fill = new SolidColorBrush(color) };
-            Canvas.SetLeft(lobe, x); Canvas.SetTop(lobe, y); cloud.Children.Add(lobe);
         }
 
         private void AddSnow(double width, double height)
