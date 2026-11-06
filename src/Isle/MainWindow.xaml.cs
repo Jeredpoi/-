@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -34,6 +35,7 @@ namespace Isle
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
         private readonly DispatcherTimer _steamTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+        private bool _downloadPollInProgress;
         private readonly Random _rnd = new();
         private DateTime _nextBlink = DateTime.Now.AddSeconds(3);
         private bool _oledHidden;
@@ -1212,10 +1214,13 @@ namespace Isle
             ToastIconBox.Width = ToastIconBox.Height = compact ? 26 : 36;
             ToastIconBox.CornerRadius = new CornerRadius(compact ? 13 : 18);
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
+            ToastFolderButton.Tag = t.FolderPath;
+            ToastFolderButton.Visibility = !string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath) ? Visibility.Visible : Visibility.Collapsed;
 
             double textLen = Math.Max(t.Title.Length, (t.Subtitle ?? "").Length);
             double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
             if (t.Progress.HasValue) w = Math.Max(w, 280);
+            if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
             if (t.Progress.HasValue)
             {
@@ -1223,6 +1228,13 @@ namespace Isle
                 ToastBarFill.BeginAnimation(WidthProperty, new DoubleAnimation(Math.Clamp(t.Progress.Value, 0, 1) * barW, TimeSpan.FromMilliseconds(160)));
             }
             AnimateSize(w, h, 360);
+        }
+
+        private void OnToastFolder(object sender, RoutedEventArgs e)
+        {
+            if (ToastFolderButton.Tag is string folder && Directory.Exists(folder))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", folder) { UseShellExecute = true });
+            e.Handled = true;
         }
 
         private static Geometry ProgressArc(double progress, double cx, double cy, double radius)
@@ -1246,18 +1258,92 @@ namespace Isle
 
         private void RefreshSteamDownload()
         {
-            var d = SteamDownloadService.ReadCurrent();
-            if (d == null) return;
+            if (_downloadPollInProgress) return;
+            _downloadPollInProgress = true;
+            _ = RefreshDownloadsAsync();
+        }
+
+        private async Task RefreshDownloadsAsync()
+        {
+            try
+            {
+                var result = await Task.Run(() =>
+                {
+                    var steam = SteamDownloadService.ReadCurrent();
+                    var steamCompleted = new List<SteamDownload>();
+                    while (SteamDownloadService.TakeCompleted() is { } completed) steamCompleted.Add(completed);
+                    var browser = BrowserDownloadService.ReadSnapshot();
+                    return (steam, steamCompleted, browser);
+                });
+
+                foreach (var completed in result.steamCompleted)
+                    ToastBus.Show(new Toast
+                    {
+                        Kind = ToastKind.Success,
+                        Title = "Загружено в Steam",
+                        Subtitle = completed.Name,
+                        Image = completed.Icon,
+                        FolderPath = completed.FolderPath,
+                        Icon = Icons.Check,
+                        Important = true,
+                        Duration = TimeSpan.FromSeconds(4)
+                    });
+
+                foreach (var completed in result.browser.Completed)
+                    ToastBus.Show(new Toast
+                    {
+                        Kind = ToastKind.Success,
+                        Title = "Загрузка завершена",
+                        Subtitle = completed.Browser + " · " + completed.FileName,
+                        Icon = Icons.Check,
+                        Important = true,
+                        Duration = TimeSpan.FromSeconds(4)
+                    });
+
+                var steam = result.steam;
+                if (steam is { IsPaused: false })
+                {
+                    ShowSteamDownload(steam);
+                    return;
+                }
+
+                var download = result.browser.Active.FirstOrDefault();
+                if (download != null)
+                {
+                    ToastBus.Show(new Toast
+                    {
+                        Kind = ToastKind.Download,
+                        Title = download.FileName,
+                        Subtitle = download.Browser + " · " + download.ProgressText,
+                        SpeedText = download.SpeedText,
+                        EtaText = download.EtaText,
+                        Icon = Icons.Bolt,
+                        Progress = download.Progress,
+                        ReplaceKey = "browser-download",
+                        Duration = TimeSpan.FromSeconds(3)
+                    });
+                    return;
+                }
+
+                if (steam != null) ShowSteamDownload(steam);
+            }
+            catch (Exception ex) { App.Trace("ошибка отслеживания загрузок: " + ex.Message); }
+            finally { _downloadPollInProgress = false; }
+        }
+
+        private void ShowSteamDownload(SteamDownload download)
+        {
             ToastBus.Show(new Toast
             {
                 Kind = ToastKind.Download,
-                Title = d.Name,
-                Subtitle = d.ProgressText,
-                SpeedText = d.SpeedText,
-                EtaText = d.EtaText,
-                Image = d.Icon,
+                Title = download.Name,
+                Subtitle = (download.IsPaused ? "На паузе · " : "") + download.ProgressText,
+                SpeedText = download.SpeedText,
+                EtaText = download.EtaText,
+                Image = download.Icon,
+                FolderPath = download.FolderPath,
                 Icon = Icons.Bolt,
-                Progress = d.Progress,
+                Progress = download.Progress,
                 ReplaceKey = "steam-download",
                 Duration = TimeSpan.FromSeconds(3)
             });

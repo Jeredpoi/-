@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -18,8 +19,9 @@ namespace Isle.Services
         public double BytesPerSecond { get; init; }
         public TimeSpan? Remaining { get; init; }
         public ImageSource Icon { get; init; }
-        public bool EstimatedProgress { get; init; }
-        public string ProgressText => (EstimatedProgress ? "~" : "") + (int)Math.Round(Progress * 100) + "%";
+        public string FolderPath { get; init; }
+        public bool IsPaused { get; init; }
+        public string ProgressText => (int)Math.Round(Progress * 100) + "%";
         public string SpeedText => BytesPerSecond > 0 ? FormatBytes(BytesPerSecond) + "/с" : "";
         public string EtaText => Remaining.HasValue ? "~" + FormatTime(Remaining.Value) : "";
 
@@ -38,16 +40,23 @@ namespace Isle.Services
     /// </summary>
     public static class SteamDownloadService
     {
-        private static readonly Regex AppLine = new(@"AppID\s+(\d+)\s+(?:update|state)\s+(started|changed|canceled|finished|paused)\s*:?\s*(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex BytesLine = new(@"download\s+(\d+)\s*/\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex AppLine = new(@"AppID\s+(\d+)\s+(?:(?:App|Workshop)\s+)?(?<kind>update|state)\s+(?<action>started|changed|canceled|finished|paused)\s*:?\s*(?<detail>.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BytesLine = new(@"download\s+([\d,]+)\s*/\s*([\d,]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex RateLine = new(@"Current download rate:\s*([\d.,]+)\s*Mbps", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Dictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<int> ObservedActive = new();
+        private static readonly ConcurrentQueue<SteamDownload> Completed = new();
 
         private sealed class AppState
         {
             public int Id;
             public bool Active;
+            public bool Paused;
+            public bool Cancelled;
+            public bool Finished;
+            public bool Downloading;
+            public bool Staging;
             public long Done, Total;
             public DateTime Updated;
             public DateTime StartedAt;
@@ -55,11 +64,19 @@ namespace Isle.Services
 
         private sealed record RateSample(DateTime At, double BytesPerSecond);
 
-        public static SteamDownload ReadCurrent()
+        private sealed record ManifestProgress(string Name, long Downloaded, long DownloadTotal, long Staged, long StageTotal, string InstallDir, string Library);
+
+        public static SteamDownload TakeCompleted()
+        {
+            return Completed.TryDequeue(out var download) ? download : null;
+        }
+
+        public static SteamDownload ReadCurrent() => ReadCurrent(FindSteamRoot(), DateTime.Now);
+
+        internal static SteamDownload ReadCurrent(string root, DateTime now)
         {
             try
             {
-                var root = FindSteamRoot();
                 if (root == null) return null;
                 var log = Path.Combine(root, "logs", "content_log.txt");
                 if (!File.Exists(log)) return null;
@@ -75,60 +92,112 @@ namespace Isle.Services
 
                     var m = AppLine.Match(line);
                     if (!m.Success || !int.TryParse(m.Groups[1].Value, out int id)) continue;
-                    var action = m.Groups[2].Value.ToLowerInvariant();
-                    var detail = m.Groups[3].Value;
+                    var kind = m.Groups["kind"].Value.ToLowerInvariant();
+                    var action = m.Groups["action"].Value.ToLowerInvariant();
+                    var detail = m.Groups["detail"].Value;
                     states.TryGetValue(id, out var prior);
                     var state = new AppState
                     {
                         Id = id, Updated = timestamp, Done = prior?.Done ?? 0, Total = prior?.Total ?? 0,
-                        StartedAt = prior?.StartedAt ?? DateTime.MinValue
+                        StartedAt = prior?.StartedAt ?? DateTime.MinValue,
+                        Active = prior?.Active ?? false, Paused = prior?.Paused ?? false,
+                        Cancelled = prior?.Cancelled ?? false, Finished = prior?.Finished ?? false,
+                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false
                     };
                     var bytes = BytesLine.Match(detail);
-                    if (bytes.Success && long.TryParse(bytes.Groups[1].Value, out var done) && long.TryParse(bytes.Groups[2].Value, out var total))
+                    if (bytes.Success && long.TryParse(bytes.Groups[1].Value.Replace(",", ""), out var done) && long.TryParse(bytes.Groups[2].Value.Replace(",", ""), out var total))
                     { state.Done = done; state.Total = total; }
-                    if (action == "started") state.StartedAt = timestamp;
-                    state.Active = action == "started" ||
-                        (action == "changed" && (detail.Contains("Downloading", StringComparison.OrdinalIgnoreCase) || detail.Contains("Update Started", StringComparison.OrdinalIgnoreCase))) ||
-                        (action == "changed" && detail.Contains("Running", StringComparison.OrdinalIgnoreCase) && detail.Contains("Staging", StringComparison.OrdinalIgnoreCase));
-                    if (action is "canceled" or "finished" or "paused") state.Active = false;
+
+                    var normalized = detail.ToLowerInvariant();
+                    if (kind == "update")
+                    {
+                        if (action == "started")
+                        {
+                            state.StartedAt = timestamp;
+                            state.Active = true; state.Paused = false; state.Cancelled = false; state.Finished = false;
+                            state.Downloading = normalized.Contains("download");
+                            state.Staging = normalized.Contains("stage");
+                        }
+                        else if (action == "canceled")
+                        {
+                            state.Active = false;
+                            state.Paused = normalized.Contains("suspend") || normalized.Contains("paus");
+                            state.Cancelled = !state.Paused;
+                        }
+                        else if (action == "finished")
+                        {
+                            state.Active = false; state.Paused = false; state.Cancelled = false; state.Finished = true;
+                        }
+                        else if (action == "paused")
+                        {
+                            state.Active = false; state.Paused = true;
+                        }
+                        else if (action == "changed")
+                        {
+                            if (normalized.Contains("suspend") || normalized.Contains("paus"))
+                            { state.Active = false; state.Paused = true; }
+                            else if (normalized.Contains("stopping") || normalized.Trim() == "none")
+                            { state.Active = false; }
+                            else if (normalized.Contains("running update") && (normalized.Contains("download") || normalized.Contains("stag") || normalized.Contains("preallocat") || normalized.Contains("verifying")))
+                            {
+                                state.Active = true; state.Paused = false; state.Cancelled = false; state.Finished = false;
+                                state.Downloading = normalized.Contains("download");
+                                state.Staging = normalized.Contains("stag");
+                            }
+                        }
+                    }
+                    else if (kind == "state" && action == "changed")
+                    {
+                        if (normalized.Contains("update paused") || normalized.Contains("suspended"))
+                        { state.Active = false; state.Paused = true; }
+                        else if (state.Cancelled)
+                        { state.Active = false; state.Paused = false; }
+                        else if (normalized.Contains("update running"))
+                        { state.Active = true; state.Paused = false; }
+                        else if (normalized.Contains("fully installed") && !normalized.Contains("update required") && !normalized.Contains("update queued") && !normalized.Contains("update started"))
+                        { state.Active = false; state.Paused = false; state.Finished = true; }
+                    }
                     states[id] = state;
                 }
 
-                var current = states.Values.Where(x => x.Active && x.Total > 0)
-                    .OrderByDescending(x => x.Updated).FirstOrDefault();
-                if (current == null || DateTime.Now - current.Updated > TimeSpan.FromMinutes(10)) return null;
-                var now = DateTime.Now;
-                var samples = rates.Where(x => x.At >= current.StartedAt && x.At <= now).OrderBy(x => x.At).ToList();
-                var rateBytes = samples.Count > 0 && now - samples[^1].At < TimeSpan.FromMinutes(3) ? samples[^1].BytesPerSecond : 0;
-                double estimatedDone = current.Done;
-                bool estimatedProgress = !ReadManifestProgress(root, current.Id, out var manifestDone, out var manifestTotal);
-                if (!estimatedProgress)
+                foreach (var state in states.Values)
                 {
-                    estimatedDone = manifestDone;
-                    current.Total = manifestTotal;
-                }
-                else if (current.StartedAt != DateTime.MinValue && samples.Count > 0)
-                {
-                    var cursor = current.StartedAt;
-                    var segmentRate = samples[0].BytesPerSecond;
-                    foreach (var sample in samples)
+                    if (state.Active && !state.Paused && !state.Cancelled) ObservedActive.Add(state.Id);
+                    else if (state.Paused || state.Cancelled) ObservedActive.Remove(state.Id);
+                    else if (state.Finished && ObservedActive.Remove(state.Id))
                     {
-                        estimatedDone += Math.Max(0, (sample.At - cursor).TotalSeconds) * segmentRate;
-                        cursor = sample.At;
-                        segmentRate = sample.BytesPerSecond;
+                        var finished = ReadManifestProgress(root, state.Id);
+                        Completed.Enqueue(new SteamDownload
+                        {
+                            Name = !string.IsNullOrWhiteSpace(finished?.Name) ? finished.Name : FindAppName(root, state.Id) ?? "Steam · App " + state.Id,
+                            Icon = FindAppIcon(root, state.Id),
+                            FolderPath = finished == null ? null : GetInstallFolder(finished),
+                            Progress = 1
+                        });
                     }
-                    estimatedDone += Math.Max(0, (now - cursor).TotalSeconds) * segmentRate;
                 }
-                estimatedDone = Math.Clamp(estimatedDone, current.Done, current.Total);
-                var remaining = rateBytes > 0 ? TimeSpan.FromSeconds(Math.Max(0, current.Total - estimatedDone) / rateBytes) : (TimeSpan?)null;
+
+                var current = states.Values.Where(x => (x.Active || x.Paused) && !x.Cancelled && !x.Finished)
+                    .OrderByDescending(x => x.Updated).FirstOrDefault();
+                if (current == null || current.Updated == DateTime.MinValue || now - current.Updated > TimeSpan.FromMinutes(10)) return null;
+                var samples = rates.Where(x => x.At >= current.StartedAt && x.At <= now).OrderBy(x => x.At).ToList();
+                var rateBytes = !current.Paused && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90) ? samples[^1].BytesPerSecond : 0;
+                var manifest = ReadManifestProgress(root, current.Id);
+                var useStage = current.Paused || (!current.Downloading && current.Staging) || (rateBytes <= 0 && current.Staging);
+                long progressDone = useStage ? manifest?.Staged ?? 0 : manifest?.Downloaded ?? current.Done;
+                long progressTotal = useStage ? manifest?.StageTotal ?? 0 : manifest?.DownloadTotal ?? current.Total;
+                var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
+                var remainingBytes = Math.Max(0, progressTotal - progressDone);
+                var remaining = rateBytes > 0 && !useStage ? TimeSpan.FromSeconds(remainingBytes / rateBytes) : (TimeSpan?)null;
                 return new SteamDownload
                 {
-                    Name = FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
-                    Progress = Math.Clamp(estimatedDone / current.Total, 0, 1),
-                    EstimatedProgress = estimatedProgress,
+                    Name = !string.IsNullOrWhiteSpace(manifest?.Name) ? manifest.Name : FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
+                    Progress = progress,
                     BytesPerSecond = rateBytes,
                     Remaining = remaining,
-                    Icon = FindAppIcon(root, current.Id)
+                    Icon = FindAppIcon(root, current.Id),
+                    FolderPath = manifest == null ? null : GetInstallFolder(manifest),
+                    IsPaused = current.Paused
                 };
             }
             catch { return null; }
@@ -200,25 +269,31 @@ namespace Isle.Services
             return null;
         }
 
-        private static bool ReadManifestProgress(string root, int appId, out long downloaded, out long total)
+        private static ManifestProgress ReadManifestProgress(string root, int appId)
         {
-            downloaded = total = 0;
             foreach (var library in Libraries(root))
             {
                 var manifest = Path.Combine(library, "steamapps", "appmanifest_" + appId + ".acf");
                 try
                 {
                     var text = File.ReadAllText(manifest);
-                    var doneMatch = Regex.Match(text, @"""BytesDownloaded""\s+""(\d+)""", RegexOptions.IgnoreCase);
-                    var totalMatch = Regex.Match(text, @"""BytesToDownload""\s+""(\d+)""", RegexOptions.IgnoreCase);
-                    if (!doneMatch.Success || !totalMatch.Success || !long.TryParse(doneMatch.Groups[1].Value, out downloaded)
-                        || !long.TryParse(totalMatch.Groups[1].Value, out total) || total <= 0) continue;
-                    downloaded = Math.Clamp(downloaded, 0, total);
-                    return true;
+                    string name = Regex.Match(text, @"""name""\s+""([^""]+)""", RegexOptions.IgnoreCase).Groups[1].Value;
+                    long downloadDone = ReadManifestLong(text, "BytesDownloaded");
+                    long downloadTotal = ReadManifestLong(text, "BytesToDownload");
+                    long staged = ReadManifestLong(text, "BytesStaged");
+                    long stageTotal = ReadManifestLong(text, "BytesToStage");
+                    string installDir = Regex.Match(text, @"""installdir""\s+""([^""]+)""", RegexOptions.IgnoreCase).Groups[1].Value;
+                    return new ManifestProgress(name, downloadDone, downloadTotal, staged, stageTotal, installDir, library);
                 }
                 catch { }
             }
-            return false;
+            return null;
+        }
+
+        private static long ReadManifestLong(string text, string field)
+        {
+            var match = Regex.Match(text, "\\\"" + Regex.Escape(field) + "\\\"\\s+\\\"(\\d+)\\\"", RegexOptions.IgnoreCase);
+            return match.Success && long.TryParse(match.Groups[1].Value, out var value) ? Math.Max(0, value) : 0;
         }
 
         private static ImageSource FindAppIcon(string root, int appId)
@@ -227,7 +302,7 @@ namespace Isle.Services
             if (IconCache.TryGetValue(cacheKey, out var cached)) return cached;
             foreach (var library in Libraries(root))
             {
-                var cache = Path.Combine(library, "steamapps", "librarycache");
+                foreach (var cache in new[] { Path.Combine(library, "steamapps", "librarycache"), Path.Combine(library, "appcache", "librarycache") })
                 foreach (var file in new[] { appId + "_header.jpg", appId + "_library_600x900.jpg", appId + "_logo.png" })
                 {
                     var path = Path.Combine(cache, file);
@@ -242,6 +317,13 @@ namespace Isle.Services
                 }
             }
             return null;
+        }
+
+        private static string GetInstallFolder(ManifestProgress manifest)
+        {
+            if (string.IsNullOrWhiteSpace(manifest.InstallDir)) return null;
+            var path = Path.Combine(manifest.Library, "steamapps", "common", manifest.InstallDir);
+            return Directory.Exists(path) ? path : null;
         }
     }
 }

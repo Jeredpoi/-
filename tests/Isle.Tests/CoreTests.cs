@@ -1,5 +1,6 @@
 using System.Linq;
 using System;
+using System.IO;
 using Isle.Helpers;
 using Isle.Services;
 using Isle.Views;
@@ -146,6 +147,97 @@ namespace Isle.Tests
             Assert.Equal("two", l[1].Text);
             Assert.Equal(TimeSpan.FromSeconds(62), l[1].At);
         }
+    }
+}
+
+namespace Isle.Tests
+{
+    public class SteamDownloadTrackingTests
+    {
+        private static readonly DateTime PausedAt = new(2026, 11, 6, 16, 45, 0, DateTimeKind.Local);
+
+        [Fact]
+        public void PausedUpdateUsesStagingPercentAndDropsStaleSpeed()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), PausedLog(appId));
+                var download = SteamDownloadService.ReadCurrent(root, PausedAt);
+
+                Assert.NotNull(download);
+                Assert.True(download.IsPaused);
+                Assert.Equal("16%", download.ProgressText);
+                Assert.Empty(download.SpeedText);
+                Assert.Empty(download.EtaText);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void UserCancelledUpdateIsNoLongerShown()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var log = ActiveLog(appId) +
+                    $"[2026-11-06 16:44:05] AppID {appId} update canceled : User canceled\n" +
+                    $"[2026-11-06 16:44:05] AppID {appId} App update changed : None\n" +
+                    $"[2026-11-06 16:44:06] AppID {appId} state changed : Update Required,Fully Installed,Update Queued,Update Started,\n";
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), log);
+
+                Assert.Null(SteamDownloadService.ReadCurrent(root, PausedAt));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void FinishedDownloadEmitsOneCompletionEvent()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var logPath = Path.Combine(root, "logs", "content_log.txt");
+                File.WriteAllText(logPath, ActiveLog(appId));
+                Assert.NotNull(SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 40, DateTimeKind.Local)));
+
+                File.AppendAllText(logPath,
+                    $"[2026-11-06 16:44:10] AppID {appId} update finished : No Error\n" +
+                    $"[2026-11-06 16:44:10] AppID {appId} state changed : Fully Installed,\n");
+                Assert.Null(SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 44, 11, DateTimeKind.Local)));
+                Assert.Equal("Test Game", SteamDownloadService.TakeCompleted()?.Name);
+                Assert.Null(SteamDownloadService.TakeCompleted());
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        private static string CreateSteamRoot(int appId)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "IsleSteamTest-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(root, "logs"));
+            Directory.CreateDirectory(Path.Combine(root, "steamapps"));
+            File.WriteAllText(Path.Combine(root, "steamapps", $"appmanifest_{appId}.acf"),
+                $"\"AppState\" {{\n\t\"appid\" \"{appId}\"\n\t\"name\" \"Test Game\"\n" +
+                "\t\"BytesToDownload\" \"1958392864\"\n\t\"BytesDownloaded\" \"429201552\"\n" +
+                "\t\"BytesToStage\" \"38428989932\"\n\t\"BytesStaged\" \"6066033337\"\n}\n");
+            return root;
+        }
+
+        private static string ActiveLog(int appId) =>
+            $"[2026-11-06 16:43:34] AppID {appId} update started : download 0/1958392864, store 0/0, reuse 0/34740569739, delta 0/1043595302, stage 0/38428989932\n" +
+            $"[2026-11-06 16:43:34] AppID {appId} state changed : Update Required,Fully Installed,Update Queued,Update Running,Update Started,\n" +
+            $"[2026-11-06 16:43:34] AppID {appId} App update changed : Running Update,Downloading,Staging,\n" +
+            "[2026-11-06 16:43:35] Current download rate: 100.525 Mbps\n";
+
+        private static string PausedLog(int appId) => ActiveLog(appId) +
+            $"[2026-11-06 16:44:05] AppID {appId} update canceled : Disabled (Suspended)\n" +
+            $"[2026-11-06 16:44:05] AppID {appId} App update changed : Running Update,Stopping,\n" +
+            $"[2026-11-06 16:44:05] AppID {appId} App update changed : None\n" +
+            $"[2026-11-06 16:44:52] AppID {appId} state changed : Update Required,Fully Installed,Update Queued,Update Started, (Suspended)\n" +
+            $"[2026-11-06 16:44:52] AppID {appId} state changed : Update Required,Fully Installed,Update Paused,Update Started,\n";
     }
 }
 

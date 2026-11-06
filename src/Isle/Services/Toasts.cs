@@ -16,6 +16,7 @@ namespace Isle.Services
         public string Icon { get; set; } = Icons.Info;
         public Color Accent { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public ImageSource Image { get; set; }
+        public string FolderPath { get; set; }
         public double? Progress { get; set; }
         public TimeSpan Duration { get; set; } = TimeSpan.FromSeconds(2.2);
         /// <summary>Тосты с ключом заменяют друг друга без мигания (громкость, раскладка).</summary>

@@ -120,6 +120,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Border x:Name="ToastIconBox" Width="34" Height="34" CornerRadius="17" Background="#141417" VerticalAlignment="Center">
                                 <Grid>
@@ -146,6 +147,9 @@
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
                                 </Grid>
                             </Grid>
+                            <Button x:Name="ToastFolderButton" Grid.Column="2" Width="30" Height="30" Margin="8,0,0,0" Padding="0" Style="{StaticResource Ghost}" Click="OnToastFolder" ToolTip="Открыть папку игры" Visibility="Collapsed">
+                                <h:Icon Kind="Folder" Width="15" Height="15"/>
+                            </Button>
                         </Grid>
                     </Grid>
 
