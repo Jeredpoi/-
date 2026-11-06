@@ -32,6 +32,7 @@ namespace Isle.Services
             ["телеграм"] = "telegram", ["telegram"] = "telegram", ["дискорд"] = "discord", ["discord"] = "discord",
             ["спотифай"] = "spotify", ["spotify"] = "spotify", ["стим"] = "steam", ["steam"] = "steam",
             ["хром"] = "chrome", ["chrome"] = "chrome", ["гугл хром"] = "chrome", ["edge"] = "msedge", ["эдж"] = "msedge",
+            ["comet"] = "comet", ["комет"] = "comet", ["perplexity"] = "comet", ["перплексити"] = "comet",
             ["яндекс"] = "browser", ["яндекс браузер"] = "browser", ["firefox"] = "firefox", ["фаерфокс"] = "firefox",
             ["вконтакте"] = "https://vk.com", ["вк"] = "https://vk.com", ["vk"] = "https://vk.com", ["vk.com"] = "https://vk.com",
             ["ютуб"] = "https://youtube.com", ["youtube"] = "https://youtube.com",
@@ -46,6 +47,7 @@ namespace Isle.Services
             ["spotify"] = new[] { @"%AppData%\Spotify\Spotify.exe", "spotify:" },
             ["steam"] = new[] { @"%ProgramFiles(x86)%\Steam\steam.exe" },
             ["browser"] = new[] { @"%LocalAppData%\Yandex\YandexBrowser\Application\browser.exe" },
+            ["comet"] = new[] { @"%LocalAppData%\Perplexity\Comet\Application\comet.exe", @"%LocalAppData%\Comet\Application\comet.exe" },
         };
 
         public static bool Open(string what) => Launch(what, null);
@@ -149,7 +151,7 @@ namespace Isle.Services
         private static bool FocusExistingVk()
         {
             var browsers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                { "chrome", "msedge", "firefox", "opera", "opera_gx", "browser", "yandex", "vivaldi" };
+                { "chrome", "msedge", "firefox", "opera", "opera_gx", "browser", "yandex", "vivaldi", "comet" };
             IntPtr found = IntPtr.Zero;
             Win32.EnumWindows((hwnd, _) =>
             {
@@ -184,7 +186,7 @@ namespace Isle.Services
                 Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
             };
-            var n = name.ToLowerInvariant();
+            var n = NormalizeAppName(name);
             string best = null; int bestScore = int.MaxValue;
             foreach (var d in dirs.Where(Directory.Exists))
             {
@@ -192,13 +194,43 @@ namespace Isle.Services
                 try { files = Directory.EnumerateFiles(d, "*.lnk", SearchOption.AllDirectories).ToList(); } catch { continue; }
                 foreach (var f in files)
                 {
-                    var t = Path.GetFileNameWithoutExtension(f).ToLowerInvariant();
+                    var rawTitle = Path.GetFileNameWithoutExtension(f);
+                    var t = NormalizeAppName(rawTitle);
                     if (t.Contains("uninstall") || t.Contains("удал")) continue;
                     int score = t == n ? 0 : t.StartsWith(n) ? 1 + t.Length - n.Length : t.Contains(n) ? 50 + t.Length : int.MaxValue;
+                    // Handle small spelling/voice-recognition errors without launching
+                    // an unrelated app: fuzzy matches must be close and unambiguous.
+                    if (score == int.MaxValue && n.Length >= 4)
+                    {
+                        int distance = EditDistance(n, t);
+                        int limit = Math.Max(1, Math.Min(2, n.Length / 5));
+                        if (distance <= limit) score = 100 + distance * 10 + Math.Abs(t.Length - n.Length);
+                    }
                     if (score < bestScore) { bestScore = score; best = f; }
                 }
             }
-            return best;
+            return bestScore < 100 || (bestScore >= 100 && bestScore < 130) ? best : null;
+        }
+
+        private static string NormalizeAppName(string value)
+        {
+            var chars = (value ?? "").ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray();
+            return new string(chars);
+        }
+
+        private static int EditDistance(string a, string b)
+        {
+            if (a.Length > b.Length) (a, b) = (b, a);
+            var previous = Enumerable.Range(0, a.Length + 1).ToArray();
+            var current = new int[a.Length + 1];
+            for (int j = 1; j <= b.Length; j++)
+            {
+                current[0] = j;
+                for (int i = 1; i <= a.Length; i++)
+                    current[i] = Math.Min(Math.Min(current[i - 1] + 1, previous[i] + 1), previous[i - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+                (previous, current) = (current, previous);
+            }
+            return previous[a.Length];
         }
 
         private static bool Start(string target, string args)

@@ -140,6 +140,11 @@ namespace Isle.Services
                 ("Brave", Path.Combine(local, "BraveSoftware", "Brave-Browser", "User Data")),
                 ("Vivaldi", Path.Combine(local, "Vivaldi", "User Data")),
                 ("Yandex Browser", Path.Combine(local, "Yandex", "YandexBrowser", "User Data")),
+                // Perplexity Comet is Chromium-based and keeps the normal History DB
+                // under its own LocalAppData user-data directory.
+                ("Comet", Path.Combine(local, "Perplexity", "Comet", "User Data")),
+                // Older/alternate per-user installs used this shorter product root.
+                ("Comet", Path.Combine(local, "Comet", "User Data")),
                 ("Chromium", Path.Combine(local, "Chromium", "User Data")),
                 ("Opera", Path.Combine(roaming, "Opera Software", "Opera Stable")),
                 ("Opera GX", Path.Combine(roaming, "Opera Software", "Opera GX Stable"))
