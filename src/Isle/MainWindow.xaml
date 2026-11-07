@@ -79,11 +79,11 @@
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <!-- кнопки мини-плеера -->
                             <StackPanel x:Name="MiniButtons" Orientation="Horizontal" Margin="0,0,10,0" Visibility="Collapsed">
-                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
-                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay">
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev" ToolTip="Предыдущий"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay" ToolTip="Пауза / играть">
                                     <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Fg}"><h:Icon x:Name="MiniPlayIcon" Kind="Pause" Width="12" Height="12" StrokeWidth="2.4" Foreground="Black"/></Border>
                                 </Button>
-                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext" ToolTip="Следующий"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
                             </StackPanel>
                             <TextBlock x:Name="MediaTimer" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <TextBlock x:Name="MediaDownload" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Идёт загрузка"/>

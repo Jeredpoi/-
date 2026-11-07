@@ -128,6 +128,8 @@ namespace Isle.Services
         public int MaxFps { get; set; } = 60;
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
         public bool FirstRunDone { get; set; } = false;
+        /// <summary>Подсказка из трея «Isle запущен» уже показывалась.</summary>
+        public bool TrayHintShown { get; set; } = false;
         public bool AutoUpdateCheck { get; set; } = true;
         public bool ScaleFixV2 { get; set; } = false;
         public bool ObsStatus { get; set; } = true;

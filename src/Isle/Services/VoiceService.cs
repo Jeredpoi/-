@@ -102,14 +102,15 @@ namespace Isle.Services
         {
             if (!Recording) return;
             var cap = _capture;
+            var buffer = _pcm; // своя запись: новая, начатая за эти 150 мс, сюда не попадёт и не потеряется
             _capture = null;
             try { cap.StopRecording(); } catch { }
             await Task.Delay(150); // последние куски звука
             cap.DataAvailable -= OnData;
             cap.Dispose();
             RecordingChanged?.Invoke(false);
-            var pcm = TrimSilence(_pcm.ToArray());
-            _pcm = null;
+            var pcm = TrimSilence(buffer.ToArray());
+            if (ReferenceEquals(_pcm, buffer)) _pcm = null;
             if (pcm == null)
             {
                 ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });

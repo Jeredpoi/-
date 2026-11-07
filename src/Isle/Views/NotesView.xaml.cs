@@ -20,12 +20,16 @@ namespace Isle.Views
         private bool _loading;
         private DateTime _deleteArmed = DateTime.MinValue;
         private readonly DispatcherTimer _save = new() { Interval = TimeSpan.FromMilliseconds(600) };
+        private readonly DispatcherTimer _disarm = new() { Interval = TimeSpan.FromSeconds(3) };
 
         public NotesView()
         {
             InitializeComponent();
             if (_data.Notes.Count == 0) _data.Notes.Add(new Note());
             _save.Tick += (_, __) => { _save.Stop(); SaveNow(); };
+            // выход из Isle сразу после набора — последние правки не теряем
+            Application.Current.Exit += (_, __) => { if (_save.IsEnabled) { _save.Stop(); Storage.Save("notes.json", _data); } };
+            _disarm.Tick += (_, __) => { _disarm.Stop(); if (Saved.Text.StartsWith("Нажми ещё раз")) Saved.Text = "Сохраняется само"; };
 
             foreach (var m in new[] { 5, 10, 15, 25, 45 })
             {
@@ -45,7 +49,12 @@ namespace Isle.Views
             Editor.LostKeyboardFocus += (_, __) => EditorHint.Visibility = PlainText().Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        public void OnShown() { UpdateTimer(); BuildTabs(); }
+        public void OnShown()
+        {
+            UpdateTimer(); BuildTabs();
+            // «сегодня / завтра в …» считается при показе — после полуночи надписи должны обновиться
+            System.Windows.Data.CollectionViewSource.GetDefaultView(RemList.ItemsSource)?.Refresh();
+        }
 
         // ---------- Заметки ----------
 
@@ -128,6 +137,7 @@ namespace Isle.Views
             {
                 _deleteArmed = DateTime.Now;
                 Saved.Text = "Нажми ещё раз, чтобы удалить";
+                _disarm.Stop(); _disarm.Start(); // через 3 с подсказка уходит — как и сама возможность удалить
                 return;
             }
             _deleteArmed = DateTime.MinValue;
@@ -140,7 +150,9 @@ namespace Isle.Views
         private void OnCopy(object s, RoutedEventArgs e)
         {
             var t = PlainText();
-            if (t.Length > 0) ClipboardService.SetText(t);
+            if (t.Length == 0) return;
+            ClipboardService.SetText(t);
+            ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Заметка скопирована", Subtitle = t.Length + " симв.", Icon = Icons.Copy, Important = true, Duration = TimeSpan.FromSeconds(1.6) });
         }
 
         private void OnRemindLine(object s, RoutedEventArgs e)

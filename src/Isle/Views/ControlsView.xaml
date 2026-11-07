@@ -29,7 +29,7 @@
                         <h:Icon Kind="Wifi" Width="16" Height="16"/>
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
-                        <TextBlock x:Name="NetName" Text="Сеть" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="NetName" Text="Сеть" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="NetStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>

@@ -71,6 +71,7 @@ namespace Isle
             EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.ClosedEvent, new RoutedEventHandler((_, __) => _openMenus = Math.Max(0, _openMenus - 1)));
             var s = AppSettings.Current;
             ScaleT.ScaleX = ScaleT.ScaleY = Math.Clamp(s.Scale, 0.7, 1.6);
+            DndChip.IsChecked = s.DoNotDisturb; // «Не беспокоить» сохраняется — кнопка должна это показывать после перезапуска
 
             AppHost.Timer = new TimerService();
             AppHost.Shelf = new ShelfService();
@@ -547,8 +548,17 @@ namespace Isle
             Win32.ForceForeground(_hwnd); // без этого Windows часто не даёт печатать в остров
         }
 
+        private bool _displayHooked;
+
         private void PlaceWindow()
         {
+            if (!_displayHooked)
+            {
+                _displayHooked = true;
+                // сменили разрешение, монитор или масштаб — чёлка должна остаться сверху по центру
+                Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, __) => Dispatcher.InvokeAsync(PlaceWindow, DispatcherPriority.Background);
+                DpiChanged += (_, __) => Dispatcher.InvokeAsync(PlaceWindow, DispatcherPriority.Background);
+            }
             Left = SystemParameters.PrimaryScreenWidth / 2 - Width / 2;
             Top = 0;
         }
@@ -1608,18 +1618,23 @@ namespace Isle
                         Icon = Icons.Check, FolderPath = done.Folder, Important = true, Duration = TimeSpan.FromSeconds(7)
                     });
                 }
-                foreach (var c in result.browser.Completed) _recentDone[c.FileName] = DateTime.Now;
-
                 foreach (var completed in result.browser.Completed)
+                {
+                    // о том же файле уже сообщили по временному файлу (история браузера пишется позже)
+                    bool shown = _recentDone.TryGetValue(completed.FileName ?? "", out var shownAt) && DateTime.Now - shownAt < TimeSpan.FromMinutes(1);
+                    _recentDone[completed.FileName ?? ""] = DateTime.Now;
+                    if (shown) continue;
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Success,
                         Title = "Загрузка завершена",
                         Subtitle = completed.Browser + " · " + completed.FileName,
                         Icon = Icons.Check,
+                        FolderPath = Services.PartialDownloadService.Folders().FirstOrDefault(),
                         Important = true,
                         Duration = TimeSpan.FromSeconds(7)
                     });
+                }
 
                 foreach (var paused in result.steamPaused)
                     ToastBus.Show(new Toast
@@ -1978,12 +1993,16 @@ namespace Isle
             }
         }
 
+        /// <summary>Последняя ошибка загрузки погоды (null — всё хорошо) — вкладка «Погода» показывает её вместо вечного «Загружаю…».</summary>
+        public string WeatherError { get; private set; }
+
         public async Task RefreshWeather()
         {
             try
             {
                 var s = AppSettings.Current;
                 var weather = await WeatherService.LoadAsync(s.Latitude, s.Longitude, s.City);
+                WeatherError = null;
                 AppHost.SetWeather(weather);
                 // Предупреждаем заранее: о грозе, граде и гололёде — за 2 часа, об остальном (дождь, снег, туман, ветер, мороз, жара) — за час.
                 if (weather.NextAlert is { } alert && alert.At > weather.ForecastNow)
@@ -2003,7 +2022,7 @@ namespace Isle
                     }
                 }
             }
-            catch (Exception ex) { App.Log("weather: " + ex.Message); }
+            catch (Exception ex) { WeatherError = ex.Message; App.Log("weather: " + ex.Message); }
         }
 
         private void UpdateWeatherMini()

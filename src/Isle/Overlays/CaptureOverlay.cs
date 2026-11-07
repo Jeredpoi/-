@@ -97,7 +97,8 @@ namespace Isle.Overlays
                 _escWasDown = down;
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
-            Closed += (_, __) => _escPoll.Stop();
+            // окно закрыли не через Finish (Alt+F4 и т. п.) — всё равно завершаем, иначе чёлка останется скрытой, а снимки — заблокированы
+            Closed += (_, __) => { _escPoll.Stop(); _tcs.TrySetResult(null); };
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
@@ -136,6 +137,7 @@ namespace Isle.Overlays
         {
             if (_mode == CaptureMode.Pipette)
             {
+                if (_px == null) return; // пиксели ещё готовятся (4K, несколько мониторов) — иначе скопировался бы чёрный
                 var c = ColorAt(e.GetPosition(this));
                 Finish(c);
                 return;

@@ -39,7 +39,8 @@ namespace Isle.Views
         {
             SyncVolume();
             FillDevices();
-            MicBtn.IsChecked = AppHost.Audio.MicMuted;
+            MicBtn.IsChecked = !AppHost.Audio.MicMuted; // подсвечено = микрофон работает, как у остальных кнопок
+            MicBtn.ToolTip = AppHost.Audio.MicMuted ? "Микрофон выключен — нажми, чтобы включить" : "Микрофон включён — нажми, чтобы выключить";
 
             var net = SystemControls.Network();
             NetName.Text = net.name;
@@ -130,7 +131,8 @@ namespace Isle.Views
 
         private void OnMic(object s, RoutedEventArgs e)
         {
-            AppHost.Audio.MicMuted = MicBtn.IsChecked == true;
+            AppHost.Audio.MicMuted = MicBtn.IsChecked != true;
+            MicBtn.ToolTip = AppHost.Audio.MicMuted ? "Микрофон выключен — нажми, чтобы включить" : "Микрофон включён — нажми, чтобы выключить";
             ToastBus.Show(new Toast { Title = AppHost.Audio.MicMuted ? "Микрофон выключен" : "Микрофон включён", Icon = Icons.Mic, On = !AppHost.Audio.MicMuted, ReplaceKey = "mic", Important = true });
         }
 
