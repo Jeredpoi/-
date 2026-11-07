@@ -74,7 +74,7 @@ namespace Isle.Helpers
                     if (dy > -6 && dy < 140 && dxOut < 60)
                     {
                         double dist = Math.Max(0, dy) + dxOut;
-                        targetAmp = 11 * Math.Max(0, 1 - dist / 140.0);
+                        targetAmp = 13 * Math.Max(0, 1 - dist / 140.0);
                         targetX = Math.Clamp(local.X, CornerRadius, w - CornerRadius);
                     }
                 }
@@ -125,6 +125,8 @@ namespace Isle.Helpers
 
         private bool _wasAny;
         private readonly Point[] _pts = new Point[Samples];
+        private static readonly Pen OutlinePen = MakeOutline();
+        private static Pen MakeOutline() { var p = new Pen(new SolidColorBrush(Color.FromRgb(0x23, 0x23, 0x2A)), 1); p.Freeze(); return p; }
 
         protected override void OnRender(DrawingContext dc)
         {
@@ -154,6 +156,25 @@ namespace Isle.Helpers
                 }
                 g.Freeze();
                 dc.DrawGeometry(Fill, null, g);
+
+                // обводка по изгибу — тем же цветом, что и контур острова: «жидкость» видна и на чёрном экране
+                var outline = new StreamGeometry();
+                using (var c = outline.Open())
+                {
+                    c.BeginFigure(new Point(r - 2, -0.5), false, false);
+                    c.LineTo(_pts[0], true, true);
+                    for (int i = 0; i < _pts.Length - 1; i++)
+                    {
+                        var p0 = _pts[Math.Max(0, i - 1)]; var p1 = _pts[i]; var p2 = _pts[i + 1]; var p3 = _pts[Math.Min(_pts.Length - 1, i + 2)];
+                        c.BezierTo(new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6),
+                                   new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6), p2, true, true);
+                    }
+                    c.LineTo(new Point(w - r + 2, -0.5), true, true);
+                }
+                outline.Freeze();
+                dc.PushTransform(new TranslateTransform(0, 1)); // ровно на линии нижнего контура острова, без двойной полоски
+                dc.DrawGeometry(null, OutlinePen, outline);
+                dc.Pop();
 
                 // кончики всплесков светятся цветом обложки
                 double musicLevel = 0;

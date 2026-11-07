@@ -321,8 +321,9 @@ namespace Isle.Helpers
             }
             if (mood == Mood.Idle && _activity == Ball)
             {
-                // следит за мячиком
-                _lookX += (0 - _lookX) * FrameClock.Lerp(0.3); _lookY += (-0.9 + Math.Abs(Math.Sin(_time * 3.2)) * -0.1 - _lookY) * FrameClock.Lerp(0.3);
+                // следит за мячиком сбоку: глаза вправо, вверх-вниз за полётом
+                var (_, by) = BallPos();
+                _lookX += (0.85 - _lookX) * FrameClock.Lerp(0.3); _lookY += ((by - 4.5) / 4.5 - _lookY) * FrameClock.Lerp(0.3);
             }
             if (mood == Mood.Idle && _activity == 2)
             {
@@ -349,6 +350,15 @@ namespace Isle.Helpers
         private static readonly Brush BallRed = Freeze(new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71)));
         private static readonly Brush Cup = Freeze(new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1)));
         private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
+
+        /// <summary>Фаза чеканки 0..1 (0 — мяч у ноги) и положение мяча в клетках спрайта: справа от тела, по параболе.</summary>
+        private double BallPhase() => (_time * 1.5) % 1;
+        private (double x, double y) BallPos()
+        {
+            double p = BallPhase();
+            double h = 4 * p * (1 - p);              // 0 у ноги → 1 в верхней точке
+            return (13.2 + Math.Sin(p * Math.PI) * 0.4, 8.6 - h * 5.2);
+        }
 
         private static void DrawHeart(DrawingContext dc, double x, double y, double s)
         {
@@ -389,9 +399,10 @@ namespace Isle.Helpers
                 }
                 case Ball:
                 {
-                    // подкидывает мячик над головой
-                    double up = Math.Abs(Math.Sin(_time * 3.2));
-                    dc.DrawEllipse(BallRed, null, new Point(ox + 6.5 * px, oy - (1.2 + up * 4.2) * px), 0.8 * px, 0.8 * px);
+                    // чеканит мячик ногой сбоку от себя — мяч не залезает на голову и шапку
+                    var (bx, by) = BallPos();
+                    dc.DrawEllipse(BallRed, null, new Point(ox + bx * px, oy + by * px), 0.85 * px, 0.85 * px);
+                    dc.DrawRectangle(Cup, null, new Rect(ox + (bx - 0.3) * px, oy + (by - 0.55) * px, 0.35 * px, 0.35 * px)); // блик
                     break;
                 }
                 case Phone:
@@ -657,6 +668,8 @@ namespace Isle.Helpers
                         // шаг: пары ножек по очереди поднимаются
                         bool pairA = x == 2 || x == 8;
                         if (step && pairA && y == 8) continue;
+                        // чеканка: правая ножка подбрасывает мяч, когда он у ноги
+                        if (mood == Mood.Idle && _activity == Ball && _cheer <= 0 && x == 10 && y == 8 && (BallPhase() < 0.12 || BallPhase() > 0.94)) continue;
                         if (step && !pairA && y == 8 && mood == Mood.Music) cy = 8;
                     }
                     // ручки машут под музыку и от радости, а за ноутбуком — «печатают»
@@ -671,7 +684,7 @@ namespace Isle.Helpers
                     {
                         if (_activity == Wave && x == 12) cy = y - 1 - (Math.Sin(_time * 14) > 0 ? 1 : 0);
                         if (_activity == Stretch) cy = y - 2;
-                        if (_activity == Ball) cy = (Math.Sin(_time * 6.4 + (x == 0 ? 0 : Math.PI)) > 0.3) ? y - 1 : y;
+                        if (_activity == Ball) cy = x == 0 ? y - 1 : y; // левая ручка в сторону для равновесия
                         if (_activity == Coffee && x == 12) cy = y - (Math.Sin(_time * 0.8) > 0.85 ? 2 : 0); // отпивает
                         if (_activity == Phone && x == 12) cy = y - 1;                                          // держит телефон
                         if (_activity == Game) cy = y - (Math.Sin(_time * 18 + (x == 0 ? 0 : 2)) > 0.4 ? 1 : 0); // жмёт кнопки

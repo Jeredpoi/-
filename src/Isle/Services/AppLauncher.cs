@@ -33,6 +33,8 @@ namespace Isle.Services
             ["спотифай"] = "spotify", ["spotify"] = "spotify", ["стим"] = "steam", ["steam"] = "steam",
             ["хром"] = "chrome", ["chrome"] = "chrome", ["гугл хром"] = "chrome", ["edge"] = "msedge", ["эдж"] = "msedge",
             ["comet"] = "comet", ["комет"] = "comet", ["perplexity"] = "comet", ["перплексити"] = "comet",
+            ["браузер"] = "default-browser", ["веб-браузер"] = "default-browser", ["интернет"] = "default-browser",
+            ["web browser"] = "default-browser", ["мой браузер"] = "default-browser",
             ["яндекс"] = "browser", ["яндекс браузер"] = "browser", ["firefox"] = "firefox", ["фаерфокс"] = "firefox",
             ["вконтакте"] = "https://vk.com", ["вк"] = "https://vk.com", ["vk"] = "https://vk.com", ["vk.com"] = "https://vk.com",
             ["ютуб"] = "https://youtube.com", ["youtube"] = "https://youtube.com",
@@ -63,6 +65,14 @@ namespace Isle.Services
             // instead of asking the default browser to create another tab.
             if ((key.Equals("https://vk.com", StringComparison.OrdinalIgnoreCase) || key.Equals("http://vk.com", StringComparison.OrdinalIgnoreCase)) && FocusExistingVk()) return true;
 
+            // «открой браузер» — браузер по умолчанию (Chrome, Яндекс, Comet…), а не случайный
+            if (key == "default-browser")
+            {
+                var browser = DefaultBrowserExe();
+                if (browser != null && FocusRunning(browser)) return true;
+                return browser != null ? Start(browser, null) : Start("https://www.google.com", null);
+            }
+
             // сайты и протоколы
             if (key.Contains("://") || (key.EndsWith(":") && !key.Contains('\\')) || key.StartsWith("ms-"))
                 return Start(key, null);
@@ -72,6 +82,8 @@ namespace Isle.Services
             if (File.Exists(key) || Directory.Exists(key)) return Start(key, extraArgs);
 
             var exe = Find(key);
+            // программа уже запущена (OBS, Telegram, Discord…) — просто показываем её окно, а не второй экземпляр
+            if (exe != null && string.IsNullOrEmpty(extraArgs) && !exe.Contains('|') && exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && FocusRunning(exe)) return true;
             if (exe != null) return Start(exe, extraArgs);
             // системные команды (calc, notepad, mspaint…) находятся через PATH
             return Start(key, extraArgs);
@@ -94,6 +106,19 @@ namespace Isle.Services
                 {
                     using var k = root.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths\" + (name.EndsWith(".exe") ? name : name + ".exe"));
                     if (k?.GetValue(null) is string v && File.Exists(v.Trim('"'))) return v.Trim('"');
+                }
+                catch { }
+            }
+            // OBS из Steam: ...\steamapps\common\OBS Studio\bin\64bit\obs64.exe в любой библиотеке Steam
+            if (name.Equals("obs", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    foreach (var lib in SteamDownloadService.SteamLibraries())
+                    {
+                        var steamObs = Path.Combine(lib, "steamapps", "common", "OBS Studio", "bin", "64bit", "obs64.exe");
+                        if (File.Exists(steamObs)) return steamObs;
+                    }
                 }
                 catch { }
             }
@@ -194,7 +219,10 @@ namespace Isle.Services
             foreach (var d in dirs.Where(Directory.Exists))
             {
                 IEnumerable<string> files;
-                try { files = Directory.EnumerateFiles(d, "*.lnk", SearchOption.AllDirectories).ToList(); } catch { continue; }
+                // .lnk — обычные ярлыки, .url — ярлыки Steam и интернет-ярлыки (OBS из Steam, игры)
+                try { files = Directory.EnumerateFiles(d, "*.*", SearchOption.AllDirectories)
+                        .Where(f => f.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".url", StringComparison.OrdinalIgnoreCase)).ToList(); }
+                catch { continue; }
                 foreach (var f in files)
                 {
                     var rawTitle = Path.GetFileNameWithoutExtension(f);
@@ -234,6 +262,50 @@ namespace Isle.Services
                 (previous, current) = (current, previous);
             }
             return previous[a.Length];
+        }
+
+        /// <summary>Путь к браузеру по умолчанию из настроек Windows (UserChoice для http → команда открытия).</summary>
+        public static string DefaultBrowserExe()
+        {
+            try
+            {
+                using var choice = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice")
+                                   ?? Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice");
+                var progId = choice?.GetValue("ProgId") as string;
+                if (string.IsNullOrEmpty(progId)) return null;
+                using var cmd = Registry.ClassesRoot.OpenSubKey(progId + @"\shell\open\command");
+                var line = cmd?.GetValue(null) as string;
+                if (string.IsNullOrWhiteSpace(line)) return null;
+                line = line.Trim();
+                string exe = line.StartsWith("\"") ? line.Substring(1, line.IndexOf('"', 1) - 1) : line.Split(' ')[0];
+                exe = Environment.ExpandEnvironmentVariables(exe);
+                return File.Exists(exe) ? exe : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Если программа с этим exe уже запущена и у неё есть окно — вывести его вперёд.</summary>
+        private static bool FocusRunning(string exe)
+        {
+            try
+            {
+                var name = Path.GetFileNameWithoutExtension(exe);
+                var procs = Process.GetProcessesByName(name);
+                try
+                {
+                    foreach (var p in procs)
+                    {
+                        var h = p.MainWindowHandle;
+                        if (h == IntPtr.Zero) continue;
+                        Win32.ShowWindow(h, 9); // SW_RESTORE — если свёрнуто
+                        Win32.ForceForeground(h);
+                        return true;
+                    }
+                }
+                finally { foreach (var p in procs) p.Dispose(); }
+            }
+            catch { }
+            return false;
         }
 
         private static bool Start(string target, string args)

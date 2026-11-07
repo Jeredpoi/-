@@ -331,6 +331,9 @@ namespace Isle.Services
                 ? DateTime.SpecifyKind(time, DateTimeKind.Local) : DateTime.MinValue;
         }
 
+        /// <summary>Все библиотеки Steam (для поиска программ, установленных через Steam, например OBS).</summary>
+        public static List<string> SteamLibraries() { var root = FindSteamRoot(); return root == null ? new List<string>() : Libraries(root); }
+
         private static List<string> Libraries(string root)
         {
             var result = new List<string> { root };
