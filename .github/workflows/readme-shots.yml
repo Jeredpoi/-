@@ -7,6 +7,9 @@ on:
   push:
     branches: ["readme-shots*"]
 
+permissions:
+  contents: write
+
 jobs:
   shots:
     runs-on: windows-latest
@@ -45,3 +48,18 @@ jobs:
             shots/*.png
             shots/*.gif
             shots/*.txt
+
+      # Снимки кладём в отдельную ветку shots-assets (коммит от имени владельца репозитория),
+      # оттуда они попадают в README обычным PR
+      - name: Сохранить в ветку shots-assets
+        shell: pwsh
+        run: |
+          git config user.name "Jeredpoi"
+          git config user.email "death_in_red19@mail.ru"
+          git checkout -B shots-assets
+          New-Item -ItemType Directory -Force docs/screenshots | Out-Null
+          Copy-Item shots/*.png docs/screenshots/
+          Copy-Item shots/clawd-dance.gif docs/screenshots/
+          git add docs/screenshots
+          git commit -m "Снимки интерфейса для README"
+          git push -f origin shots-assets
