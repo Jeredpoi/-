@@ -1278,7 +1278,11 @@ namespace Isle
             if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
             double imageSize = compact ? 26 : 36;
-            ToastImage.Clip = t.Image == null ? null : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
+            // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
+            ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
+            ToastImage.Clip = t.Image == null ? null : t.RoundImage
+                ? new EllipseGeometry(new Point(imageSize / 2, imageSize / 2), imageSize / 2, imageSize / 2)
+                : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
             if (t.Progress.HasValue)
             {
                 double barW = w - 16 * 2 - 36 - 12;
@@ -1344,7 +1348,7 @@ namespace Isle
                         Kind = ToastKind.Success,
                         Title = "Загружено в Steam",
                         Subtitle = completed.Name,
-                        Image = completed.Icon,
+                        Image = completed.Icon, RoundImage = true,
                         FolderPath = completed.FolderPath,
                         Icon = Icons.Check,
                         Important = true,
@@ -1368,7 +1372,7 @@ namespace Isle
                         Kind = ToastKind.Info,
                         Title = "Загрузка приостановлена",
                         Subtitle = paused.Name + " · " + paused.ProgressText,
-                        Image = paused.Icon,
+                        Image = paused.Icon, RoundImage = true,
                         FolderPath = paused.FolderPath,
                         Icon = Icons.Bolt,
                         Important = true,

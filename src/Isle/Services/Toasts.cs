@@ -17,6 +17,8 @@ namespace Isle.Services
         public Color Accent { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public ImageSource Image { get; set; }
         public string FolderPath { get; set; }
+        /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
+        public bool RoundImage { get; set; }
         /// <summary>Анимированный значок погоды вместо иконки (вид: sun, rain, thunder, snow… — см. WeatherGlyph).</summary>
         public string WeatherKind { get; set; }
         public double? Progress { get; set; }
