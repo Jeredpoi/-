@@ -1422,8 +1422,8 @@ namespace Isle
             double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
             if (t.Progress.HasValue) w = Math.Max(w, 280);
             if (ToastFolderButton.Visibility == Visibility.Visible || ToastEditButton.Visibility == Visibility.Visible) w += 38;
-            if (ToastFolderButton.Visibility == Visibility.Visible && ToastEditButton.Visibility == Visibility.Visible) h = Math.Max(h, 70);
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
+            if (ToastFolderButton.Visibility == Visibility.Visible && ToastEditButton.Visibility == Visibility.Visible) h = Math.Max(h, 70);
             // запись голоса — вместо полоски волна, как в ChatGPT
             bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
             if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
