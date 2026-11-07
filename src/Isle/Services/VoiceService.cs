@@ -112,12 +112,12 @@ namespace Isle.Services
             _pcm = null;
             if (pcm == null)
             {
-                ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
             if (pcm.Length < 16000) // меньше половины секунды
             {
-                ToastBus.Show(new Toast { Title = "Слишком коротко", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Слишком коротко", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
             ToastBus.Show(new Toast { Title = "Распознаю…", Icon = Icons.Mic, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
@@ -125,12 +125,12 @@ namespace Isle.Services
             try { text = await TranscribeAsync(Wav(pcm), command); }
             catch (Exception ex)
             {
-                ToastBus.Show(new Toast { Title = "Не удалось распознать", Subtitle = ex.Message, Icon = Icons.Mic, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(6) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Не удалось распознать", Subtitle = ex.Message, Icon = Icons.Mic, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(6) });
                 return;
             }
             if (string.IsNullOrWhiteSpace(text))
             {
-                ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
             if (AppSettings.Current.VoicePunctuate && !command) text = await AiService.PunctuateAsync(text); // команде знаки не нужны — экономим запрос
