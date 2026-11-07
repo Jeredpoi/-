@@ -81,6 +81,18 @@ Steam и браузеры прямо в чёлке: картинка игры, �
 </p>
 <p align="center"><sub>Свёрнутая чёлка · всплывашка пипетки</sub></p>
 
+<p align="center">
+  <img src="docs/screenshots/download.png" width="410" alt="Загрузка игры в Steam">
+  &nbsp;
+  <img src="docs/screenshots/volume.png" width="360" alt="Громкость">
+</p>
+<p align="center">
+  <img src="docs/screenshots/caps.png" width="326" alt="Caps Lock">
+  &nbsp;
+  <img src="docs/screenshots/layout.png" width="304" alt="Раскладка">
+</p>
+<p align="center"><sub>Загрузка игры в Steam · громкость · Caps Lock · смена раскладки</sub></p>
+
 <p align="center"><img src="docs/screenshots/home.png" width="820" alt="Главная"></p>
 <p align="center"><sub>Главная: инструменты, громкость, полка ярлыков</sub></p>
 
