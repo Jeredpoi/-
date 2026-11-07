@@ -106,7 +106,7 @@ namespace Isle.Services
         // Голос в текст (Whisper)
         public string VoicePreset { get; set; } = "groq"; // groq | openai | custom
         public string VoiceBaseUrl { get; set; } = "https://api.groq.com/openai/v1";
-        public string VoiceModel { get; set; } = "whisper-large-v3-turbo";
+        public string VoiceModel { get; set; } = "whisper-large-v3";
         public string VoiceKeyProtected { get; set; } = "";
         public string VoiceLanguage { get; set; } = ""; // "" — сам определит, ru, en
         public bool VoiceAutoPaste { get; set; } = true;
@@ -176,7 +176,14 @@ namespace Isle.Services
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;
-        public static AppSettings Current => _current ??= Storage.Load<AppSettings>("settings.json");
+        public static AppSettings Current => _current ??= Migrate(Storage.Load<AppSettings>("settings.json"));
+
+        /// <summary>Старые значения по умолчанию → новые (облегчённый turbo хуже ставит знаки препинания).</summary>
+        private static AppSettings Migrate(AppSettings s)
+        {
+            if (s != null && s.VoiceModel == "whisper-large-v3-turbo") s.VoiceModel = "whisper-large-v3";
+            return s;
+        }
         public void Save() => Storage.Save("settings.json", this);
     }
 

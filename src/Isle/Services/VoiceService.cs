@@ -181,7 +181,7 @@ namespace Isle.Services
             var file = new ByteArrayContent(wav);
             file.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             form.Add(file, "file", "voice.wav");
-            form.Add(new StringContent(string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3-turbo" : s.VoiceModel), "model");
+            form.Add(new StringContent(string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3" : s.VoiceModel), "model");
             if (!string.IsNullOrEmpty(s.VoiceLanguage)) form.Add(new StringContent(s.VoiceLanguage), "language");
             form.Add(new StringContent("json"), "response_format");
             // подсказка-образец с пунктуацией: Whisper подстраивается под стиль и сам ставит точки, запятые и вопросы

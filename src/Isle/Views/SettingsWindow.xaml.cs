@@ -485,7 +485,7 @@ namespace Isle.Views
         {
             var id = (string)((FrameworkElement)s).Tag;
             S.VoicePreset = id;
-            if (id == "groq") { S.VoiceBaseUrl = "https://api.groq.com/openai/v1"; S.VoiceModel = "whisper-large-v3-turbo"; }
+            if (id == "groq") { S.VoiceBaseUrl = "https://api.groq.com/openai/v1"; S.VoiceModel = "whisper-large-v3"; }
             if (id == "openai") { S.VoiceBaseUrl = "https://api.openai.com/v1"; S.VoiceModel = "whisper-1"; }
             S.Save();
             VoiceBase.Text = S.VoiceBaseUrl;
