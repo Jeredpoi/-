@@ -27,6 +27,7 @@ namespace Isle.Services
             "search" => "Найти в интернете: " + Arg,
             "timer" => "Таймер на " + Arg,
             "remind" => "Напоминание: " + Arg,
+            "edit" => "Переписать текст в поле: " + Arg,
             "volume" => "Громкость " + Arg + "%",
             "media" => Arg switch { "next" => "Следующий трек", "prev" => "Предыдущий трек", _ => "Музыка: пауза / играть" },
             "copy" => "Скопировать в буфер",
@@ -67,7 +68,7 @@ namespace Isle.Services
             "Не пиши команды, если пользователь просто спрашивает.";
 
         private static readonly Regex Rx = new(@"\[\[\s*(\w+)\s*(?::\s*([^\]]*?))?\s*\]\]", RegexOptions.Compiled);
-        private static readonly HashSet<string> Known = new() { "open", "search", "timer", "remind", "volume", "media", "copy", "screenshot", "lock", "sleep", "cmd" };
+        private static readonly HashSet<string> Known = new() { "edit", "open", "search", "timer", "remind", "volume", "media", "copy", "screenshot", "lock", "sleep", "cmd" };
 
         /// <summary>Достаёт команды из ответа и возвращает текст без них.</summary>
         public static (string text, List<AiAction> actions) Extract(string answer)
@@ -91,6 +92,8 @@ namespace Isle.Services
             {
                 switch (a.Name)
                 {
+                    case "edit":
+                        return "✗ Править набранный текст можно голосовой командой Ctrl+Alt+A";
                     case "open":
                         return AppLauncher.Open(a.Arg) ? "✓ Открыл " + a.Arg : "✗ Не нашёл «" + a.Arg + "» — проверь, что программа установлена";
                     case "search":
