@@ -164,6 +164,8 @@
                                     <TextBlock x:Name="ToastSub" FontSize="12" Foreground="#B9B9C3" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="#B9B9C3" Margin="10,0,0,0"/>
                                 </Grid>
+                                <!-- волна голоса во время диктовки (Ctrl+Alt+D / Ctrl+Alt+A / микрофон в чате) -->
+                                <h:VoiceWave x:Name="VoiceWave" Grid.Row="2" Height="20" Margin="0,5,0,0" Visibility="Collapsed"/>
                                 <Grid x:Name="ToastBar" Grid.Row="2" Height="4" Margin="0,4,0,0" Visibility="Collapsed">
                                     <Border CornerRadius="2" Background="{StaticResource Track}"/>
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
