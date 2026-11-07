@@ -105,16 +105,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <ContentPresenter x:Name="cp" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <ContentPresenter.RenderTransform><ScaleTransform x:Name="sc" ScaleX="1" ScaleY="1"/></ContentPresenter.RenderTransform>
-                    </ContentPresenter>
+                    <ContentPresenter x:Name="cp" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="cp" Property="Opacity" Value="0.88"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="sc" Property="ScaleX" Value="0.93"/>
-                            <Setter TargetName="sc" Property="ScaleY" Value="0.93"/>
+                            <Setter TargetName="cp" Property="RenderTransform">
+                                <Setter.Value><ScaleTransform ScaleX="0.93" ScaleY="0.93"/></Setter.Value>
+                            </Setter>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
