@@ -30,7 +30,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock x:Name="NetName" Text="Сеть" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="NetStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11"/>
+                        <TextBlock x:Name="NetStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
@@ -41,7 +41,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Bluetooth" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="BtStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11"/>
+                        <TextBlock x:Name="BtStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
@@ -63,7 +63,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Диспетчер" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock Text="задач" Style="{StaticResource MutedText}" FontSize="11"/>
+                        <TextBlock x:Name="LoadText" Text="задач" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>

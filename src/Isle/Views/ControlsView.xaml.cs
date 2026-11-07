@@ -22,9 +22,14 @@ namespace Isle.Views
         private readonly DispatcherTimer _disarm = new() { Interval = ConfirmTime };
         private bool _fillingDevices, _settingVolume;
 
+        // загрузка ЦП и памяти в плитке «Диспетчер» — обновляется, пока вкладка открыта
+        private readonly DispatcherTimer _load = new() { Interval = TimeSpan.FromSeconds(2) };
+
         public ControlsView()
         {
             InitializeComponent();
+            _load.Tick += (_, __) => ShowLoad();
+            IsVisibleChanged += (_, __) => { if (IsVisible) { ShowLoad(); _load.Start(); } else _load.Stop(); };
             _disarm.Tick += (_, __) => Disarm();
             AppHost.Audio.VolumeChanged += (_, __) => SyncVolume();
             AppHost.Audio.DeviceChanged += () => { SyncVolume(); FillDevices(); };
@@ -48,6 +53,27 @@ namespace Isle.Views
             var bt = await SystemControls.GetRadio(Radios.RadioKind.Bluetooth);
             BtStatus.Text = bt == null ? "Нет адаптера" : bt.Value ? "Включён" : "Выключен";
             SetTile(BtDot, BtIcon, bt == true);
+            if (bt == true)
+            {
+                // подключённые устройства: одно — по имени, несколько — числом (имена во всплывающей подсказке)
+                var devices = await SystemControls.ConnectedBluetoothAsync();
+                if (devices.Count == 1) BtStatus.Text = devices[0];
+                else if (devices.Count > 1) BtStatus.Text = devices.Count + " " + Plural(devices.Count, "устройство", "устройства", "устройств");
+                BtStatus.ToolTip = devices.Count > 0 ? string.Join("\n", devices) : null;
+            }
+            ShowLoad();
+        }
+
+        private void ShowLoad()
+        {
+            var (cpu, ram) = SystemControls.Load();
+            LoadText.Text = "ЦП " + cpu + "% · ОЗУ " + ram + "%";
+        }
+
+        private static string Plural(int n, string one, string few, string many)
+        {
+            int m10 = n % 10, m100 = n % 100;
+            return m10 == 1 && m100 != 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
         }
 
         /// <summary>Включённое — белый кружок с чёрной иконкой, выключенное — тёмный.</summary>
