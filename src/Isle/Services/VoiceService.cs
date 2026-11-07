@@ -274,7 +274,7 @@ namespace Isle.Services
 
         /// <summary>
         /// Модели распознавания у выбранного сервиса: только «голос → текст» (вход — звук, выход — текст),
-        /// от дешёвых к дорогим. У Pollinations сотни моделей — остальные (картинки, чат, озвучка) отбрасываем.
+        /// от дешёвых к дорогим. У агрегаторов (Polza.ai, OpenRouter) сотни моделей — остальные (картинки, чат, озвучка) отбрасываем.
         /// </summary>
         public static async Task<System.Collections.Generic.List<VoiceModelInfo>> ModelsAsync(string baseUrl)
         {
@@ -314,13 +314,17 @@ namespace Isle.Services
                 a.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && (x.GetString() ?? "").Contains(value, StringComparison.OrdinalIgnoreCase));
             if (Has(m, "supported_endpoints", "audio/transcriptions")) return true;
             if (m.TryGetProperty("supported_endpoints", out _)) return false; // сервис сам перечислил, что модель умеет — распознавания нет
+            // у агрегаторов в стиле OpenRouter (Polza.ai) модальности лежат в «architecture»
+            if (m.TryGetProperty("architecture", out var arch) && arch.ValueKind == JsonValueKind.Object
+                && Has(arch, "input_modalities", "audio") && Has(arch, "output_modalities", "text") && !Has(arch, "output_modalities", "audio")
+                && !Has(arch, "input_modalities", "text")) return true;
             if (Has(m, "input_modalities", "audio") && Has(m, "output_modalities", "text") && !Has(m, "output_modalities", "audio")
                 && !(m.TryGetProperty("category", out var c) && c.GetString() == "text")) return true;
             var low = id.ToLowerInvariant();
             return low.Contains("whisper") || low.Contains("transcribe") || low.Contains("speech-to-text") || low.Contains("stt");
         }
 
-        /// <summary>Цена модели из её «pricing» (у Pollinations — в пыльце за единицу). NaN — сервис цену не сообщил.</summary>
+        /// <summary>Цена модели из её «pricing» (у агрегаторов — цена за единицу). NaN — сервис цену не сообщил.</summary>
         private static (double, string) Price(JsonElement m)
         {
             if (!m.TryGetProperty("pricing", out var pr) || pr.ValueKind != JsonValueKind.Object) return (double.NaN, "");
@@ -333,8 +337,8 @@ namespace Isle.Services
                 if (v > 0) { sum += v; any = true; }
             }
             if (!any) return (0, "бесплатно");
-            var unit = string.IsNullOrEmpty(currency) || currency.Equals("pollen", StringComparison.OrdinalIgnoreCase) ? "пыльцы" : currency;
-            return (sum, sum.ToString(sum < 0.001 ? "0.#######" : "0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + unit);
+            var unit = string.IsNullOrEmpty(currency) ? "" : currency.Equals("RUB", StringComparison.OrdinalIgnoreCase) ? "₽" : currency;
+            return (sum, (sum.ToString(sum < 0.001 ? "0.#######" : "0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + unit).Trim());
         }
 
         /// <summary>Проверка: отправляем секунду тишины — если ключ верный, сервис ответит.</summary>

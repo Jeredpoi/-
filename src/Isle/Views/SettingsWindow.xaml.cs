@@ -174,7 +174,7 @@ namespace Isle.Views
 
             VpGroq.IsChecked = S.VoicePreset == "groq";
             VpOpenAi.IsChecked = S.VoicePreset == "openai";
-            VpPollinations.IsChecked = S.VoicePreset == "pollinations";
+            VpPolza.IsChecked = S.VoicePreset == "polza";
             VpCustom.IsChecked = S.VoicePreset == "custom";
             VoiceBase.Text = S.VoiceBaseUrl;
             VoiceModel.Text = S.VoiceModel;
@@ -488,7 +488,7 @@ namespace Isle.Views
             S.VoicePreset = id;
             if (id == "groq") { S.VoiceBaseUrl = "https://api.groq.com/openai/v1"; S.VoiceModel = "whisper-large-v3"; }
             if (id == "openai") { S.VoiceBaseUrl = "https://api.openai.com/v1"; S.VoiceModel = "whisper-1"; }
-            if (id == "pollinations") { S.VoiceBaseUrl = "https://gen.pollinations.ai/v1"; S.VoiceModel = "openai/whisper-large-v3"; }
+            if (id == "polza") { S.VoiceBaseUrl = "https://polza.ai/api/v1"; S.VoiceModel = "openai/whisper-1"; }
             S.Save();
             VoiceBase.Text = S.VoiceBaseUrl;
             VoiceModel.Text = S.VoiceModel;
@@ -524,7 +524,7 @@ namespace Isle.Views
                 else menu.Items.Add(new MenuItem { Header = "Голос → текст · от дешёвых к дорогим", IsEnabled = false });
                 foreach (var m in models)
                 {
-                    var header = m.Id + (string.IsNullOrEmpty(m.PriceText) ? "" : "   ·   " + m.PriceText) + (m.PaidOnly ? "   ·   только платная пыльца" : "");
+                    var header = m.Id + (string.IsNullOrEmpty(m.PriceText) ? "" : "   ·   " + m.PriceText) + (m.PaidOnly ? "   ·   только платно" : "");
                     var item = new MenuItem { Header = header, IsChecked = m.Id == VoiceModel.Text.Trim(), ToolTip = string.IsNullOrEmpty(m.Title) ? null : m.Title };
                     var id = m.Id;
                     item.Click += (_, __) => { VoiceModel.Text = id; OnVoiceFields(null, null); VoiceTestResult.Text = "Модель: " + id + " — нажми «Проверить»"; };
