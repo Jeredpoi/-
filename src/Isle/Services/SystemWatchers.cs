@@ -130,7 +130,7 @@ namespace Isle.Services
             // Батарея
             if (GetSystemPowerStatus(out var ps))
             {
-                HasBattery = ps.BatteryFlag != 128 && ps.BatteryLifePercent != 255;
+                HasBattery = ps.BatteryFlag != 128 && ps.BatteryFlag != 255 && ps.BatteryLifePercent != 255; // 128 — батареи нет (обычный ПК), 255 — Windows не знает: тоже не показываем
                 Charging = ps.ACLineStatus == 1;
                 BatteryPercent = ps.BatteryLifePercent == 255 ? -1 : ps.BatteryLifePercent;
                 if (HasBattery && s.BatteryToasts)
