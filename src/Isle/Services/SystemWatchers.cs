@@ -14,6 +14,25 @@ namespace Isle.Services
         private readonly DispatcherTimer _fast = new() { Interval = TimeSpan.FromMilliseconds(200) };
         private readonly DispatcherTimer _slow = new() { Interval = TimeSpan.FromSeconds(5) };
         private int _lastLang = -1;
+        private IntPtr _lastFg;
+
+        private static readonly string[] ShellClasses = { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "Windows.UI.Core.CoreWindow" };
+
+        private static bool IsShellOrOwn(IntPtr hwnd)
+        {
+            try
+            {
+                var sb = new StringBuilder(64);
+                Win32.GetClassName(hwnd, sb, sb.Capacity);
+                if (ShellClasses.Contains(sb.ToString())) return true;
+                Win32.GetWindowThreadProcessId(hwnd, out uint pid);
+                if (pid == (uint)Environment.ProcessId) return true; // сам Isle (поле ввода в острове)
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                var name = p.ProcessName.ToLowerInvariant();
+                return name.StartsWith("wallpaper") || name == "lively" || name == "explorer" && sb.ToString() != "CabinetWClass";
+            }
+            catch { return false; }
+        }
         private bool? _lastCaps;
         private bool? _lastCharging;
         private int _lastBattery = -1;
@@ -41,20 +60,26 @@ namespace Isle.Services
         {
             var s = AppSettings.Current;
 
-            // Раскладка
+            // Раскладка — того поля, где стоит курсор ввода, а не просто «окна»
             try
             {
                 var fg = Win32.GetForegroundWindow();
-                uint tid = Win32.GetWindowThreadProcessId(fg, out _);
-                var hkl = Win32.GetKeyboardLayout(tid);
+                // Рабочий стол, панель задач, обои (Wallpaper Engine) и сам остров «говорят» английскую раскладку по умолчанию —
+                // из-за них раньше выскакивала ложная плашка «EN», хотя раскладку никто не менял. Их пропускаем.
+                if (fg == IntPtr.Zero || IsShellOrOwn(fg)) return;
+                var hkl = Win32.LayoutOf(Win32.FocusWindowOf(fg));
                 int langId = (int)((long)hkl & 0xFFFF);
+                bool sameWindow = fg == _lastFg;
+                _lastFg = fg;
                 if (langId != 0 && langId != _lastLang)
                 {
                     bool first = _lastLang == -1;
                     _lastLang = langId;
                     LanguageCode = LangCode(langId);
                     LanguageChanged?.Invoke();
-                    if (!first && s.LayoutToasts)
+                    // плашку показываем только если раскладка сменилась в том же окне (её переключили),
+                    // а не потому, что перешли в другое окно со своей раскладкой
+                    if (!first && sameWindow && s.LayoutToasts)
                         ToastBus.Show(new Toast
                         {
                             Kind = ToastKind.Layout, Title = LanguageCode + "  ·  " + LangName(langId), Icon = Icons.Keyboard,
