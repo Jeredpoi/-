@@ -132,7 +132,7 @@ namespace Isle
                 int pct = (int)Math.Round(v * 100);
                 EnqueueToast(new Toast
                 {
-                    Kind = ToastKind.Volume, Title = muted ? "Звук выключен" : "Громкость " + pct, Icon = muted ? Icons.Mute : Icons.Volume,
+                    Kind = ToastKind.Volume, Title = muted ? "Звук выключен" : "Громкость " + pct, Icon = muted ? Icons.Mute : Icons.Volume, On = muted ? false : null,
                     Progress = muted ? 0 : v, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(1.3)
                 });
             };
@@ -1041,7 +1041,7 @@ namespace Isle
                 if (!Win32.PressLayoutHotkey())
                     ToastBus.Show(new Toast
                     {
-                        Title = "Окно не дало сменить раскладку", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
+                        Kind = ToastKind.Error, Title = "Окно не дало сменить раскладку", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
                         Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
                     });
                 await Task.Delay(200);
@@ -1475,13 +1475,38 @@ namespace Isle
         /// </summary>
         private void PlayToastStatus(Toast t)
         {
+            // надпись вместо значка (раскладка) и «включено / выключено» для переключателей
+            bool badge = !string.IsNullOrEmpty(t.Badge);
+            ToastBadge.Text = t.Badge ?? "";
+            ToastBadge.Visibility = badge ? Visibility.Visible : Visibility.Collapsed;
+            if (badge) ToastIcon.Visibility = Visibility.Collapsed;
+            ToastOffSlash.Visibility = t.On == false && !badge ? Visibility.Visible : Visibility.Collapsed;
+            if (t.On.HasValue)
+            {
+                double box = ToastIconBox.Width;
+                ToastOffSlash.X1 = ToastOffSlash.Y1 = box * 0.26; ToastOffSlash.X2 = ToastOffSlash.Y2 = box * 0.74;
+                ToastIconBox.Background = t.On.Value ? (Brush)FindResource("Fg") : new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x17));
+                ToastIcon.Foreground = t.On.Value ? Brushes.Black : new SolidColorBrush(Color.FromRgb(0x6B, 0x6B, 0x75));
+                ToastBadge.Foreground = t.On.Value ? Brushes.Black : (Brush)FindResource("Fg");
+            }
+            else if (badge)
+            {
+                ToastIconBox.Background = (Brush)FindResource("Fg");
+                ToastBadge.Foreground = Brushes.Black;
+            }
+
             bool error = t.Kind == ToastKind.Error || (t.Kind == ToastKind.Info && FailTitle.IsMatch(t.Title ?? ""));
             bool success = !error && t.Kind == ToastKind.Success;
-            if (error) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
-            else if (success && t.Icon != Icons.Pipette) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
-            ToastIconBox.Background = error ? new SolidColorBrush(Color.FromRgb(0x2A, 0x14, 0x16))
-                : success && t.Swatch == null ? new SolidColorBrush(Color.FromRgb(0x12, 0x24, 0x18))
-                : ToastIconBox.Background;
+            if (!t.On.HasValue && !badge)
+            {
+                if (error) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
+                else if (success && t.Icon != Icons.Pipette) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+                ToastIconBox.Background = error ? new SolidColorBrush(Color.FromRgb(0x2A, 0x14, 0x16))
+                    : success && t.Swatch == null ? new SolidColorBrush(Color.FromRgb(0x12, 0x24, 0x18))
+                    : ToastIconBox.Background;
+            }
+            // переключатель «включился» — короткий «прыжок», чтобы смена была заметна
+            if (t.On == true || badge) success = true;
             if (ToastIconBox.RenderTransform is not TransformGroup tg)
             {
                 tg = new TransformGroup();

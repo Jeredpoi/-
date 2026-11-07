@@ -151,6 +151,10 @@
                                         <Border CornerRadius="6" BorderBrush="#40000000" BorderThickness="1"/>
                                     </Border>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
+                                    <!-- «выключено»: косая черта поверх значка -->
+                                    <Line x:Name="ToastOffSlash" X1="9" Y1="9" X2="25" Y2="25" Stroke="#F87171" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
+                                    <TextBlock x:Name="ToastBadge" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     <h:WeatherGlyph x:Name="ToastWeather" Margin="2" Visibility="Collapsed"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>

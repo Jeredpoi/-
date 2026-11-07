@@ -151,7 +151,7 @@ namespace Isle.Services
                     Kind = ToastKind.Info,
                     Title = active ? "VPN подключён" + (Country.Length > 0 ? " · " + Country : "") : "VPN отключён",
                     Subtitle = active ? (CountryName.Length > 0 ? CountryName + " · " : "") + Name : (CountryName.Length > 0 ? "Сейчас вы: " + CountryName : ""),
-                    Icon = Icons.Shield,
+                    Icon = Icons.Shield, On = active,
                     Accent = active ? System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80) : System.Windows.Media.Color.FromRgb(0xA1, 0xA1, 0xAB)
                 });
         }

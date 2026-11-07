@@ -55,7 +55,7 @@ namespace Isle.Services
             catch (Exception ex)
             {
                 _capture = null;
-                ToastBus.Show(new Toast { Title = "Микрофон недоступен", Subtitle = ex.Message, Icon = Icons.Mic, Important = true, Duration = TimeSpan.FromSeconds(4) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Микрофон недоступен", Subtitle = ex.Message, Icon = Icons.Mic, Important = true, Duration = TimeSpan.FromSeconds(4) });
             }
         }
 

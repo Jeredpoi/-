@@ -131,7 +131,7 @@ namespace Isle.Views
         private void OnMic(object s, RoutedEventArgs e)
         {
             AppHost.Audio.MicMuted = MicBtn.IsChecked == true;
-            ToastBus.Show(new Toast { Title = AppHost.Audio.MicMuted ? "Микрофон выключен" : "Микрофон включён", Icon = Icons.Mic, ReplaceKey = "mic", Important = true });
+            ToastBus.Show(new Toast { Title = AppHost.Audio.MicMuted ? "Микрофон выключен" : "Микрофон включён", Icon = Icons.Mic, On = !AppHost.Audio.MicMuted, ReplaceKey = "mic", Important = true });
         }
 
         private void FillDevices()

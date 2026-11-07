@@ -271,7 +271,7 @@ namespace Isle.Views
                 ToastBus.Show(new Toast
                 {
                     Kind = ToastKind.Success,
-                    Title = Autostart.IsChecked == true ? "Автозапуск включён" : "Автозапуск выключен",
+                    Title = Autostart.IsChecked == true ? "Автозапуск включён" : "Автозапуск выключен", On = Autostart.IsChecked == true,
                     Icon = Icons.Check
                 });
             }
