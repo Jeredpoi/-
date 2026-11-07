@@ -17,6 +17,13 @@ namespace Isle.Views
         {
             InitializeComponent();
             AppHost.WeatherChanged += Render;
+            // бесконечные анимации снега/дождя крутятся, даже когда вкладка закрыта, и держат отрисовку окна —
+            // убираем их, пока погоду не видно, и рисуем заново при показе
+            IsVisibleChanged += (_, __) =>
+            {
+                if (!IsVisible) WeatherFx.Children.Clear();
+                else if (AppHost.Weather is { } w) DrawWeatherBackdrop(w);
+            };
             Render();
         }
 

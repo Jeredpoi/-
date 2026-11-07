@@ -1094,7 +1094,17 @@ namespace Isle
             if (DateTime.Now >= _nextClaudeCheck)
             {
                 _nextClaudeCheck = DateTime.Now.AddSeconds(15);
-                try { _claudeRunning = System.Diagnostics.Process.GetProcessesByName("claude").Length > 0; } catch { }
+                // перебор процессов занимает заметное время — в фоне, чтобы чёлка не дёргалась раз в 15 с
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var procs = System.Diagnostics.Process.GetProcessesByName("claude");
+                        _claudeRunning = procs.Length > 0;
+                        foreach (var p in procs) p.Dispose();
+                    }
+                    catch { }
+                });
             }
             if (DateTime.Now >= _nextWork && idle < TimeSpan.FromMinutes(4))
             {

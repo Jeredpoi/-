@@ -132,7 +132,8 @@ namespace Isle.Services
         private async Task Check()
         {
             if (!AppSettings.Current.VpnStatus) { if (Active) { Active = false; Changed?.Invoke(); } return; }
-            var nic = Find();
+            // Список сетевых адаптеров Windows отдаёт медленно (до десятков мс) — не в потоке интерфейса, иначе раз в 10 с подлагивает анимация
+            var nic = await Task.Run(Find);
             bool active = nic != null;
             if (active == _last) return;
             bool first = _last == null;
