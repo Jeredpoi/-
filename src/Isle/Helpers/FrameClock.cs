@@ -17,6 +17,7 @@ namespace Isle.Helpers
         private static int _subscribers;
         private static event Action<double> _tick;
         private static Action<double>[] _handlers = Array.Empty<Action<double>>();
+        private static readonly System.Collections.Generic.Dictionary<Action<double>, int> Failures = new();
 
         private static void RefreshHandlers()
         {
@@ -66,11 +67,21 @@ namespace Isle.Helpers
                 var handlers = _handlers;
                 foreach (Action<double> handler in handlers)
                 {
-                    try { handler(dt); }
+                    try { handler(dt); Failures.Remove(handler); }
                     catch (Exception ex)
                     {
-                        App.Trace("анимация отключена после ошибки кадра: " + ex.Message);
-                        Tick -= handler;
+                        // Одна случайная ошибка не должна навсегда выключать анимацию (а через этот кадр
+                        // работает и логика чёлки: наведение, закрытие, эквалайзер). Отключаем только
+                        // обработчик, который падает ~3 секунды подряд.
+                        Failures.TryGetValue(handler, out int n);
+                        Failures[handler] = ++n;
+                        if (n == 1) App.Log("ошибка кадра анимации: " + ex);
+                        if (n >= 90)
+                        {
+                            App.Trace("анимация отключена после повторяющихся ошибок: " + ex.Message);
+                            Failures.Remove(handler);
+                            Tick -= handler;
+                        }
                     }
                 }
             };

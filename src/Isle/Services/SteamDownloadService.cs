@@ -86,7 +86,10 @@ namespace Isle.Services
         {
             try
             {
-                if (System.Diagnostics.Process.GetProcessesByName("steam").Length == 0) return null;
+                var procs = System.Diagnostics.Process.GetProcessesByName("steam");
+                bool running = procs.Length > 0;
+                foreach (var p in procs) p.Dispose();
+                if (!running) return null;
             }
             catch { return null; }
             return ReadCurrent(FindSteamRoot(), DateTime.Now);
@@ -232,6 +235,9 @@ namespace Isle.Services
                 var useStage = current.Staging || (!current.Downloading && manifest?.Staged > 0);
                 long progressDone = useStage ? manifest?.Staged ?? 0 : manifest?.Downloaded ?? current.Done;
                 long progressTotal = useStage ? manifest?.StageTotal ?? 0 : manifest?.DownloadTotal ?? current.Total;
+                // Steam пишет байты в appmanifest редко (раз в десятки секунд), поэтому проценты «прыгали».
+                // Между записями досчитываем по скорости, как это делает сам клиент Steam.
+                if (!useStage) progressDone = Smooth(current.Id, progressDone, progressTotal, rateBytes, now);
                 var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
                 var remainingBytes = Math.Max(0, progressTotal - progressDone);
                 var downloadRemaining = Math.Max(0, (manifest?.DownloadTotal ?? current.Total) - (manifest?.Downloaded ?? current.Done));
@@ -251,6 +257,26 @@ namespace Isle.Services
                 };
             }
             catch { return null; }
+        }
+
+        private static readonly Dictionary<int, (long Real, double Est, DateTime At)> Estimates = new();
+
+        /// <summary>
+        /// Плавный прогресс между редкими записями Steam: растёт со скоростью загрузки, никогда не идёт назад,
+        /// не убегает дальше реального значения больше чем на 90 секунд загрузки и не доходит до 100% раньше Steam.
+        /// </summary>
+        internal static long Smooth(int appId, long real, long total, double rate, DateTime now)
+        {
+            if (total <= 0) return real;
+            if (!Estimates.TryGetValue(appId, out var e) || real < e.Real - total / 100)
+                e = (real, real, now);                                   // новая загрузка или Steam начал заново
+            double dt = Math.Clamp((now - e.At).TotalSeconds, 0, 10);
+            double est = Math.Max(e.Est, real);
+            if (rate > 0) est = Math.Min(est + rate * dt, real + rate * 90);
+            est = Math.Min(est, total * 0.999);
+            est = Math.Max(est, real);
+            Estimates[appId] = (Math.Max(real, e.Real), est, now);
+            return (long)est;
         }
 
         private static string FindSteamRoot()

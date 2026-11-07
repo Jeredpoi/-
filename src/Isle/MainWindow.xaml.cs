@@ -606,11 +606,15 @@ namespace Isle
             // музыка важнее: таймер тогда показывается маленьким рядом с треком
             bool timer = !media && (timerRunning || timerPaused);
             MediaTimer.Visibility = media && (timerRunning || timerPaused) ? Visibility.Visible : Visibility.Collapsed;
+            // загрузка: своя пилюля, а под музыку — маленькая метка «↓ 45%» рядом с треком
+            bool dl = _download != null && !media && !timer;
+            MediaDownload.Visibility = _download != null && media ? Visibility.Visible : Visibility.Collapsed;
 
             TimerRow.Visibility = timer ? Visibility.Visible : Visibility.Collapsed;
             MediaRow.Visibility = media ? Visibility.Visible : Visibility.Collapsed;
-            IdleRow.Visibility = !timer && !media ? Visibility.Visible : Visibility.Collapsed;
-            RevealRow(timer ? TimerRow : media ? MediaRow : (UIElement)IdleRow);
+            DownloadRow.Visibility = dl ? Visibility.Visible : Visibility.Collapsed;
+            IdleRow.Visibility = !timer && !media && !dl ? Visibility.Visible : Visibility.Collapsed;
+            RevealRow(timer ? TimerRow : media ? MediaRow : dl ? DownloadRow : (UIElement)IdleRow);
 
             double h = 34;
             double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
@@ -618,6 +622,8 @@ namespace Isle
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
+            if (MediaDownload.Visibility == Visibility.Visible) w += 54;
+            if (dl) { w = 320; h = 42; }
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
@@ -841,7 +847,9 @@ namespace Isle
                 _voiceKeyPoll.Tick += (_, __) =>
                 {
                     if (!AppHost.Voice.Recording) { _voiceKeyPoll.Stop(); return; }
-                    bool held = (Win32.GetAsyncKeyState(0x41) & 0x8000) != 0; // клавиша A ещё зажата
+                    // основная клавиша сочетания (по умолчанию A) ещё зажата — сочетание можно переназначить
+                    uint vk = TryParseHotkey(AppSettings.Current.HotkeyVoiceCommand, out _, out uint k) ? k : 0x41;
+                    bool held = (Win32.GetAsyncKeyState((int)vk) & 0x8000) != 0;
                     if (held) return;
                     _voiceKeyPoll.Stop();
                     if (DateTime.Now - _voiceKeyDown < TimeSpan.FromMilliseconds(400)) return; // короткое нажатие — запись идёт до второго нажатия
@@ -1041,7 +1049,7 @@ namespace Isle
             brush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0x5A, 0x14, 0x18), Color.FromRgb(0x2A, 0x2A, 0x30), TimeSpan.FromMilliseconds(520))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
             ToastIcon.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(260)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
-        foreach (var b in _characters) b.Mood = Helpers.Mood.Attention;
+            foreach (var b in _characters) b.Mood = Helpers.Mood.Attention;
         }
 
         private void StopAlarmPulse()
@@ -1191,7 +1199,7 @@ namespace Isle
             if (_oledHidden) { _hideAfterToast = true; OledReveal(false); }
             State = IslandState.Toast;
             CollapsedView.Visibility = Visibility.Visible;
-            IdleRow.Visibility = MediaRow.Visibility = TimerRow.Visibility = Visibility.Collapsed;
+            IdleRow.Visibility = MediaRow.Visibility = TimerRow.Visibility = DownloadRow.Visibility = Visibility.Collapsed;
             ToastRow.Visibility = Visibility.Visible;
             _lastRow = null;
             RevealRow(ToastRow);
@@ -1332,54 +1340,75 @@ namespace Isle
                         Duration = TimeSpan.FromSeconds(4)
                     });
 
+                // Идущая загрузка живёт в самой чёлке (как музыка или таймер), а не всплывашками каждые 2 секунды
                 var steam = result.steam;
-                if (steam is { IsPaused: false })
-                {
-                    ShowSteamDownload(steam);
-                    return;
-                }
-
                 var download = result.browser.Active.FirstOrDefault();
-                if (download != null)
-                {
-                    ToastBus.Show(new Toast
-                    {
-                        Kind = ToastKind.Download,
-                        Title = download.FileName,
-                        Subtitle = download.Browser + " · " + download.ProgressText,
-                        SpeedText = download.SpeedText,
-                        EtaText = download.EtaText,
-                        Icon = Icons.Bolt,
-                        Progress = download.Progress,
-                        ReplaceKey = "browser-download",
-                        Duration = TimeSpan.FromSeconds(3)
-                    });
-                    return;
-                }
-
-                if (steam != null) ShowSteamDownload(steam);
+                if (steam is { IsPaused: false })
+                    SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon));
+                else if (download != null)
+                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, download.SpeedText, download.EtaText, null));
+                else SetDownload(null);
             }
             catch (Exception ex) { App.Trace("ошибка отслеживания загрузок: " + ex.Message); }
             finally { _downloadPollInProgress = false; }
         }
 
-        private void ShowSteamDownload(SteamDownload download)
+        /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>
+        private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art);
+        private DownloadState _download;
+        private double _dlShown;      // плавно догоняет настоящий прогресс
+        private double _dlSpin;       // вращение «неизвестного» прогресса
+
+        private void SetDownload(DownloadState d)
         {
-            ToastBus.Show(new Toast
+            bool had = _download != null;
+            _download = d;
+            if (d == null)
             {
-                Kind = ToastKind.Download,
-                Title = download.Name,
-                Subtitle = (download.IsPaused ? "На паузе · " : "") + download.ProgressText,
-                SpeedText = download.SpeedText,
-                EtaText = download.EtaText,
-                Image = download.Icon,
-                FolderPath = download.FolderPath,
-                Icon = Icons.Bolt,
-                Progress = download.Progress,
-                ReplaceKey = "steam-download",
-                Duration = TimeSpan.FromSeconds(3)
-            });
+                MediaDownload.Visibility = Visibility.Collapsed;
+                if (had && State == IslandState.Collapsed) ShowCollapsedContent(false);
+                return;
+            }
+            if (!had) _dlShown = 0;
+            DlName.Text = d.Name;
+            var parts = new List<string> { d.Source };
+            if (!string.IsNullOrEmpty(d.Speed)) parts.Add(d.Speed);
+            if (!string.IsNullOrEmpty(d.Eta)) parts.Add(d.Eta);
+            DlSub.Text = string.Join(" · ", parts);
+            DlArt.Source = d.Art;
+            DlIcon.Visibility = d.Art == null ? Visibility.Visible : Visibility.Collapsed;
+            string pct = d.Progress.HasValue ? (int)Math.Floor(Math.Clamp(d.Progress.Value, 0, 1) * 100) + "%" : "";
+            DlPercent.Text = pct;
+            DlPercent.Visibility = pct.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            MediaDownload.Text = "↓ " + (pct.Length > 0 ? pct : "…");
+            if (State == IslandState.Collapsed) ShowCollapsedContent(had);
         }
+
+        /// <summary>Кольцо прогресса загрузки: плавно догоняет реальное значение; без размера — крутится.</summary>
+        private void AnimateDownloadRing(double dt)
+        {
+            if (_download == null || DownloadRow.Visibility != Visibility.Visible) return;
+            if (_download.Progress is double target)
+            {
+                double before = _dlShown;
+                _dlShown += (Math.Clamp(target, 0, 1) - _dlShown) * Math.Min(1, dt * 4);
+                if (Math.Abs(_dlShown - before) > 0.0005 || DlRing.Data == null)
+                {
+                    DlRing.RenderTransform = null;
+                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 14, 14, 12.75);
+                }
+            }
+            else
+            {
+                _dlSpin = (_dlSpin + dt * 300) % 360;
+                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 14, 14);
+                rt.Angle = _dlSpin;
+                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 14, 14, 12.75); DlRing.Tag = "spin"; }
+                return;
+            }
+            DlRing.Tag = null;
+        }
+
         private DateTime? _lastSnowAlert;
 
         // ===================== OLED-режим =====================
@@ -1573,6 +1602,7 @@ namespace Isle
 
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
             UpdateMiniLive();
+            AnimateDownloadRing(0.033);
             if (RecChip.Visibility == Visibility.Visible) RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
             if (Buddy.Visibility == Visibility.Visible)
             {

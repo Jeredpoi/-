@@ -594,6 +594,8 @@ namespace Isle.Views
                     ToolTip = "Нажми сюда, затем нажми новое сочетание клавиш"
                 };
                 key.PreviewMouseLeftButtonDown += (_, __) => { key.Focus(); key.Text = "Нажми сочетание…"; };
+                // ушли из поля, ничего не нажав, — возвращаем текущее сочетание
+                key.LostKeyboardFocus += (_, __) => { if (key.Text == "Нажми сочетание…") key.Text = GetHotkey(name); };
                 key.PreviewKeyDown += (_, e) =>
                 {
                     var k = e.Key == Key.System ? e.SystemKey : e.Key;

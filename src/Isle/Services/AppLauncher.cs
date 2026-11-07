@@ -128,7 +128,10 @@ namespace Isle.Services
                             icon = Environment.ExpandEnvironmentVariables(icon.Trim().Trim('"'));
                             int comma = icon.LastIndexOf(',');
                             if (comma > 2 && int.TryParse(icon.Substring(comma + 1), out _)) icon = icon.Substring(0, comma).Trim('"');
-                            if (File.Exists(icon)) return icon;
+                            // DisplayIcon часто указывает на деинсталлятор или .ico — такое не запускаем
+                            var iconName = Path.GetFileName(icon).ToLowerInvariant();
+                            if (File.Exists(icon) && iconName.EndsWith(".exe") && !iconName.Contains("unins") && !iconName.Contains("uninstall")
+                                && !iconName.Contains("setup") && !iconName.Contains("update")) return icon;
                         }
                         var install = app.GetValue("InstallLocation") as string;
                         if (string.IsNullOrWhiteSpace(install) || !Directory.Exists(install)) continue;
@@ -159,7 +162,7 @@ namespace Isle.Services
                 Win32.GetWindowThreadProcessId(hwnd, out uint pid);
                 try
                 {
-                    var process = Process.GetProcessById((int)pid);
+                    using var process = Process.GetProcessById((int)pid);
                     if (!browsers.Contains(process.ProcessName)) return true;
                     var title = new StringBuilder(512);
                     Win32.GetWindowText(hwnd, title, title.Capacity);

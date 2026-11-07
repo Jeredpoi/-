@@ -182,12 +182,19 @@ namespace Isle.Services
 
         private static bool TryReadProfile(Profile profile, out List<Row> rows)
         {
+            // Пока браузер открыт, он держит History под эксклюзивной блокировкой — обычное чтение падает
+            // с «database is locked». Тогда читаем в режиме immutable: SQLite не берёт блокировок и просто читает файл.
+            return TryReadProfile(profile, false, out rows) || TryReadProfile(profile, true, out rows);
+        }
+
+        private static bool TryReadProfile(Profile profile, bool immutable, out List<Row> rows)
+        {
             rows = new List<Row>();
             try
             {
                 var builder = new SqliteConnectionStringBuilder
                 {
-                    DataSource = profile.HistoryPath,
+                    DataSource = immutable ? new Uri(profile.HistoryPath).AbsoluteUri + "?immutable=1" : profile.HistoryPath,
                     Mode = SqliteOpenMode.ReadOnly,
                     Pooling = false,
                     DefaultTimeout = 1

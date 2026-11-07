@@ -157,7 +157,9 @@ namespace Isle.Views
                                                && !IsServiceError(m.Text))); // свои ошибки ИИ не показываем как его ответы
                 answer = await AiService.AskAsync(history, requestCts.Token);
             }
-            catch (OperationCanceledException) { return; }
+            // отмену сделал сам пользователь (другой чат, очистка) — молча выходим; иначе это тайм-аут запроса
+            catch (OperationCanceledException) when (requestCts.IsCancellationRequested) { return; }
+            catch (OperationCanceledException) { answer = "Ошибка сети: сервис не ответил вовремя — попробуй ещё раз"; }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
             // A cleared or switched conversation must not be repopulated by a late API response.
             if (requestCts.IsCancellationRequested) return;
