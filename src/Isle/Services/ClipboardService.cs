@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
@@ -99,9 +100,23 @@ namespace Isle.Services
         /// <summary>До этого момента копирования делает сам Isle (правка текста ИИ) — в историю их не пишем.</summary>
         public static DateTime IgnoreUntil { get; set; }
 
+        /// <summary>
+        /// Одно изменение буфера за раз. Windows часто шлёт два события подряд на один снимок
+        /// (картинка кладётся в нескольких форматах) — раньше оба считали хэш параллельно,
+        /// не находили друг друга в истории, и снимок появлялся в буфере дважды.
+        /// </summary>
+        private readonly SemaphoreSlim _changeGate = new(1, 1);
+
         private async Task OnChangedAsync()
         {
             if (DateTime.Now < IgnoreUntil) return;
+            await _changeGate.WaitAsync();
+            try { await HandleChangeAsync(); }
+            finally { _changeGate.Release(); }
+        }
+
+        private async Task HandleChangeAsync()
+        {
             var s = AppSettings.Current;
             string owner = Win32.ClipboardOwnerProcess(); // сразу, пока владелец ещё тот
             await Task.Delay(40);
@@ -188,6 +203,10 @@ namespace Isle.Services
                 });
                 var existing = Items.FirstOrDefault(x => x.ImageHash == hash);
                 if (existing != null) { Insert(existing, null); return; }
+                // та же картинка, пришедшая вторым событием в другом формате (пиксели чуть отличаются) — не дублируем
+                var last = Items.FirstOrDefault();
+                if (last != null && last.IsImage && DateTime.Now - last.Time < TimeSpan.FromSeconds(2)
+                    && last.Text == "Изображение " + w + "×" + h) return;
 
                 await Task.Run(() =>
                 {
