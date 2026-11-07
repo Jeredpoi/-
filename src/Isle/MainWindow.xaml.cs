@@ -1563,6 +1563,13 @@ namespace Isle
         private double _dlShown;      // плавно догоняет настоящий прогресс
         private double _dlSpin;       // вращение «неизвестного» прогресса
 
+        /// <summary>Для съёмки README: показать загрузку (без опроса Steam, который бы её сбросил).</summary>
+        internal void ShowDemoDownload(string name, string source, double? progress, string speed, string eta, ImageSource art)
+        {
+            _steamTimer.Stop();
+            SetDownload(art == null && progress == null ? null : new DownloadState(name, source, progress, speed, eta, art));
+        }
+
         private void SetDownload(DownloadState d)
         {
             bool had = _download != null;

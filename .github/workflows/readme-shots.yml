@@ -28,6 +28,9 @@ jobs:
         shell: pwsh
         run: |
           $dir = Join-Path $PWD "shots"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          # обложка игры для снимка загрузки — та же картинка, что Steam показывает в библиотеке
+          try { Invoke-WebRequest "https://cdn.cloudflare.steamstatic.com/steam/apps/730/library_600x900.jpg" -OutFile "$dir/game.jpg" } catch { Write-Host "нет обложки" }
           $p = Start-Process -FilePath "out/app/Isle.exe" -ArgumentList "--readme-shots", "`"$dir`"" -PassThru
           if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
           Get-ChildItem $dir -Recurse | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }

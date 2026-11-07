@@ -29,6 +29,33 @@ namespace Isle
 
                 Save(island, Path.Combine(dir, "collapsed.png"), 40);
 
+                // всплывашки — те же, что показывает Isle (тексты и иконки как в настоящих событиях)
+                async Task ToastShot(Toast t, string name, int wait = 1200)
+                {
+                    ToastBus.Show(t);
+                    await Task.Delay(wait);
+                    Save(island, Path.Combine(dir, name), 40);
+                    await Task.Delay(Math.Max(300, (int)t.Duration.TotalMilliseconds - wait + 600));
+                }
+                await ToastShot(new Toast { Kind = ToastKind.Caps, Title = "Caps Lock включён", Icon = Icons.Caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(2) }, "caps.png");
+                await ToastShot(new Toast { Kind = ToastKind.Layout, Title = "RU  ·  Русский", Icon = Icons.Keyboard, ReplaceKey = "layout", Duration = TimeSpan.FromSeconds(2) }, "layout.png");
+                await ToastShot(new Toast { Kind = ToastKind.Volume, Title = "Громкость 64", Icon = Icons.Volume, Progress = 0.64, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(2) }, "volume.png");
+
+                // загрузка игры в Steam: обложка игры (если workflow её скачал) с кольцом прогресса
+                ImageSource art = null;
+                var artPath = Path.Combine(dir, "game.jpg");
+                if (File.Exists(artPath))
+                {
+                    var bi = new BitmapImage();
+                    bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.UriSource = new Uri(artPath); bi.EndInit(); bi.Freeze();
+                    art = bi;
+                }
+                w.ShowDemoDownload("Counter-Strike 2", "Steam", 0.68, "18,4 МБ/с", "25 с", art);
+                await Task.Delay(2500);
+                Save(island, Path.Combine(dir, "download.png"), 40);
+                w.ShowDemoDownload(null, null, null, null, null, null);
+                await Task.Delay(800);
+
                 ToastBus.Show(new Toast
                 {
                     Kind = ToastKind.Success, Title = "#E07A5F", Subtitle = "rgb(224, 122, 95) · скопирован",
