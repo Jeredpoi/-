@@ -58,7 +58,8 @@ namespace Isle
             {
                 Kind = ToastKind.Success, Title = "Снимок скопирован",
                 Subtitle = path != null ? "Сохранён в Изображения\\Isle" : "В буфере обмена",
-                Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(3)
+                Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
+                FilePath = path, EditImage = bmp
             });
         }
 

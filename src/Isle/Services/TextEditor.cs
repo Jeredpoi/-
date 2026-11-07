@@ -110,7 +110,7 @@ namespace Isle.Services
         private static void Show(string title, string sub, double seconds, bool failed = false) =>
             ToastBus.Show(new Toast
             {
-                Kind = failed ? ToastKind.Info : ToastKind.Success, Title = title, Subtitle = sub,
+                Kind = failed ? ToastKind.Error : ToastKind.Success, Title = title, Subtitle = sub,
                 Icon = failed ? Icons.Info : Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(seconds)
             });
     }
