@@ -53,6 +53,10 @@ namespace Isle.Native
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
         [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
         [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
+        [DllImport("user32.dll")] public static extern int GetMessage(out MSG msg, IntPtr hwnd, uint min, uint max);
+        [DllImport("user32.dll")] public static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr w, IntPtr l);
         [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
@@ -136,21 +140,13 @@ namespace Isle.Native
             catch { return IntPtr.Zero; }
         }
 
-        /// <summary>Нажать Win+Пробел — системное переключение раскладки (работает и там, где сообщение игнорируют).</summary>
-        public static void PressWinSpace()
-        {
-            keybd_event(0x5B, 0, 0, IntPtr.Zero);       // Win
-            keybd_event(0x20, 0, 0, IntPtr.Zero);       // Space
-            keybd_event(0x20, 0, 2, IntPtr.Zero);
-            keybd_event(0x5B, 0, 2, IntPtr.Zero);
-        }
-
         /// <summary>
         /// Нажать сочетание, которым у пользователя переключается раскладка (Alt+Shift, Ctrl+Shift или Ё),
         /// без клавиши Win: Win открывает системную плашку языка, и из-за неё мигают живые обои (Wallpaper Engine).
-        /// Если сочетание отключено в Windows — остаётся только Win+Пробел.
+        /// Сочетание отключено в Windows — ничего не жмём (Win+Пробел в играх «залипал» и выкидывал на рабочий стол).
         /// </summary>
-        public static void PressLayoutHotkey()
+        /// <returns>false — сочетание отключено в Windows, ничего не нажато.</returns>
+        public static bool PressLayoutHotkey()
         {
             string v = null;
             try
@@ -161,20 +157,24 @@ namespace Isle.Native
             catch { }
             switch ((v ?? "1").Trim())
             {
-                case "2": // Ctrl+Shift
-                    keybd_event(0xA2, 0, 0, IntPtr.Zero); keybd_event(0xA0, 0, 0, IntPtr.Zero);
-                    keybd_event(0xA0, 0, 2, IntPtr.Zero); keybd_event(0xA2, 0, 2, IntPtr.Zero);
-                    break;
-                case "4": // Ё (`)
-                    keybd_event(0xC0, 0, 0, IntPtr.Zero); keybd_event(0xC0, 0, 2, IntPtr.Zero);
-                    break;
-                case "3": // сочетание отключено
-                    PressWinSpace();
-                    break;
-                default: // Alt+Shift (по умолчанию в Windows)
-                    keybd_event(0xA4, 0, 0, IntPtr.Zero); keybd_event(0xA0, 0, 0, IntPtr.Zero);
-                    keybd_event(0xA0, 0, 2, IntPtr.Zero); keybd_event(0xA4, 0, 2, IntPtr.Zero);
-                    break;
+                case "2": SendKeyCombo(0xA2, 0xA0); return true; // Ctrl+Shift
+                case "4": SendKeyCombo(0xC0); return true;       // Ё (`)
+                case "3": return false;                           // сочетание отключено — Win+Пробел НЕ жмём (в играх «залипал» Win)
+                default: SendKeyCombo(0xA4, 0xA0); return true;  // Alt+Shift (по умолчанию в Windows)
+            }
+        }
+
+        /// <summary>
+        /// Страховка: если после нашего нажатия клавиша-модификатор всё ещё числится зажатой — отпускаем её.
+        /// Иначе следующий «Пробел» в игре мог стать «Win+Пробел» и выкинуть из полноэкранного режима.
+        /// </summary>
+        public static void ReleaseModifiers()
+        {
+            foreach (ushort vk in new ushort[] { 0x5B, 0x5C, 0xA4, 0xA5, 0xA0, 0xA1, 0xA2, 0xA3 })
+            {
+                if ((GetAsyncKeyState(vk) & 0x8000) == 0) continue;
+                var up = new INPUT[] { new() { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYUP } } } };
+                SendInput(1, up, Marshal.SizeOf(typeof(INPUT)));
             }
         }
 
