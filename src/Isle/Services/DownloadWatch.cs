@@ -21,6 +21,7 @@ namespace Isle.Services
             var targets = new List<(string Dir, string Filter)>();
             try { targets.AddRange(SteamDownloadService.WatchTargets()); } catch { }
             try { targets.AddRange(BrowserDownloadService.WatchTargets()); } catch { }
+            try { foreach (var d in PartialDownloadService.Folders()) targets.Add((d, "*")); } catch { } // папка «Загрузки»
             foreach (var (dir, filter) in targets)
             {
                 try
