@@ -1257,7 +1257,10 @@ namespace Isle
                 ? new SolidColorBrush(t.Accent)
                 : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
-            ToastIcon.Visibility = t.Image == null ? Visibility.Visible : Visibility.Collapsed;
+            bool weatherIcon = !string.IsNullOrEmpty(t.WeatherKind);
+            if (weatherIcon) ToastWeather.Kind = t.WeatherKind;
+            ToastWeather.Visibility = weatherIcon ? Visibility.Visible : Visibility.Collapsed; // анимированная погода в предупреждении
+            ToastIcon.Visibility = t.Image == null && !weatherIcon ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
@@ -1724,8 +1727,9 @@ namespace Isle
                         _lastWeatherAlert = key;
                         ToastBus.Show(new Toast
                         {
-                            Title = alert.Glyph + " " + alert.Title + " около " + alert.At.ToString("HH:mm"),
+                            Title = alert.Title + " около " + alert.At.ToString("HH:mm"),
                             Subtitle = weather.City, Icon = alert.Kind == "snow" ? Icons.Snow : Icons.Bell,
+                            WeatherKind = Helpers.WeatherGlyph.KindForAlert(alert.Kind),
                             Important = severe, Duration = TimeSpan.FromSeconds(severe ? 7 : 5)
                         });
                     }

@@ -21,7 +21,7 @@
                     <TextBlock x:Name="City" Text="—" FontSize="12" Foreground="#A1A1AB" VerticalAlignment="Center"/>
                 </DockPanel>
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,0">
-                    <TextBlock x:Name="Glyph" Text="·" FontSize="40" VerticalAlignment="Center"/>
+                    <h:WeatherGlyph x:Name="GlyphAnim" Width="54" Height="54" VerticalAlignment="Center"/>
                     <TextBlock x:Name="Temp" Text="—" FontSize="50" FontWeight="SemiBold" Margin="10,0,0,0"/>
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium"/>

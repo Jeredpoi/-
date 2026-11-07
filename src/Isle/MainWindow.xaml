@@ -151,6 +151,7 @@
                                 <Grid>
                                     <Image x:Name="ToastImage" Stretch="Uniform"/>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
+                                    <h:WeatherGlyph x:Name="ToastWeather" Margin="2" Visibility="Collapsed"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>
                                 </Grid>
