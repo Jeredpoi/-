@@ -19,6 +19,8 @@ namespace Isle.Services
         public string FolderPath { get; set; }
         /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
         public bool RoundImage { get; set; }
+        /// <summary>Уведомление другого приложения: его AppUserModelId — по клику открываем это приложение.</summary>
+        public string LaunchAppId { get; set; }
         /// <summary>Анимированный значок погоды вместо иконки (вид: sun, rain, thunder, snow… — см. WeatherGlyph).</summary>
         public string WeatherKind { get; set; }
         public double? Progress { get; set; }

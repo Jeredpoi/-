@@ -166,11 +166,16 @@ namespace Isle
                 _ungrow.Stop();
                 if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
                 bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
+                // навёл на всплывашку — она не исчезает, пока курсор на ней (и не превращается в панель)
+                if (State == IslandState.Toast) { _toastTimer.Stop(); return; }
                 if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer && !TimerRow.IsMouseOver) _hoverOpen.Start();
             };
             Island.MouseLeave += (_, __) =>
             {
                 _hoverOpen.Stop();
+                // ушёл со всплывашки — она ещё немного побудет и закроется
+                if (State == IslandState.Toast && _currentToast != null && !AlarmService.Ringing)
+                { _toastTimer.Stop(); _toastTimer.Interval = TimeSpan.FromSeconds(2.5); _toastTimer.Start(); }
                 if (State == IslandState.Expanded && !_pinned && !IsActive && !SuppressAutoCollapse) _leaveClose.Start();
                 // не сжимаемся сразу: курсор на самой границе иначе дёргает остров туда-сюда
                 if (State == IslandState.Collapsed && _hoverGrown) { _ungrow.Stop(); _ungrow.Start(); }
@@ -486,6 +491,16 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // клик по уведомлению другого приложения — открываем это приложение
+            if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.LaunchAppId is string appId
+                && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
+            {
+                NotificationService.LaunchApp(appId);
+                _toastTimer.Stop();
+                NextToast();
+                e.Handled = true;
+                return;
+            }
             if (AlarmService.Ringing && State != IslandState.Expanded)
             {
                 AlarmService.Stop(); // клик по звенящей чёлке (в любом виде) — выключить будильник
