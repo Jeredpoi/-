@@ -285,6 +285,20 @@ namespace Isle.Services
             return (long)est;
         }
 
+        /// <summary>Папки и файлы, изменение которых означает новости о загрузке: лог Steam и appmanifest каждой библиотеки.</summary>
+        public static System.Collections.Generic.IEnumerable<(string Dir, string Filter)> WatchTargets()
+        {
+            var root = FindSteamRoot();
+            if (root == null) yield break;
+            var logs = Path.Combine(root, "logs");
+            if (Directory.Exists(logs)) yield return (logs, "content_log.txt");
+            foreach (var lib in Libraries(root))
+            {
+                var apps = Path.Combine(lib, "steamapps");
+                if (Directory.Exists(apps)) yield return (apps, "appmanifest_*.acf");
+            }
+        }
+
         private static string FindSteamRoot()
         {
             try
@@ -426,24 +440,54 @@ namespace Isle.Services
         {
             string cacheKey = root + "|" + appId;
             if (IconCache.TryGetValue(cacheKey, out var cached)) return cached;
-            foreach (var library in Libraries(root))
+            foreach (var path in ArtCandidates(root, appId))
             {
-                var caches = new[] { Path.Combine(library, "steamapps", "librarycache"), Path.Combine(library, "appcache", "librarycache") };
-                var files = new[] { appId + "_header.jpg", appId + "_library_600x900.jpg", appId + "_logo.png", "library_600x900.jpg", "library_header.jpg", "logo.png", "header.jpg" };
-                foreach (var cache in caches)
-                foreach (var path in files.SelectMany(file => new[] { Path.Combine(cache, file), Path.Combine(cache, appId.ToString(CultureInfo.InvariantCulture), file) }))
+                try
                 {
-                    if (!File.Exists(path)) continue;
-                    try
-                    {
-                        var image = new BitmapImage();
-                        image.BeginInit(); image.UriSource = new Uri(path); image.CacheOption = BitmapCacheOption.OnLoad; image.EndInit(); image.Freeze();
-                        return IconCache[cacheKey] = image;
-                    }
-                    catch { }
+                    // миниатюра для кружка в чёлке: декодируем маленькой, чтобы не держать в памяти обложки 600×900
+                    var image = new BitmapImage();
+                    image.BeginInit(); image.UriSource = new Uri(path); image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.DecodePixelHeight = 96; image.EndInit(); image.Freeze();
+                    return IconCache[cacheKey] = image;
                 }
+                catch { }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Картинки игры из кэша библиотеки Steam, лучшие для маленького кружка — первыми:
+        /// квадратная иконка игры, затем обложка, шапка, логотип. Новый Steam кладёт их в
+        /// appcache\librarycache\&lt;appid&gt;\&lt;хэш&gt;\…, старый — прямо в librarycache с префиксом appid.
+        /// </summary>
+        internal static IEnumerable<string> ArtCandidates(string root, int appId)
+        {
+            string id = appId.ToString(CultureInfo.InvariantCulture);
+            var names = new[] { "library_600x900.jpg", "library_capsule.jpg", "library_header.jpg", "header.jpg", "logo.png" };
+            foreach (var library in Libraries(root))
+            foreach (var cache in new[] { Path.Combine(library, "appcache", "librarycache"), Path.Combine(library, "steamapps", "librarycache") })
+            {
+                if (!Directory.Exists(cache)) continue;
+                var appDir = Path.Combine(cache, id);
+                if (Directory.Exists(appDir))
+                {
+                    List<string> files;
+                    try { files = Directory.EnumerateFiles(appDir, "*.*", SearchOption.AllDirectories).ToList(); }
+                    catch { files = new List<string>(); }
+                    // квадратная иконка игры: файл с именем-хэшем (40 шестнадцатеричных символов) прямо в папке игры
+                    foreach (var f in files.Where(f => Path.GetDirectoryName(f) == appDir
+                                 && Regex.IsMatch(Path.GetFileNameWithoutExtension(f), "^[0-9a-f]{40}$") && f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+                        yield return f;
+                    foreach (var name in names)
+                        foreach (var f in files.Where(f => Path.GetFileName(f).Equals(name, StringComparison.OrdinalIgnoreCase)))
+                            yield return f;
+                }
+                foreach (var name in new[] { id + "_icon.jpg", id + "_library_600x900.jpg", id + "_header.jpg", id + "_logo.png" })
+                {
+                    var f = Path.Combine(cache, name);
+                    if (File.Exists(f)) yield return f;
+                }
+            }
         }
 
         private static string GetInstallFolder(ManifestProgress manifest)

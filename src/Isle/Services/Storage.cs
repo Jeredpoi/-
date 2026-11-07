@@ -124,6 +124,8 @@ namespace Isle.Services
         // Внешний вид
         public string AccentHex { get; set; } = "#ECECF1";
         public double IslandOpacity { get; set; } = 1.0;
+        /// <summary>Частота анимаций, кадров/с: 30, 60, 120 или 0 — как у монитора.</summary>
+        public int MaxFps { get; set; } = 60;
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
         public bool FirstRunDone { get; set; } = false;
         public bool AutoUpdateCheck { get; set; } = true;

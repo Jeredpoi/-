@@ -36,6 +36,14 @@ namespace Isle.Services
                 Available = true;
                 Status = "Работает";
                 _timer.Tick += async (_, __) => await Poll();
+                // Мгновенно — по событию Windows «уведомления изменились». Оно работает только у приложений-пакетов (MSIX),
+                // у обычного exe Windows отказывает — тогда опрашиваем чаще, раз в секунду.
+                try
+                {
+                    _listener.NotificationChanged += (_, __) => System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () => await Poll());
+                    _timer.Interval = TimeSpan.FromSeconds(10); // подстраховка
+                }
+                catch { _timer.Interval = TimeSpan.FromSeconds(1); }
                 _timer.Start();
             }
             catch (Exception ex)
@@ -44,9 +52,12 @@ namespace Isle.Services
             }
         }
 
+        private bool _polling;
+
         private async Task Poll()
         {
-            if (!AppSettings.Current.NotificationToasts) return;
+            if (!AppSettings.Current.NotificationToasts || _polling) return; // опросы не накладываются друг на друга
+            _polling = true;
             try
             {
                 var list = await _listener.GetNotificationsAsync(Notif.NotificationKinds.Toast);
@@ -86,6 +97,7 @@ namespace Isle.Services
                 }
             }
             catch (Exception ex) { App.Log("notification poll: " + ex.Message); }
+            finally { _polling = false; }
         }
 
         private static string Fingerprint(Notif.UserNotification n)

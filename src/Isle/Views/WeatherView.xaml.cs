@@ -17,6 +17,13 @@ namespace Isle.Views
         {
             InitializeComponent();
             AppHost.WeatherChanged += Render;
+            // бесконечные анимации снега/дождя крутятся, даже когда вкладка закрыта, и держат отрисовку окна —
+            // убираем их, пока погоду не видно, и рисуем заново при показе
+            IsVisibleChanged += (_, __) =>
+            {
+                if (!IsVisible) WeatherFx.Children.Clear();
+                else if (AppHost.Weather is { } w) DrawWeatherBackdrop(w);
+            };
             Render();
         }
 
@@ -32,10 +39,10 @@ namespace Isle.Views
                 return;
             }
             City.Text = w.City;
-            Glyph.Text = w.Glyph;
+            GlyphAnim.Kind = Helpers.WeatherGlyph.KindFor(w.Code, w.IsDay, w.Temp, w.Wind); // живой значок: солнце, облака, дождь, гроза…
             Temp.Text = Math.Round(w.Temp) + "°";
             Desc.Text = w.Description;
-            Snow.Text = w.SnowForecast;
+            Snow.Text = w.AlertForecast; // ближайшее явление: гроза, дождь, снег, туман, ветер, мороз, жара
             Feels.Text = "Сегодня " + Math.Round(w.TodayMin) + "°…" + Math.Round(w.TodayMax) + "°";
             Wind.Text = w.Wind.ToString("0.#", CultureInfo.CurrentCulture) + " м/с " + w.WindFrom;
             Hum.Text = w.Humidity + "%";
@@ -71,10 +78,14 @@ namespace Isle.Views
             // the sun when the forecast explicitly says this is daytime.
             if (weather.IsDay && (weather.Code == 0 || weather.Code is 1 or 2))
                 AddSun(width, cloudy ? 0.72 : 1.0);
+            if (!weather.IsDay && weather.Code is 0 or 1 or 2) AddStars(width, height);
             if (cloudy) AddCloud(width, weather.Code);
+            if (weather.Code == 3 || rain || snow || IsThunder(weather.Code)) AddCloud(width * 0.45, weather.Code, 0.75, 46, 0.7); // пасмурно — второе облако
             if (snow) AddSnow(width, height);
             else if (rain) AddRain(width, height);
             else if (weather.Code is 45 or 48) AddMist(width, height);
+            if (IsThunder(weather.Code)) AddLightning(width, height);
+            if (weather.Wind >= 8) AddWind(width, height);
         }
 
         private void AddSun(double width, double opacity)
@@ -91,19 +102,25 @@ namespace Isle.Views
             sun.BeginAnimation(OpacityProperty, pulse);
         }
 
-        private void AddCloud(double width, int code)
+        private void AddCloud(double width, int code) => AddCloud(width, code, 1, 24, 0.92);
+
+        /// <summary>Облако, которое медленно плывёт туда-сюда.</summary>
+        private void AddCloud(double width, int code, double scale, double top, double opacity)
         {
             var color = code >= 95 ? Color.FromRgb(0xC6, 0xC8, 0xD9) : Color.FromRgb(0xE6, 0xF1, 0xFA);
             // One continuous silhouette avoids visible seams between translucent lobes.
             var cloud = new System.Windows.Shapes.Path
             {
-                Width = 130, Height = 64, Opacity = 0.92,
+                Width = 130 * scale, Height = 64 * scale, Opacity = opacity, RenderTransform = new TranslateTransform(),
                 Stretch = Stretch.Fill,
                 Fill = new SolidColorBrush(color),
                 Data = Geometry.Parse("M 16,54 C 7,54 2,47 2,39 C 2,31 8,25 16,24 C 19,11 30,4 43,4 C 55,4 64,11 68,22 C 72,18 78,16 84,16 C 97,16 107,25 109,37 C 120,37 128,44 128,53 C 128,61 122,64 113,64 L 17,64 C 8,64 3,60 3,55 Z")
             };
-            Canvas.SetLeft(cloud, Math.Max(8, width - 142)); Canvas.SetTop(cloud, 24);
+            Canvas.SetLeft(cloud, Math.Max(8, width - 142 * scale)); Canvas.SetTop(cloud, top);
             WeatherFx.Children.Add(cloud);
+            var drift = new DoubleAnimation(-14, 10, TimeSpan.FromSeconds(7 + _weatherRandom.NextDouble() * 4))
+            { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
+            ((TranslateTransform)cloud.RenderTransform).BeginAnimation(TranslateTransform.XProperty, drift);
         }
 
         private void AddSnow(double width, double height)
@@ -155,6 +172,50 @@ namespace Isle.Views
                 WeatherFx.Children.Add(haze);
                 var drift = new DoubleAnimation(-8, 10, TimeSpan.FromSeconds(5 + i)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
                 ((TranslateTransform)haze.RenderTransform).BeginAnimation(TranslateTransform.XProperty, drift);
+            }
+        }
+
+        /// <summary>Ночью в ясную погоду — мерцающие звёзды.</summary>
+        private void AddStars(double width, double height)
+        {
+            for (int i = 0; i < 14; i++)
+            {
+                double size = 1.2 + _weatherRandom.NextDouble() * 1.6;
+                var star = new Ellipse { Width = size, Height = size, Fill = Brushes.White, Opacity = 0.2 };
+                Canvas.SetLeft(star, _weatherRandom.NextDouble() * width);
+                Canvas.SetTop(star, _weatherRandom.NextDouble() * height * 0.55);
+                WeatherFx.Children.Add(star);
+                star.BeginAnimation(OpacityProperty, new DoubleAnimation(0.15, 0.85, TimeSpan.FromSeconds(1.2 + _weatherRandom.NextDouble() * 2))
+                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(_weatherRandom.NextDouble() * 2) });
+            }
+        }
+
+        /// <summary>Гроза: всё небо коротко вспыхивает, раз в несколько секунд двойной вспышкой.</summary>
+        private void AddLightning(double width, double height)
+        {
+            var flash = new Rectangle { Width = width, Height = height, Fill = Brushes.White, Opacity = 0 };
+            WeatherFx.Children.Add(flash);
+            var keys = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(5.5), RepeatBehavior = RepeatBehavior.Forever };
+            keys.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            keys.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(3.0))));
+            keys.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.05, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(3.08))));
+            keys.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.45, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(3.16))));
+            keys.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(3.6))));
+            flash.BeginAnimation(OpacityProperty, keys);
+        }
+
+        /// <summary>Сильный ветер: по карточке проносятся светлые штрихи.</summary>
+        private void AddWind(double width, double height)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                var gust = new Border { Width = 26 + _weatherRandom.NextDouble() * 30, Height = 1.6, CornerRadius = new CornerRadius(1), Background = new SolidColorBrush(Color.FromArgb(90, 0xFF, 0xFF, 0xFF)), RenderTransform = new TranslateTransform() };
+                Canvas.SetLeft(gust, -60);
+                Canvas.SetTop(gust, height * (0.2 + _weatherRandom.NextDouble() * 0.6));
+                WeatherFx.Children.Add(gust);
+                ((TranslateTransform)gust.RenderTransform).BeginAnimation(TranslateTransform.XProperty,
+                    new DoubleAnimation(0, width + 120, TimeSpan.FromSeconds(1.1 + _weatherRandom.NextDouble() * 0.8))
+                    { BeginTime = TimeSpan.FromSeconds(_weatherRandom.NextDouble() * 2.5), RepeatBehavior = RepeatBehavior.Forever });
             }
         }
 

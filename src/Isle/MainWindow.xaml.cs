@@ -35,7 +35,8 @@ namespace Isle
         private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
-        private readonly DispatcherTimer _steamTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+        private readonly DispatcherTimer _steamTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+        private readonly DispatcherTimer _downloadKick = new() { Interval = TimeSpan.FromMilliseconds(300) };
         private bool _downloadPollInProgress;
         private readonly Random _rnd = new();
         private DateTime _nextBlink = DateTime.Now.AddSeconds(3);
@@ -153,6 +154,10 @@ namespace Isle
             _oledHide.Tick += (_, __) => { _oledHide.Stop(); TryOledHide(); };
             _weatherTimer.Tick += async (_, __) => await RefreshWeather();
             _steamTimer.Tick += (_, __) => RefreshSteamDownload();
+            // Загрузки по событиям: Steam/браузер записал файл — проверяем через 0,3 с (несколько записей подряд склеиваются).
+            // Таймер остаётся подстраховкой: раз в секунду, пока что-то качается (скорость, остаток), и раз в 8 с в простое.
+            _downloadKick.Tick += (_, __) => { _downloadKick.Stop(); RefreshSteamDownload(); };
+            DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { _downloadKick.Stop(); _downloadKick.Start(); });
 
             Island.MouseEnter += (_, __) =>
             {
@@ -234,7 +239,8 @@ namespace Isle
                 _clock.Start();
                 _topmost.Start();
                 KeepOnTop();
-                Helpers.FrameClock.Tick += _ => Animate(); // общий кадр с Клоди и краем — окно перерисовывается один раз
+                Helpers.FrameClock.MaxFps = AppSettings.Current.MaxFps;
+                Helpers.FrameClock.Tick += dt => { _frameDt = dt; Animate(); }; // общий кадр с Клоди и краем — в такт монитору
 
                 ApplyAppearance();
                 AppHost.Watchers.Start();
@@ -243,6 +249,7 @@ namespace Isle
                 _ = AppHost.Notifications.StartAsync();
                 _weatherTimer.Start();
                 _steamTimer.Start();
+                _ = Task.Run(DownloadWatch.Start);
                 RefreshSteamDownload();
                 await RefreshWeather();
                 ApplyOledMode();
@@ -638,7 +645,7 @@ namespace Isle
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
-            if (dl) { w = 320; h = 42; }
+            if (dl) { w = 330; h = 46; }
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
@@ -1087,7 +1094,17 @@ namespace Isle
             if (DateTime.Now >= _nextClaudeCheck)
             {
                 _nextClaudeCheck = DateTime.Now.AddSeconds(15);
-                try { _claudeRunning = System.Diagnostics.Process.GetProcessesByName("claude").Length > 0; } catch { }
+                // перебор процессов занимает заметное время — в фоне, чтобы чёлка не дёргалась раз в 15 с
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var procs = System.Diagnostics.Process.GetProcessesByName("claude");
+                        _claudeRunning = procs.Length > 0;
+                        foreach (var p in procs) p.Dispose();
+                    }
+                    catch { }
+                });
             }
             if (DateTime.Now >= _nextWork && idle < TimeSpan.FromMinutes(4))
             {
@@ -1240,7 +1257,10 @@ namespace Isle
                 ? new SolidColorBrush(t.Accent)
                 : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
-            ToastIcon.Visibility = t.Image == null ? Visibility.Visible : Visibility.Collapsed;
+            bool weatherIcon = !string.IsNullOrEmpty(t.WeatherKind);
+            if (weatherIcon) ToastWeather.Kind = t.WeatherKind;
+            ToastWeather.Visibility = weatherIcon ? Visibility.Visible : Visibility.Collapsed; // анимированная погода в предупреждении
+            ToastIcon.Visibility = t.Image == null && !weatherIcon ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
@@ -1258,7 +1278,11 @@ namespace Isle
             if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
             double imageSize = compact ? 26 : 36;
-            ToastImage.Clip = t.Image == null ? null : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
+            // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
+            ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
+            ToastImage.Clip = t.Image == null ? null : t.RoundImage
+                ? new EllipseGeometry(new Point(imageSize / 2, imageSize / 2), imageSize / 2, imageSize / 2)
+                : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
             if (t.Progress.HasValue)
             {
                 double barW = w - 16 * 2 - 36 - 12;
@@ -1324,7 +1348,7 @@ namespace Isle
                         Kind = ToastKind.Success,
                         Title = "Загружено в Steam",
                         Subtitle = completed.Name,
-                        Image = completed.Icon,
+                        Image = completed.Icon, RoundImage = true,
                         FolderPath = completed.FolderPath,
                         Icon = Icons.Check,
                         Important = true,
@@ -1348,7 +1372,7 @@ namespace Isle
                         Kind = ToastKind.Info,
                         Title = "Загрузка приостановлена",
                         Subtitle = paused.Name + " · " + paused.ProgressText,
-                        Image = paused.Icon,
+                        Image = paused.Icon, RoundImage = true,
                         FolderPath = paused.FolderPath,
                         Icon = Icons.Bolt,
                         Important = true,
@@ -1378,6 +1402,9 @@ namespace Isle
         {
             bool had = _download != null;
             _download = d;
+            // пока идёт загрузка — частые обновления (скорость, остаток); в простое — редкие, новости придут по событиям
+            var interval = TimeSpan.FromSeconds(d != null ? 1 : 8);
+            if (_steamTimer.Interval != interval) _steamTimer.Interval = interval;
             if (d == null)
             {
                 MediaDownload.Visibility = Visibility.Collapsed;
@@ -1410,21 +1437,21 @@ namespace Isle
                 if (Math.Abs(_dlShown - before) > 0.0005 || DlRing.Data == null)
                 {
                     DlRing.RenderTransform = null;
-                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 14, 14, 12.75);
+                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 17, 17, 15.75);
                 }
             }
             else
             {
                 _dlSpin = (_dlSpin + dt * 300) % 360;
-                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 14, 14);
+                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 17, 17);
                 rt.Angle = _dlSpin;
-                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 14, 14, 12.75); DlRing.Tag = "spin"; }
+                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 17, 17, 15.75); DlRing.Tag = "spin"; }
                 return;
             }
             DlRing.Tag = null;
         }
 
-        private DateTime? _lastSnowAlert;
+        private string _lastWeatherAlert;
 
         // ===================== OLED-режим =====================
 
@@ -1561,7 +1588,8 @@ namespace Isle
             catch { return null; }
         }
 
-        private int _specIdle;
+        private double _specIdle;
+        private double _frameDt = 1 / 30.0;
         private const double BarMax = 18;
         private Border[] _bars;
         private ScaleTransform[] _barScale;
@@ -1580,7 +1608,7 @@ namespace Isle
             return bars;
         }
 
-        private int _pushTicks;
+        private double _pushTicks; // сколько секунд курсор упирается в верх над островом
 
         /// <summary>Курсор упёрся в самый верх экрана над островом — открываем (как в оригинале).</summary>
         private void CheckTopPush()
@@ -1596,7 +1624,8 @@ namespace Isle
             catch { }
             if (!atTop) { _pushTicks = 0; return; }
             if (_oledHidden) { OledReveal(); return; }
-            if (++_pushTicks == 6 && Scaler.Visibility == Visibility.Visible) Expand(null);
+            double was = _pushTicks; _pushTicks += _frameDt;
+            if (was < 0.2 && _pushTicks >= 0.2 && Scaler.Visibility == Visibility.Visible) Expand(null);
         }
 
         private void Animate()
@@ -1608,7 +1637,7 @@ namespace Isle
             var md = AppHost.Media?.Current;
             bool wantSpectrum = md != null && md.HasSession && md.IsPlaying && State != IslandState.Expanded && !_oledHidden && Scaler.Visibility == Visibility.Visible;
             if (wantSpectrum) { _specIdle = 0; if (!AppHost.Spectrum.Running) AppHost.Spectrum.Start(); }
-            else if (AppHost.Spectrum.Running && ++_specIdle > 60) AppHost.Spectrum.Stop();
+            else if (AppHost.Spectrum.Running && (_specIdle += _frameDt) > 2) AppHost.Spectrum.Stop();
             Edge.Active = State != IslandState.Expanded && !_oledHidden;
             Helpers.FrameClock.Hidden = _oledHidden; // спрятанный остров не рисуем — экономим процессор
             var idle = IdleTime();
@@ -1617,7 +1646,7 @@ namespace Isle
 
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
             UpdateMiniLive();
-            AnimateDownloadRing(0.033);
+            AnimateDownloadRing(_frameDt);
             if (RecChip.Visibility == Visibility.Visible) RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
             if (Buddy.Visibility == Visibility.Visible)
             {
@@ -1669,7 +1698,7 @@ namespace Isle
                     // Меняем масштаб, а не высоту: без пересчёта раскладки 30 раз в секунду
                     var st = _barScale[i];
                     double cur = st.ScaleY * BarMax;
-                    double k = target > cur ? 0.75 : 0.28;
+                    double k = Helpers.FrameClock.Lerp(target > cur ? 0.75 : 0.28);
                     double next = cur + (target - cur) * k;
                     if (Math.Abs(next - cur) > 0.05) st.ScaleY = next / BarMax;
                 }
@@ -1692,11 +1721,22 @@ namespace Isle
                 var s = AppSettings.Current;
                 var weather = await WeatherService.LoadAsync(s.Latitude, s.Longitude, s.City);
                 AppHost.SetWeather(weather);
-                if (weather.NextSnowAt is DateTime snow && snow > weather.ForecastNow && snow <= weather.ForecastNow.AddHours(1)
-                    && (!_lastSnowAlert.HasValue || _lastSnowAlert.Value != snow))
+                // Предупреждаем заранее: о грозе, граде и гололёде — за 2 часа, об остальном (дождь, снег, туман, ветер, мороз, жара) — за час.
+                if (weather.NextAlert is { } alert && alert.At > weather.ForecastNow)
                 {
-                    _lastSnowAlert = snow;
-                    ToastBus.Show(new Toast { Title = "Снег начнётся около " + snow.ToString("HH:mm"), Subtitle = weather.City, Icon = Icons.Snow, Duration = TimeSpan.FromSeconds(5) });
+                    bool severe = alert.Kind is "thunder" or "hail" or "sleet";
+                    string key = alert.Kind + "|" + alert.At.ToString("yyyyMMddHH");
+                    if (alert.At <= weather.ForecastNow.AddHours(severe ? 2 : 1) && key != _lastWeatherAlert)
+                    {
+                        _lastWeatherAlert = key;
+                        ToastBus.Show(new Toast
+                        {
+                            Title = alert.Title + " около " + alert.At.ToString("HH:mm"),
+                            Subtitle = weather.City, Icon = alert.Kind == "snow" ? Icons.Snow : Icons.Bell,
+                            WeatherKind = Helpers.WeatherGlyph.KindForAlert(alert.Kind),
+                            Important = severe, Duration = TimeSpan.FromSeconds(severe ? 7 : 5)
+                        });
+                    }
                 }
             }
             catch (Exception ex) { App.Log("weather: " + ex.Message); }

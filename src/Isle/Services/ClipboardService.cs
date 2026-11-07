@@ -127,7 +127,7 @@ namespace Isle.Services
             }
 
             if (hasText) await AddTextAsync();
-            else if (hasImage && s.ClipboardImages) AddImage();
+            else if (hasImage && s.ClipboardImages) await AddImageAsync();
         }
 
         /// <summary>
@@ -166,25 +166,36 @@ namespace Isle.Services
             Insert(existing, new ClipItem { Text = text, Source = Win32.ForegroundProcessName() });
         }
 
-        private void AddImage()
+        private async Task AddImageAsync()
         {
             try
             {
                 var img = Clipboard.GetImage();
                 if (img == null) return;
-                var px = Services.ScreenTools.Bgra(img, out int w, out int h);
-                var hash = Convert.ToHexString(SHA1.HashData(px));
+                var source = Win32.ForegroundProcessName();
+                // Хэш и PNG для снимка 4K — это сотни миллисекунд: считаем в фоне, чтобы чёлка не замирала при копировании картинки
+                if (img.CanFreeze) img.Freeze();
+                if (!img.IsFrozen) img = new WriteableBitmap(img).GetAsFrozen() as BitmapSource ?? img; // в фоне можно работать только с «замороженной» картинкой
+                var file = Guid.NewGuid().ToString("N") + ".png";
+                var (hash, w, h) = await Task.Run(() =>
+                {
+                    var px = Services.ScreenTools.Bgra(img, out int pw, out int ph);
+                    return (Convert.ToHexString(SHA1.HashData(px)), pw, ph);
+                });
                 var existing = Items.FirstOrDefault(x => x.ImageHash == hash);
                 if (existing != null) { Insert(existing, null); return; }
 
-                Directory.CreateDirectory(ImagesDir);
-                var file = Guid.NewGuid().ToString("N") + ".png";
-                var enc = new PngBitmapEncoder();
-                enc.Frames.Add(BitmapFrame.Create(img));
-                using (var fs = File.Create(Path.Combine(ImagesDir, file))) enc.Save(fs);
+                await Task.Run(() =>
+                {
+                    Directory.CreateDirectory(ImagesDir);
+                    var enc = new PngBitmapEncoder();
+                    enc.Frames.Add(BitmapFrame.Create(img));
+                    using var fs = File.Create(Path.Combine(ImagesDir, file));
+                    enc.Save(fs);
+                });
                 Insert(null, new ClipItem
                 {
-                    Text = "Изображение " + w + "×" + h, ImageFile = file, ImageHash = hash, Source = Win32.ForegroundProcessName()
+                    Text = "Изображение " + w + "×" + h, ImageFile = file, ImageHash = hash, Source = source
                 });
             }
             catch (Exception ex) { App.Log("clip image: " + ex.Message); }

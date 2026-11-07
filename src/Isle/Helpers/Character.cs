@@ -253,13 +253,13 @@ namespace Isle.Helpers
                 }
                 catch { }
             }
-            _lookX += (tx - _lookX) * 0.28;
-            _lookY += (ty - _lookY) * 0.28;
+            _lookX += (tx - _lookX) * FrameClock.Lerp(0.28);
+            _lookY += (ty - _lookY) * FrameClock.Lerp(0.28);
 
             // ---- зевок: раз в 7–15 секунд, ~1,6 с
             if (mood == Mood.Drowsy)
             {
-                if (_yawn > 0) _yawn = Math.Min(1.0001, _yawn + 0.025);
+                if (_yawn > 0) _yawn = Math.Min(1.0001, _yawn + 0.025 * FrameClock.K);
                 if (_yawn > 1) { _yawn = 0; _nextYawn = DateTime.Now.AddSeconds(7 + _rnd.NextDouble() * 8); }
                 else if (_yawn == 0 && DateTime.Now >= _nextYawn) _yawn = 0.001;
             }
@@ -275,7 +275,7 @@ namespace Isle.Helpers
                     _nextBlink = DateTime.Now.AddSeconds(2 + _rnd.NextDouble() * 3);
                 }
                 double target = _yawn > 0.15 && _yawn < 0.85 || DateTime.Now < _blinkUntil ? 1 : 0.55;
-                _blink += (target - _blink) * 0.15;
+                _blink += (target - _blink) * FrameClock.Lerp(0.15);
             }
             else if (mood != Mood.Sleep)
             {
@@ -286,11 +286,11 @@ namespace Isle.Helpers
                     if (_rnd.NextDouble() < 0.2) _nextBlink = DateTime.Now.AddMilliseconds(260); // двойное моргание
                 }
                 double target = DateTime.Now < _blinkUntil ? 1 : 0;
-                _blink += (target - _blink) * 0.6;
+                _blink += (target - _blink) * FrameClock.Lerp(0.6);
             }
-            else _blink += (1 - _blink) * 0.2;
+            else _blink += (1 - _blink) * FrameClock.Lerp(0.2);
 
-            if (_cheer > 0) _cheer = Math.Max(0, _cheer - 0.035);
+            if (_cheer > 0) _cheer = Math.Max(0, _cheer - 0.035 * FrameClock.K);
             if (mood == Mood.Idle && DateTime.Now >= _activityUntil) StartActivity(Stand, 0); // короткое занятие закончилось
             if (mood == Mood.Idle && DateTime.Now >= _nextActivity)
             {
@@ -311,18 +311,18 @@ namespace Isle.Helpers
             {
                 // читает: глаза бегут по строчкам вниз-вправо и возвращаются
                 double line = (_time * 0.7) % 1;
-                _lookX += ((line * 1.6 - 0.8) - _lookX) * 0.3; _lookY += (0.85 - _lookY) * 0.3;
+                _lookX += ((line * 1.6 - 0.8) - _lookX) * FrameClock.Lerp(0.3); _lookY += (0.85 - _lookY) * FrameClock.Lerp(0.3);
             }
             if (mood == Mood.Idle && (_activity == Phone || _activity == Game || _activity == Paint))
             {
                 // уткнулся в телефон / приставку / холст: смотрит вниз-вперёд, иногда косится по сторонам
                 double gx = _activity == Paint ? 0.6 : Math.Sin(_time * 0.7) * 0.3;
-                _lookX += (gx - _lookX) * 0.25; _lookY += (0.75 - _lookY) * 0.25;
+                _lookX += (gx - _lookX) * FrameClock.Lerp(0.25); _lookY += (0.75 - _lookY) * FrameClock.Lerp(0.25);
             }
             if (mood == Mood.Idle && _activity == Ball)
             {
                 // следит за мячиком
-                _lookX += (0 - _lookX) * 0.3; _lookY += (-0.9 + Math.Abs(Math.Sin(_time * 3.2)) * -0.1 - _lookY) * 0.3;
+                _lookX += (0 - _lookX) * FrameClock.Lerp(0.3); _lookY += (-0.9 + Math.Abs(Math.Sin(_time * 3.2)) * -0.1 - _lookY) * FrameClock.Lerp(0.3);
             }
             if (mood == Mood.Idle && _activity == 2)
             {
@@ -331,9 +331,9 @@ namespace Isle.Helpers
                     _nextWander = DateTime.Now.AddSeconds(0.8 + _rnd.NextDouble() * 1.5);
                     _wander = new Point(_rnd.NextDouble() * 2 - 1, _rnd.NextDouble() * 1.2 - 0.5);
                 }
-                _lookX += (_wander.X - _lookX) * 0.2; _lookY += (_wander.Y - _lookY) * 0.2;
+                _lookX += (_wander.X - _lookX) * FrameClock.Lerp(0.2); _lookY += (_wander.Y - _lookY) * FrameClock.Lerp(0.2);
             }
-            _bob += ((mood == Mood.Music ? Math.Min(1, Beat * 2.2) : 0) - _bob) * 0.5;
+            _bob += ((mood == Mood.Music ? Math.Min(1, Beat * 2.2) : 0) - _bob) * FrameClock.Lerp(0.5);
             if (mood == Mood.Music && DateTime.Now >= _nextDance)
             {
                 _dance = PickDance(Bpm, Energy, _dance, _rnd); // по темпу и «плотности» музыки
@@ -341,7 +341,7 @@ namespace Isle.Helpers
                 // брейк-данс — ровно два полных круга (падение → вращение → фриз), чтобы не обрывался посреди
                 _nextDance = DateTime.Now.AddSeconds(_dance == 8 ? 2 / 0.17 : 7 + _rnd.NextDouble() * 5);
             }
-            if (mood == Mood.Music && (_dance == 4)) { _lookY += (0.8 - _lookY) * 0.3; } // хедбэнг — смотрит в пол
+            if (mood == Mood.Music && (_dance == 4)) { _lookY += (0.8 - _lookY) * FrameClock.Lerp(0.3); } // хедбэнг — смотрит в пол
         }
 
         private static readonly Brush BookCover = Freeze(new SolidColorBrush(Color.FromRgb(0x3B, 0x6F, 0xD9)));

@@ -178,6 +178,7 @@ namespace Isle.Views
             VoiceBase.Text = S.VoiceBaseUrl;
             VoiceModel.Text = S.VoiceModel;
             VoiceKeyState.Text = string.IsNullOrEmpty(S.VoiceKey) ? "Используется ключ из раздела «ИИ», если сервис тот же" : "•••••••• свой ключ сохранён";
+            (S.MaxFps switch { 30 => Fps30, 120 => Fps120, 0 => FpsMax, _ => Fps60 }).IsChecked = true;
             VlAuto.IsChecked = string.IsNullOrEmpty(S.VoiceLanguage);
             VlRu.IsChecked = S.VoiceLanguage == "ru";
             VlEn.IsChecked = S.VoiceLanguage == "en";
@@ -505,6 +506,13 @@ namespace Isle.Views
             S.Save();
             VoiceKey.Password = "";
             VoiceKeyState.Text = string.IsNullOrEmpty(S.VoiceKey) ? "Используется ключ из раздела «ИИ», если сервис тот же" : "•••••••• свой ключ сохранён";
+        }
+
+        private void OnFps(object s, RoutedEventArgs e)
+        {
+            S.MaxFps = int.Parse((string)((FrameworkElement)s).Tag);
+            Helpers.FrameClock.MaxFps = S.MaxFps;
+            S.Save();
         }
 
         private void OnVoiceLang(object s, RoutedEventArgs e)
