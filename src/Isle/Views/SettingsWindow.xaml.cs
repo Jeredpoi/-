@@ -510,6 +510,34 @@ namespace Isle.Views
             VoiceKeyState.Text = string.IsNullOrEmpty(S.VoiceKey) ? "Используется ключ из раздела «ИИ», если сервис тот же" : "•••••••• свой ключ сохранён";
         }
 
+        private async void OnVoiceModels(object s, RoutedEventArgs e)
+        {
+            OnVoiceFields(null, null);
+            var menu = new ContextMenu { PlacementTarget = VoiceModelsBtn, Placement = PlacementMode.Bottom, MaxHeight = 420 };
+            menu.Items.Add(new MenuItem { Header = "Загружаю список…", IsEnabled = false });
+            menu.IsOpen = true;
+            try
+            {
+                var models = await VoiceService.ModelsAsync(VoiceBase.Text.Trim());
+                menu.Items.Clear();
+                if (models.Count == 0) menu.Items.Add(new MenuItem { Header = "У сервиса нет моделей распознавания речи", IsEnabled = false });
+                else menu.Items.Add(new MenuItem { Header = "Голос → текст · от дешёвых к дорогим", IsEnabled = false });
+                foreach (var m in models)
+                {
+                    var header = m.Id + (string.IsNullOrEmpty(m.PriceText) ? "" : "   ·   " + m.PriceText) + (m.PaidOnly ? "   ·   только платная пыльца" : "");
+                    var item = new MenuItem { Header = header, IsChecked = m.Id == VoiceModel.Text.Trim(), ToolTip = string.IsNullOrEmpty(m.Title) ? null : m.Title };
+                    var id = m.Id;
+                    item.Click += (_, __) => { VoiceModel.Text = id; OnVoiceFields(null, null); VoiceTestResult.Text = "Модель: " + id + " — нажми «Проверить»"; };
+                    menu.Items.Add(item);
+                }
+            }
+            catch (Exception ex)
+            {
+                menu.Items.Clear();
+                menu.Items.Add(new MenuItem { Header = "Не удалось загрузить: " + ex.Message, IsEnabled = false });
+            }
+        }
+
         private void OnVoiceDeleteKey(object s, RoutedEventArgs e)
         {
             S.VoiceKey = "";

@@ -145,6 +145,18 @@ namespace Isle.Tests
             Assert.Equal("user", fit[0].Role);
         }
 
+        [Theory]
+        [InlineData("{\"id\":\"openai/whisper-large-v3\",\"supported_endpoints\":[\"/v1/audio/transcriptions\"]}", true)]
+        [InlineData("{\"id\":\"openai/gpt-5.4-nano\",\"supported_endpoints\":[\"/v1/chat/completions\"],\"input_modalities\":[\"text\",\"audio\"]}", false)]
+        [InlineData("{\"id\":\"elevenlabs/tts\",\"supported_endpoints\":[\"/v1/audio/speech\"]}", false)]
+        [InlineData("{\"id\":\"whisper-large-v3\"}", true)]
+        [InlineData("{\"id\":\"llama-3.3-70b-versatile\"}", false)]
+        public void OnlySpeechToTextModels(string json, bool stt)
+        {
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal(stt, VoiceService.IsSpeechToText(doc.RootElement, doc.RootElement.GetProperty("id").GetString()));
+        }
+
         [Fact]
         public void NoTimeReturnsNull()
         {

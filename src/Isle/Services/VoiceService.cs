@@ -270,15 +270,88 @@ namespace Isle.Services
             return res;
         }
 
+        public sealed record VoiceModelInfo(string Id, string Title, double Price, string PriceText, bool PaidOnly);
+
+        /// <summary>
+        /// Модели распознавания у выбранного сервиса: только «голос → текст» (вход — звук, выход — текст),
+        /// от дешёвых к дорогим. У Pollinations сотни моделей — остальные (картинки, чат, озвучка) отбрасываем.
+        /// </summary>
+        public static async Task<System.Collections.Generic.List<VoiceModelInfo>> ModelsAsync(string baseUrl)
+        {
+            var s = AppSettings.Current;
+            using var req = new HttpRequestMessage(HttpMethod.Get, baseUrl.TrimEnd('/') + "/models");
+            var key = KeyFor(s);
+            if (!string.IsNullOrWhiteSpace(key)) req.Headers.Add("Authorization", "Bearer " + key.Trim());
+            using var resp = await Http.SendAsync(req);
+            var json = await resp.Content.ReadAsStringAsync();
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(json); }
+            catch { throw new Exception("сервис ответил не по делу (код " + (int)resp.StatusCode + ")"); }
+            using (doc)
+            {
+                if (!resp.IsSuccessStatusCode) throw new Exception(AiService.ErrorText(doc.RootElement, (int)resp.StatusCode));
+                var list = new System.Collections.Generic.List<VoiceModelInfo>();
+                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) return list;
+                foreach (var m in data.EnumerateArray())
+                {
+                    var id = m.TryGetProperty("id", out var i) ? i.GetString() ?? "" : "";
+                    if (id.Length == 0 || !IsSpeechToText(m, id)) continue;
+                    var title = m.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : "";
+                    bool paid = m.TryGetProperty("paid_only", out var p) && p.ValueKind == JsonValueKind.True;
+                    var (price, text) = Price(m);
+                    list.Add(new VoiceModelInfo(id, title, price, text, paid));
+                }
+                // сначала с известной ценой — от дешёвых к дорогим, без цены — в конце по алфавиту
+                return list.OrderBy(x => double.IsNaN(x.Price) ? 1 : 0).ThenBy(x => double.IsNaN(x.Price) ? 0 : x.Price).ThenBy(x => x.Id).ToList();
+            }
+        }
+
+        /// <summary>Вход — звук, выход — текст: по списку поддерживаемых адресов, по модальностям или по имени (Whisper и т. п.).</summary>
+        internal static bool IsSpeechToText(JsonElement m, string id)
+        {
+            static bool Has(JsonElement el, string prop, string value) =>
+                el.TryGetProperty(prop, out var a) && a.ValueKind == JsonValueKind.Array &&
+                a.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && (x.GetString() ?? "").Contains(value, StringComparison.OrdinalIgnoreCase));
+            if (Has(m, "supported_endpoints", "audio/transcriptions")) return true;
+            if (m.TryGetProperty("supported_endpoints", out _)) return false; // сервис сам перечислил, что модель умеет — распознавания нет
+            if (Has(m, "input_modalities", "audio") && Has(m, "output_modalities", "text") && !Has(m, "output_modalities", "audio")
+                && !(m.TryGetProperty("category", out var c) && c.GetString() == "text")) return true;
+            var low = id.ToLowerInvariant();
+            return low.Contains("whisper") || low.Contains("transcribe") || low.Contains("speech-to-text") || low.Contains("stt");
+        }
+
+        /// <summary>Цена модели из её «pricing» (у Pollinations — в пыльце за единицу). NaN — сервис цену не сообщил.</summary>
+        private static (double, string) Price(JsonElement m)
+        {
+            if (!m.TryGetProperty("pricing", out var pr) || pr.ValueKind != JsonValueKind.Object) return (double.NaN, "");
+            double sum = 0; bool any = false;
+            string currency = pr.TryGetProperty("currency", out var cur) && cur.ValueKind == JsonValueKind.String ? cur.GetString() : "";
+            foreach (var f in pr.EnumerateObject())
+            {
+                double v = f.Value.ValueKind == JsonValueKind.Number ? f.Value.GetDouble()
+                    : f.Value.ValueKind == JsonValueKind.String && double.TryParse(f.Value.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0;
+                if (v > 0) { sum += v; any = true; }
+            }
+            if (!any) return (0, "бесплатно");
+            var unit = string.IsNullOrEmpty(currency) || currency.Equals("pollen", StringComparison.OrdinalIgnoreCase) ? "пыльцы" : currency;
+            return (sum, sum.ToString(sum < 0.001 ? "0.#######" : "0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + unit);
+        }
+
         /// <summary>Проверка: отправляем секунду тишины — если ключ верный, сервис ответит.</summary>
         public static async Task<string> TestAsync()
         {
             try
             {
                 await TranscribeAsync(Wav(new byte[32000]));
-                return "Работает: сервис принял запись";
+                return "Работает: модель " + AppSettings.Current.VoiceModel + " приняла запись";
             }
-            catch (Exception ex) { return "Ошибка: " + ex.Message; }
+            catch (Exception ex)
+            {
+                var msg = ex.Message;
+                if (msg.Contains("model", StringComparison.OrdinalIgnoreCase) || msg.Contains("модел", StringComparison.OrdinalIgnoreCase))
+                    msg += " — нажми «Модели» и выбери из списка";
+                return "Ошибка: " + msg;
+            }
         }
     }
 }

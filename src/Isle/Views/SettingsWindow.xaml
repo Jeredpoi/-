@@ -419,9 +419,11 @@
                         <StackPanel Margin="0,12">
                             <TextBlock Style="{StaticResource RowTitle}" Text="Адрес API и модель"/>
                             <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBox x:Name="VoiceBase" LostFocus="OnVoiceFields"/>
                                 <TextBox x:Name="VoiceModel" Grid.Column="1" Margin="8,0,0,0" LostFocus="OnVoiceFields"/>
+                                <Button x:Name="VoiceModelsBtn" Grid.Column="2" Style="{StaticResource SFlat}" Content="Модели" Margin="8,0,0,0" Click="OnVoiceModels"
+                                        ToolTip="Только модели «голос → текст», от дешёвых к дорогим"/>
                             </Grid>
                             <TextBlock Style="{StaticResource RowTitle}" Text="Ключ распознавания" Margin="0,16,0,0"/>
                             <TextBlock Style="{StaticResource RowNote}" Text="Можно оставить пустым, если в разделе «ИИ» выбран тот же сервис: у Groq, Pollinations и OpenAI один ключ подходит и для чата, и для диктовки."/>
