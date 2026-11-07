@@ -278,6 +278,17 @@
                                 <Slider x:Name="OpacitySlider" Grid.Column="1" Minimum="50" Maximum="100" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnOpacity"/>
                                 <TextBlock x:Name="OpacityText" Grid.Column="2" TextAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Плавность анимаций"/><TextBlock Style="{StaticResource RowNote}" Text="Больше кадров — плавнее, но больше нагрузка"/></StackPanel>
+                                <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps30" Content="30 к/с" Tag="30" Click="OnFps"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps60" Content="60 к/с" Tag="60" Click="OnFps"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps120" Content="120 к/с" Tag="120" Click="OnFps"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="FpsMax" Content="Как у монитора" Tag="0" Click="OnFps"/>
+                                </WrapPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

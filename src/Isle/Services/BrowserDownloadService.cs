@@ -152,6 +152,16 @@ namespace Isle.Services
             };
         }
 
+        /// <summary>Папки профилей браузеров: при записи в History (или его журнал) проверяем загрузки сразу.</summary>
+        public static IEnumerable<(string Dir, string Filter)> WatchTargets()
+        {
+            foreach (var p in FindProfiles())
+            {
+                var dir = Path.GetDirectoryName(p.HistoryPath);
+                if (!string.IsNullOrEmpty(dir)) yield return (dir, "History*");
+            }
+        }
+
         private static IEnumerable<Profile> FindProfiles()
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

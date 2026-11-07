@@ -60,7 +60,7 @@ namespace Isle.Helpers
             for (int i = 0; i < _spec.Length; i++)
             {
                 float target = spec != null ? spec[i] : 0;
-                _spec[i] += (target - _spec[i]) * 0.45f;
+                _spec[i] += (target - _spec[i]) * (float)FrameClock.Lerp(0.45);
             }
 
             // курсор рядом → край тянется к нему
@@ -80,11 +80,11 @@ namespace Isle.Helpers
                 }
                 catch { }
             }
-            _bulgeAmp += (targetAmp - _bulgeAmp) * 0.18;
-            _bulgeX += (targetX - _bulgeX) * 0.25;
+            _bulgeAmp += (targetAmp - _bulgeAmp) * FrameClock.Lerp(0.18);
+            _bulgeX += (targetX - _bulgeX) * FrameClock.Lerp(0.25);
 
             // провисание, когда пользователя нет
-            _sag += ((Away && Active ? 5.5 : 0) - _sag) * 0.02;
+            _sag += ((Away && Active ? 5.5 : 0) - _sag) * FrameClock.Lerp(0.02);
 
             // дождь — редкие капли
             if (Raining && Active && DateTime.Now >= _nextDrip)
@@ -95,8 +95,8 @@ namespace Isle.Helpers
             for (int i = _drops.Count - 1; i >= 0; i--)
             {
                 var d = _drops[i];
-                d.Vy += 0.35; d.Y += d.Vy;
-                if (d.Y > 14) d.Life -= 0.06;
+                d.Vy += 0.35 * FrameClock.K; d.Y += d.Vy * FrameClock.K;
+                if (d.Y > 14) d.Life -= 0.06 * FrameClock.K;
                 if (d.Life <= 0 || d.Y > ActualHeight) _drops.RemoveAt(i);
             }
 

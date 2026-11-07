@@ -285,6 +285,20 @@ namespace Isle.Services
             return (long)est;
         }
 
+        /// <summary>Папки и файлы, изменение которых означает новости о загрузке: лог Steam и appmanifest каждой библиотеки.</summary>
+        public static System.Collections.Generic.IEnumerable<(string Dir, string Filter)> WatchTargets()
+        {
+            var root = FindSteamRoot();
+            if (root == null) yield break;
+            var logs = Path.Combine(root, "logs");
+            if (Directory.Exists(logs)) yield return (logs, "content_log.txt");
+            foreach (var lib in Libraries(root))
+            {
+                var apps = Path.Combine(lib, "steamapps");
+                if (Directory.Exists(apps)) yield return (apps, "appmanifest_*.acf");
+            }
+        }
+
         private static string FindSteamRoot()
         {
             try

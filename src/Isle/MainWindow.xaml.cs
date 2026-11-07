@@ -35,7 +35,8 @@ namespace Isle
         private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
-        private readonly DispatcherTimer _steamTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+        private readonly DispatcherTimer _steamTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+        private readonly DispatcherTimer _downloadKick = new() { Interval = TimeSpan.FromMilliseconds(300) };
         private bool _downloadPollInProgress;
         private readonly Random _rnd = new();
         private DateTime _nextBlink = DateTime.Now.AddSeconds(3);
@@ -153,6 +154,10 @@ namespace Isle
             _oledHide.Tick += (_, __) => { _oledHide.Stop(); TryOledHide(); };
             _weatherTimer.Tick += async (_, __) => await RefreshWeather();
             _steamTimer.Tick += (_, __) => RefreshSteamDownload();
+            // Загрузки по событиям: Steam/браузер записал файл — проверяем через 0,3 с (несколько записей подряд склеиваются).
+            // Таймер остаётся подстраховкой: раз в секунду, пока что-то качается (скорость, остаток), и раз в 8 с в простое.
+            _downloadKick.Tick += (_, __) => { _downloadKick.Stop(); RefreshSteamDownload(); };
+            DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { _downloadKick.Stop(); _downloadKick.Start(); });
 
             Island.MouseEnter += (_, __) =>
             {
@@ -234,7 +239,8 @@ namespace Isle
                 _clock.Start();
                 _topmost.Start();
                 KeepOnTop();
-                Helpers.FrameClock.Tick += _ => Animate(); // общий кадр с Клоди и краем — окно перерисовывается один раз
+                Helpers.FrameClock.MaxFps = AppSettings.Current.MaxFps;
+                Helpers.FrameClock.Tick += dt => { _frameDt = dt; Animate(); }; // общий кадр с Клоди и краем — в такт монитору
 
                 ApplyAppearance();
                 AppHost.Watchers.Start();
@@ -243,6 +249,7 @@ namespace Isle
                 _ = AppHost.Notifications.StartAsync();
                 _weatherTimer.Start();
                 _steamTimer.Start();
+                _ = Task.Run(DownloadWatch.Start);
                 RefreshSteamDownload();
                 await RefreshWeather();
                 ApplyOledMode();
@@ -1378,6 +1385,9 @@ namespace Isle
         {
             bool had = _download != null;
             _download = d;
+            // пока идёт загрузка — частые обновления (скорость, остаток); в простое — редкие, новости придут по событиям
+            var interval = TimeSpan.FromSeconds(d != null ? 1 : 8);
+            if (_steamTimer.Interval != interval) _steamTimer.Interval = interval;
             if (d == null)
             {
                 MediaDownload.Visibility = Visibility.Collapsed;
@@ -1561,7 +1571,8 @@ namespace Isle
             catch { return null; }
         }
 
-        private int _specIdle;
+        private double _specIdle;
+        private double _frameDt = 1 / 30.0;
         private const double BarMax = 18;
         private Border[] _bars;
         private ScaleTransform[] _barScale;
@@ -1580,7 +1591,7 @@ namespace Isle
             return bars;
         }
 
-        private int _pushTicks;
+        private double _pushTicks; // сколько секунд курсор упирается в верх над островом
 
         /// <summary>Курсор упёрся в самый верх экрана над островом — открываем (как в оригинале).</summary>
         private void CheckTopPush()
@@ -1596,7 +1607,8 @@ namespace Isle
             catch { }
             if (!atTop) { _pushTicks = 0; return; }
             if (_oledHidden) { OledReveal(); return; }
-            if (++_pushTicks == 6 && Scaler.Visibility == Visibility.Visible) Expand(null);
+            double was = _pushTicks; _pushTicks += _frameDt;
+            if (was < 0.2 && _pushTicks >= 0.2 && Scaler.Visibility == Visibility.Visible) Expand(null);
         }
 
         private void Animate()
@@ -1608,7 +1620,7 @@ namespace Isle
             var md = AppHost.Media?.Current;
             bool wantSpectrum = md != null && md.HasSession && md.IsPlaying && State != IslandState.Expanded && !_oledHidden && Scaler.Visibility == Visibility.Visible;
             if (wantSpectrum) { _specIdle = 0; if (!AppHost.Spectrum.Running) AppHost.Spectrum.Start(); }
-            else if (AppHost.Spectrum.Running && ++_specIdle > 60) AppHost.Spectrum.Stop();
+            else if (AppHost.Spectrum.Running && (_specIdle += _frameDt) > 2) AppHost.Spectrum.Stop();
             Edge.Active = State != IslandState.Expanded && !_oledHidden;
             Helpers.FrameClock.Hidden = _oledHidden; // спрятанный остров не рисуем — экономим процессор
             var idle = IdleTime();
@@ -1617,7 +1629,7 @@ namespace Isle
 
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
             UpdateMiniLive();
-            AnimateDownloadRing(0.033);
+            AnimateDownloadRing(_frameDt);
             if (RecChip.Visibility == Visibility.Visible) RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
             if (Buddy.Visibility == Visibility.Visible)
             {
@@ -1669,7 +1681,7 @@ namespace Isle
                     // Меняем масштаб, а не высоту: без пересчёта раскладки 30 раз в секунду
                     var st = _barScale[i];
                     double cur = st.ScaleY * BarMax;
-                    double k = target > cur ? 0.75 : 0.28;
+                    double k = Helpers.FrameClock.Lerp(target > cur ? 0.75 : 0.28);
                     double next = cur + (target - cur) * k;
                     if (Math.Abs(next - cur) > 0.05) st.ScaleY = next / BarMax;
                 }
