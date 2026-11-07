@@ -36,7 +36,8 @@ namespace Isle.Views
             AppHost.Lyrics.Changed += OnLyricsChanged;
             AppHost.Audio.VolumeChanged += (_, __) => SyncVolume();
             AppHost.Audio.DeviceChanged += () => { SyncVolume(); FillDevices(); };
-            _tick.Tick += (_, __) => TickPosition();
+            _tick.Tick += (_, __) => { TickPosition(); if (++_appVolTicks % 10 == 0) SyncAppVolume(); };
+            AppVol.ValueChanged += OnAppVolume;
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
             IsVisibleChanged += (_, __) => { if (IsVisible) _tick.Start(); else _tick.Stop(); };
             foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
@@ -183,10 +184,12 @@ namespace Isle.Views
                 Cover.Source = null;
                 CoverGlow.Source = null;
                 PlayIcon.Kind = "Play";
+                AppVol.Visibility = Visibility.Collapsed;
                 SetLyrics(null);
                 return;
             }
             Source.Text = (m.SourceApp ?? "").ToUpperInvariant();
+            SyncAppVolume();
             Title.Text = m.Title;
             Artist.Text = m.Artist;
             Cover.Source = m.Cover;
@@ -361,6 +364,30 @@ namespace Isle.Views
         }
 
         private static string Fmt(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : ((int)t.TotalMinutes) + ":" + t.Seconds.ToString("00");
+
+        private int _appVolTicks;
+        private DateTime _appVolSetAt;
+
+        /// <summary>
+        /// Громкость плеера — та же, что в самом приложении и в «Микшере громкости» Windows:
+        /// в Spotify стоит 30 % — крутилка показывает 30 %, переключился на браузер со 100 % — покажет 100 %.
+        /// </summary>
+        private void SyncAppVolume()
+        {
+            var m = AppHost.Media.Current;
+            if (!m.HasSession || string.IsNullOrEmpty(m.SourceAppId)) { AppVol.Visibility = Visibility.Collapsed; return; }
+            if (AppVol.IsMouseCaptured || DateTime.Now - _appVolSetAt < TimeSpan.FromSeconds(1)) return; // крутят сейчас — не перебиваем
+            var v = AppHost.Audio.AppVolume(m.SourceAppId);
+            AppVol.Visibility = v.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            if (v.HasValue) AppVol.Value = v.Value;
+            AppVol.ToolTip = "Громкость " + (string.IsNullOrEmpty(m.SourceApp) ? "плеера" : m.SourceApp) + " · крути колесиком";
+        }
+
+        private void OnAppVolume(double v)
+        {
+            _appVolSetAt = DateTime.Now;
+            AppHost.Audio.SetAppVolume(AppHost.Media.Current.SourceAppId, (float)v);
+        }
 
         private void OnPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
         private void OnNext(object s, RoutedEventArgs e) => AppHost.Media.Next();

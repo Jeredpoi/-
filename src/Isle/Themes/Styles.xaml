@@ -98,6 +98,30 @@
         <Setter Property="Padding" Value="6"/>
     </Style>
 
+    <!-- Кнопка без подложки: только содержимое (круглая «пауза» без квадратной тени при наведении) -->
+    <Style x:Key="Bare" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <ContentPresenter x:Name="cp" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ContentPresenter.RenderTransform><ScaleTransform x:Name="sc" ScaleX="1" ScaleY="1"/></ContentPresenter.RenderTransform>
+                    </ContentPresenter>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="cp" Property="Opacity" Value="0.88"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="sc" Property="ScaleX" Value="0.93"/>
+                            <Setter TargetName="sc" Property="ScaleY" Value="0.93"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Flat}">
         <Setter Property="Background" Value="{DynamicResource Accent}"/>
         <Setter Property="Foreground" Value="#08080A"/>

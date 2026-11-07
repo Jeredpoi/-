@@ -14,6 +14,8 @@ namespace Isle.Services
         public string Artist = "";
         public string Album = "";
         public string SourceApp = "";
+        /// <summary>Системный id плеера (AUMID): по нему ищем его громкость в микшере Windows.</summary>
+        public string SourceAppId = "";
         public bool IsPlaying;
         public TimeSpan Position;
         public TimeSpan Duration;
@@ -151,6 +153,7 @@ namespace Isle.Services
                 {
                     info.HasSession = true;
                     info.SourceApp = PrettyApp(s.SourceAppUserModelId);
+                    info.SourceAppId = s.SourceAppUserModelId ?? "";
                     var props = await s.TryGetMediaPropertiesAsync();
                     if (props != null)
                     {

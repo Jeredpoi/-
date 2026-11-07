@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using NAudio.CoreAudioApi;
@@ -67,6 +68,64 @@ namespace Isle.Services
                 catch { }
                 finally { _suppress = false; }
             }
+        }
+
+        // ---------- Громкость отдельного приложения (как в «Микшере громкости» Windows) ----------
+
+        /// <summary>
+        /// Звуковые сессии плеера, который сейчас играет. AUMID у плееров разный: «Spotify.exe»,
+        /// «SpotifyAB.SpotifyMusic_…!Spotify», «Chrome», «MSEdge», у Firefox — хэш. Сопоставляем с именем процесса.
+        /// </summary>
+        private List<AudioSessionControl> SessionsFor(string appId)
+        {
+            var result = new List<AudioSessionControl>();
+            if (_device == null || string.IsNullOrWhiteSpace(appId)) return result;
+            var id = appId.ToLowerInvariant();
+            string want = id.Contains("spotify") ? "spotify"
+                : id.Contains("msedge") ? "msedge"
+                : id.Contains("chrome") ? "chrome"
+                : id == "308046b0af4a39cb" || id.Contains("firefox") ? "firefox"
+                : id.Contains("yandex") ? "yandex"
+                : System.IO.Path.GetFileNameWithoutExtension(id.Split('!')[0].Split('_')[0].Split('\\').Last());
+            try
+            {
+                var mgr = _device.AudioSessionManager;
+                mgr.RefreshSessions();
+                var sessions = mgr.Sessions;
+                for (int i = 0; i < sessions.Count; i++)
+                {
+                    var ses = sessions[i];
+                    if (ses.IsSystemSoundsSession) continue;
+                    string name;
+                    try { using var p = System.Diagnostics.Process.GetProcessById((int)ses.GetProcessID); name = p.ProcessName.ToLowerInvariant(); }
+                    catch { continue; }
+                    if (want.Length > 0 && (name.Contains(want) || want.Contains(name))) result.Add(ses);
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        /// <summary>Громкость плеера 0..1 (как стоит в самом приложении / микшере Windows); null — плеер не найден.</summary>
+        public float? AppVolume(string appId)
+        {
+            try
+            {
+                var list = SessionsFor(appId);
+                if (list.Count == 0) return null;
+                // у браузеров несколько сессий — показываем самую громкую
+                return list.Max(x => x.SimpleAudioVolume.Volume);
+            }
+            catch { return null; }
+        }
+
+        public void SetAppVolume(string appId, float v)
+        {
+            try
+            {
+                foreach (var ses in SessionsFor(appId)) ses.SimpleAudioVolume.Volume = Math.Clamp(v, 0f, 1f);
+            }
+            catch { }
         }
 
         public bool Muted
