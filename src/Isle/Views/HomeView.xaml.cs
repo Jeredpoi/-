@@ -383,10 +383,16 @@ namespace Isle.Views
             AppVol.ToolTip = "Громкость " + (string.IsNullOrEmpty(m.SourceApp) ? "плеера" : m.SourceApp) + " · крути колесиком";
         }
 
-        private void OnAppVolume(double v)
+        private async void OnAppVolume(double v)
         {
             _appVolSetAt = DateTime.Now;
-            AppHost.Audio.SetAppVolume(AppHost.Media.Current.SourceAppId, (float)v);
+            var id = AppHost.Media.Current.SourceAppId;
+            AppHost.Audio.SetAppVolume(id, (float)v);
+            // некоторые плееры сразу возвращают свою громкость обратно — проверим и скажем честно
+            await System.Threading.Tasks.Task.Delay(600);
+            var now = AppHost.Audio.AppVolume(id);
+            if (now.HasValue && Math.Abs(now.Value - v) > 0.04)
+                AppVol.ToolTip = "Плеер не дал изменить громкость извне — поменяй её в самом приложении";
         }
 
         private void OnPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();

@@ -20,6 +20,9 @@ namespace Isle.Helpers
 
         public event Action<double> ValueChanged;
 
+        /// <summary>Проценты в центре всегда, а не только при наведении.</summary>
+        public bool ShowValue { get; set; } = true;
+
         public Brush Track { get; set; } = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x30));
         public Brush Fill { get; set; } = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
 
@@ -47,7 +50,8 @@ namespace Isle.Helpers
             ValueChanged?.Invoke(v);
         }
 
-        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        // Preview — чтобы колесико не перехватил прокручиваемый контейнер выше
+        protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
         {
             Set(_value + Math.Sign(e.Delta) * 0.02 * Math.Max(1, Math.Abs(e.Delta) / 120));
             e.Handled = true;
@@ -101,11 +105,11 @@ namespace Isle.Helpers
             var fill = new Pen(Fill, 2.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
             dc.DrawGeometry(null, track, Arc(c, r, Start, Sweep));
             dc.DrawGeometry(null, fill, Arc(c, r, Start, Sweep * _value));
-            if (IsMouseOver || _drag)
+            if (ShowValue || IsMouseOver || _drag)
             {
                 var t = new FormattedText(Math.Round(_value * 100).ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture,
                     FlowDirection.LeftToRight, new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-                    Math.Max(8, r * 0.62), Fill, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                    Math.Max(9, r * 0.7), Fill, VisualTreeHelper.GetDpi(this).PixelsPerDip);
                 dc.DrawText(t, new Point(c.X - t.Width / 2, c.Y - t.Height / 2));
             }
             else
