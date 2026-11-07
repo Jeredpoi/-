@@ -69,13 +69,13 @@ namespace Isle
             double w = Math.Ceiling(el.ActualWidth), h = Math.Ceiling(el.ActualHeight);
             if (w < 2 || h < 2) return;
             const double scale = 2;
-            var shot = new RenderTargetBitmap((int)(w * scale), (int)(h * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
-            shot.Render(el);
+            // через VisualBrush: RenderTargetBitmap.Render(el) учитывает сдвиг элемента в окне и обрезает его
+            var brush = new VisualBrush(el) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top };
             var dv = new DrawingVisual();
             using (var dc = dv.RenderOpen())
             {
                 dc.DrawRoundedRectangle(new SolidColorBrush(Backdrop), null, new Rect(0, 0, w + pad * 2, h + pad * 2), 18, 18);
-                dc.DrawImage(shot, new Rect(pad, pad, w, h));
+                dc.DrawRectangle(brush, null, new Rect(pad, pad, w, h));
             }
             var outBmp = new RenderTargetBitmap((int)((w + pad * 2) * scale), (int)((h + pad * 2) * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
             outBmp.Render(dv);
@@ -101,7 +101,7 @@ namespace Isle
             var stage = new Border
             {
                 Width = 520, Height = 360, Background = new SolidColorBrush(Backdrop),
-                Child = new Viewbox { Child = buddy, Margin = new Thickness(90, 60, 90, 40) }
+                Child = new Viewbox { Child = buddy, Margin = new Thickness(150, 95, 150, 75) }
             };
             var win = new Window
             {
