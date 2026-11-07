@@ -115,11 +115,15 @@
                         <TextBlock x:Name="PosText" Text="0:00" Style="{StaticResource MutedText}" FontSize="10"/>
                         <TextBlock x:Name="DurText" Text="0:00" Style="{StaticResource MutedText}" FontSize="10" HorizontalAlignment="Right"/>
                     </Grid>
+                    <!-- Громкость самого плеера (Spotify, браузер…): крути колесиком -->
+                    <Grid Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0">
+                        <h:VolumeKnob x:Name="AppVol" Width="30" Height="30" Visibility="Collapsed"/>
+                    </Grid>
                     <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,0">
                         <Button Style="{StaticResource Ghost}" Width="40" Height="40" Click="OnPrev" ToolTip="Предыдущий">
                             <h:Icon Kind="Prev" Width="17" Height="17"/>
                         </Button>
-                        <Button Style="{StaticResource Ghost}" Width="46" Height="46" Padding="0" Margin="16,0" Click="OnPlay" ToolTip="Пауза / играть">
+                        <Button Style="{StaticResource Bare}" Width="46" Height="46" Margin="16,0" Click="OnPlay" ToolTip="Пауза / играть">
                             <Border Width="42" Height="42" CornerRadius="21" Background="{StaticResource Fg}">
                                 <h:Icon x:Name="PlayIcon" Kind="Play" Width="16" Height="16" StrokeWidth="2.4" Foreground="#000000"/>
                             </Border>

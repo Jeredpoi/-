@@ -328,20 +328,39 @@ namespace Isle
         // получалось два окна захвата сразу, медленно и вперемешку. Низкоуровневый перехват клавиатуры
         // забирает нажатие раньше Windows: «Ножницы» не открываются, сразу выделение области Isle.
         // Alt+PrintScreen и Win+PrintScreen не трогаем — они работают как в Windows.
-        private IntPtr _kbHook;
+        // Перехват живёт в отдельном потоке со своим циклом сообщений: если окно острова занято (анимации, отрисовка),
+        // Windows не ждёт его и не «теряет» отпускание клавиш — раньше в играх могло казаться, что клавиша залипла.
+        private volatile IntPtr _kbHook;
         private Win32.LowLevelKeyboardProc _kbProc;
+        private System.Threading.Thread _kbThread;
+        private uint _kbThreadId;
 
         private void ApplyPrintScreenHook()
         {
             bool want = AppSettings.Current.PrintScreenIsle;
-            if (want && _kbHook == IntPtr.Zero)
+            if (want && _kbThread == null)
             {
                 _kbProc = KeyboardHook;
-                _kbHook = Win32.SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, _kbProc, Win32.GetModuleHandle(null), 0);
+                var ready = new System.Threading.ManualResetEventSlim();
+                _kbThread = new System.Threading.Thread(() =>
+                {
+                    _kbThreadId = Win32.GetCurrentThreadId();
+                    _kbHook = Win32.SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, _kbProc, Win32.GetModuleHandle(null), 0);
+                    ready.Set();
+                    if (_kbHook == IntPtr.Zero) return;
+                    while (Win32.GetMessage(out var m, IntPtr.Zero, 0, 0) > 0) { }
+                    Win32.UnhookWindowsHookEx(_kbHook);
+                    _kbHook = IntPtr.Zero;
+                }) { IsBackground = true, Name = "Isle keyboard hook" };
+                _kbThread.Start();
+                ready.Wait(2000);
+                if (_kbHook == IntPtr.Zero) _kbThread = null;
             }
-            else if (!want && _kbHook != IntPtr.Zero)
+            else if (!want && _kbThread != null)
             {
-                Win32.UnhookWindowsHookEx(_kbHook);
+                Win32.PostThreadMessage(_kbThreadId, 0x0012 /* WM_QUIT */, IntPtr.Zero, IntPtr.Zero);
+                _kbThread.Join(1000);
+                _kbThread = null;
                 _kbHook = IntPtr.Zero;
             }
         }
@@ -1003,15 +1022,35 @@ namespace Isle
             var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
             // 1) вежливо просим окно включить следующую раскладку (так делают переключатели вроде Punto)
             Win32.RequestNextLayout(target);
-            await Task.Delay(150);
+            // ждём до 0,5 с: окно меняет раскладку не мгновенно. Раньше через 150 мс считали, что не вышло,
+            // и жали ещё и сочетание — раскладка переключалась дважды и возвращалась обратно
+            for (int i = 0; i < 10 && Win32.LayoutOf(Win32.FocusWindowOf(target)) == before; i++) await Task.Delay(50);
             // 2) окно проигнорировало просьбу (бывает у консолей и некоторых игр) — жмём сочетание пользователя
             if (Win32.LayoutOf(Win32.FocusWindowOf(target)) == before)
             {
-                Win32.PressLayoutHotkey();
-                await Task.Delay(150);
+                await WaitModifiersUp(); // клавиши, зажатые пользователем, смешались бы с нашим сочетанием
+                if (!Win32.PressLayoutHotkey())
+                    ToastBus.Show(new Toast
+                    {
+                        Title = "Окно не дало сменить раскладку", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
+                        Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
+                    });
+                await Task.Delay(200);
+                Win32.ReleaseModifiers(); // страховка от «залипших» Alt/Shift/Win
             }
             AppHost.Watchers.RefreshLanguage();
             LangChip.Text = AppHost.Watchers.LanguageCode;
+        }
+
+        private static async Task WaitModifiersUp()
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                bool down = false;
+                foreach (int vk in new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }) down |= (Win32.GetAsyncKeyState(vk) & 0x8000) != 0;
+                if (!down) return;
+                await Task.Delay(50);
+            }
         }
 
         private static bool IsDesktopWindow(IntPtr h)
