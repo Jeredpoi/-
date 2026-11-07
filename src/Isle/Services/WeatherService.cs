@@ -34,6 +34,9 @@ namespace Isle.Services
         public double BarWidth { get; set; }
     }
 
+    /// <summary>Ожидаемое погодное явление: гроза, ливень, снег, туман, сильный ветер, мороз, жара…</summary>
+    public sealed record WeatherAlert(string Kind, string Title, DateTime At, string Glyph);
+
     public class WeatherNow
     {
         public string City = "";
@@ -53,6 +56,18 @@ namespace Isle.Services
                 var day = NextSnowAt.Value.Date - ForecastNow.Date;
                 var when = day == TimeSpan.Zero ? "сегодня" : day == TimeSpan.FromDays(1) ? "завтра" : NextSnowAt.Value.ToString("dd.MM");
                 return "Снег ожидается " + when + " около " + NextSnowAt.Value.ToString("HH:mm");
+            }
+        }
+        /// <summary>Ближайшее явление в следующие 12 часов, которого нет сейчас (null — спокойно).</summary>
+        public WeatherAlert NextAlert;
+        public string AlertForecast
+        {
+            get
+            {
+                if (NextAlert == null) return SnowForecast;
+                var day = NextAlert.At.Date - ForecastNow.Date;
+                var when = day == TimeSpan.Zero ? "сегодня" : day == TimeSpan.FromDays(1) ? "завтра" : NextAlert.At.ToString("dd.MM");
+                return NextAlert.Glyph + " " + NextAlert.Title + " " + when + " около " + NextAlert.At.ToString("HH:mm");
             }
         }
         public List<HourWeather> Hours = new();
@@ -177,6 +192,8 @@ namespace Isle.Services
                 });
             }
 
+            weather.NextAlert = FindAlert(points, current, now);
+
             var ru = new CultureInfo("ru-RU");
             var days = points.GroupBy(p => p.At.Date).Where(g => g.Key >= now.Date).Take(7).ToList();
             double globalMin = days.Min(g => g.Min(p => p.Min));
@@ -200,6 +217,35 @@ namespace Isle.Services
                 if (group.Key == now.Date) { weather.TodayMin = day.Min; weather.TodayMax = day.Max; }
             }
             return weather;
+        }
+
+        /// <summary>Какое опасное или заметное явление в этой точке прогноза (null — ничего особенного).</summary>
+        private static (string Kind, string Title, string Glyph)? Hazard(int code, double temp, double wind)
+        {
+            if (code is 96 or 99) return ("hail", "Гроза с градом", "⛈");
+            if (code == 95) return ("thunder", "Гроза", "⛈");
+            if (code == 67) return ("sleet", "Мокрый снег, возможен гололёд", "🌨");
+            if (code is 73 or 75 or 85) return ("snow", code == 75 ? "Сильный снег" : "Снег", "❄");
+            if (code is 65) return ("rain", "Сильный дождь", "🌧");
+            if (code is 61 or 80) return ("rain", code == 80 ? "Ливень" : "Дождь", "🌧");
+            if (code == 45) return ("fog", "Туман", "🌫");
+            if (wind >= 12) return ("wind", "Сильный ветер " + Math.Round(wind) + " м/с", "💨");
+            if (temp <= -15) return ("frost", "Сильный мороз " + Math.Round(temp) + "°", "🥶");
+            if (temp >= 30) return ("heat", "Жара " + Math.Round(temp) + "°", "🥵");
+            return null;
+        }
+
+        /// <summary>Первое явление в ближайшие 12 часов, которого нет прямо сейчас (дождь, который уже идёт, — не новость).</summary>
+        private static WeatherAlert FindAlert(List<ForecastPoint> points, ForecastPoint current, DateTime now)
+        {
+            var nowKind = Hazard(current.Code, current.Temp, current.Wind)?.Kind;
+            foreach (var p in points.Where(p => p.At > now && p.At <= now.AddHours(12)).OrderBy(p => p.At))
+            {
+                var h = Hazard(p.Code, p.Temp, p.Wind);
+                if (h == null || h.Value.Kind == nowKind) continue;
+                return new WeatherAlert(h.Value.Kind, h.Value.Title, p.At, h.Value.Glyph);
+            }
+            return null;
         }
 
         private static JsonElement FindPeriod(JsonElement data)

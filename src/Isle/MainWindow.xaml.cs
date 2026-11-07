@@ -645,7 +645,7 @@ namespace Isle
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
-            if (dl) { w = 320; h = 42; }
+            if (dl) { w = 330; h = 46; }
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
@@ -1430,21 +1430,21 @@ namespace Isle
                 if (Math.Abs(_dlShown - before) > 0.0005 || DlRing.Data == null)
                 {
                     DlRing.RenderTransform = null;
-                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 14, 14, 12.75);
+                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 17, 17, 15.75);
                 }
             }
             else
             {
                 _dlSpin = (_dlSpin + dt * 300) % 360;
-                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 14, 14);
+                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 17, 17);
                 rt.Angle = _dlSpin;
-                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 14, 14, 12.75); DlRing.Tag = "spin"; }
+                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 17, 17, 15.75); DlRing.Tag = "spin"; }
                 return;
             }
             DlRing.Tag = null;
         }
 
-        private DateTime? _lastSnowAlert;
+        private string _lastWeatherAlert;
 
         // ===================== OLED-режим =====================
 
@@ -1714,11 +1714,21 @@ namespace Isle
                 var s = AppSettings.Current;
                 var weather = await WeatherService.LoadAsync(s.Latitude, s.Longitude, s.City);
                 AppHost.SetWeather(weather);
-                if (weather.NextSnowAt is DateTime snow && snow > weather.ForecastNow && snow <= weather.ForecastNow.AddHours(1)
-                    && (!_lastSnowAlert.HasValue || _lastSnowAlert.Value != snow))
+                // Предупреждаем заранее: о грозе, граде и гололёде — за 2 часа, об остальном (дождь, снег, туман, ветер, мороз, жара) — за час.
+                if (weather.NextAlert is { } alert && alert.At > weather.ForecastNow)
                 {
-                    _lastSnowAlert = snow;
-                    ToastBus.Show(new Toast { Title = "Снег начнётся около " + snow.ToString("HH:mm"), Subtitle = weather.City, Icon = Icons.Snow, Duration = TimeSpan.FromSeconds(5) });
+                    bool severe = alert.Kind is "thunder" or "hail" or "sleet";
+                    string key = alert.Kind + "|" + alert.At.ToString("yyyyMMddHH");
+                    if (alert.At <= weather.ForecastNow.AddHours(severe ? 2 : 1) && key != _lastWeatherAlert)
+                    {
+                        _lastWeatherAlert = key;
+                        ToastBus.Show(new Toast
+                        {
+                            Title = alert.Glyph + " " + alert.Title + " около " + alert.At.ToString("HH:mm"),
+                            Subtitle = weather.City, Icon = alert.Kind == "snow" ? Icons.Snow : Icons.Bell,
+                            Important = severe, Duration = TimeSpan.FromSeconds(severe ? 7 : 5)
+                        });
+                    }
                 }
             }
             catch (Exception ex) { App.Log("weather: " + ex.Message); }
