@@ -122,6 +122,29 @@ namespace Isle.Tests
         public void WhisperSubtitleTailIsRemoved(string text, string expected) =>
             Assert.Equal(expected, VoiceService.StripJunk(text));
 
+        [Theory]
+        [InlineData("Сделай этот текст более официальным", true)]
+        [InlineData("исправь ошибки в сообщении", true)]
+        [InlineData("переведи текст на английский", true)]
+        [InlineData("открой телеграм", false)]
+        [InlineData("сделай таймер на 5 минут", false)]
+        public void VoiceEditRequests(string command, bool edit) =>
+            Assert.Equal(edit, TextEditor.IsEditRequest(command));
+
+        [Fact]
+        public void ChatContextKeepsWholeShortSessionAndTrimsLongOne()
+        {
+            var shortChat = new System.Collections.Generic.List<ChatMessage>();
+            for (int i = 0; i < 30; i++) shortChat.Add(new ChatMessage { Role = i % 2 == 0 ? "user" : "assistant", Text = "реплика " + i });
+            Assert.Equal(30, AiService.Fit(shortChat, 14000).Count); // раньше обрезалось до 16
+
+            var longChat = new System.Collections.Generic.List<ChatMessage>();
+            for (int i = 0; i < 10; i++) longChat.Add(new ChatMessage { Role = i % 2 == 0 ? "user" : "assistant", Text = new string('a', 3000) });
+            var fit = AiService.Fit(longChat, 14000);
+            Assert.True(fit.Count < 10);
+            Assert.Equal("user", fit[0].Role);
+        }
+
         [Fact]
         public void NoTimeReturnsNull()
         {

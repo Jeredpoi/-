@@ -193,6 +193,7 @@ namespace Isle.Services
             req.Headers.Add("Authorization", "Bearer " + key.Trim());
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();
+            AiService.CheckLimits(resp); // у Groq лимит распознавания тоже кончается — предупредим
             JsonDocument doc;
             try { doc = JsonDocument.Parse(json); }
             catch { throw new Exception("сервис ответил не по делу (код " + (int)resp.StatusCode + ") — попробуй ещё раз или включи VPN"); }

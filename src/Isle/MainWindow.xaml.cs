@@ -920,7 +920,7 @@ namespace Isle
                 _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
                 return;
             }
-            AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм»");
+            AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм» или «сделай текст официальнее»");
             if (!AppHost.Voice.Recording) return;
             _voiceKeyDown = DateTime.Now;
             if (_voiceKeyPoll.Tag == null)
@@ -941,17 +941,28 @@ namespace Isle
             _voiceKeyPoll.Start();
         }
 
+        /// <summary>Последние голосовые команды и ответы: ИИ помнит их 5 минут («а теперь на 10 минут», «повтори»).</summary>
+        private readonly List<(DateTime at, ChatMessage msg)> _voiceContext = new();
+
         private async Task RunVoiceCommand(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
+            // «сделай этот текст официальнее», «исправь ошибки в сообщении» — правим текст в поле ввода, где стоит курсор
+            if (TextEditor.IsEditRequest(text)) { await TextEditor.EditFocusedAsync(text); return; }
             ToastBus.Show(new Toast { Title = "«" + text + "»", Subtitle = "Думаю…", Icon = Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
-            var history = new List<ChatMessage>
-            {
-                new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" }
-            };
+            _voiceContext.RemoveAll(c => DateTime.Now - c.at > TimeSpan.FromMinutes(5));
+            var history = _voiceContext.Select(c => c.msg).ToList();
+            history.Add(new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" });
             string answer;
-            try { answer = await AiService.AskAsync(history); }
+            try { answer = await AiService.AskAsync(Views.ChatView.BuildHistory(history)); }
             catch (Exception ex) { answer = "Ошибка: " + ex.Message; }
+            bool ok = !(answer ?? "").StartsWith("Ошибка") && !(answer ?? "").StartsWith("Нужен API-ключ");
+            if (ok)
+            {
+                _voiceContext.Add((DateTime.Now, new ChatMessage { Role = "user", Text = text }));
+                _voiceContext.Add((DateTime.Now, new ChatMessage { Role = "assistant", Text = answer }));
+                if (_voiceContext.Count > 12) _voiceContext.RemoveRange(0, _voiceContext.Count - 12);
+            }
             var (clean, actions) = AiActions.Extract(answer ?? "");
             var reports = new List<string>();
             var confirm = new List<AiAction>();

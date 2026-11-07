@@ -175,6 +175,7 @@ namespace Isle.Services
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             using var resp = await Http.SendAsync(req, ct);
             var json = await resp.Content.ReadAsStringAsync(ct);
+            CheckLimits(resp);
             using var doc = ParseOrThrow(json, (int)resp.StatusCode);
             if (!resp.IsSuccessStatusCode) return "Ошибка: " + ErrorText(doc.RootElement, (int)resp.StatusCode);
             var sb = new StringBuilder();
@@ -187,8 +188,9 @@ namespace Isle.Services
         private static async Task<string> OpenAiAsync(IReadOnlyList<ChatMessage> history, string baseUrl, string key, string model, CancellationToken ct)
         {
             var msgs = new List<object> { new { role = "system", content = SystemPrompt } };
-            // последние 16 реплик: бесплатным тарифам (Groq) важен размер запроса
-            msgs.AddRange(history.Skip(Math.Max(0, history.Count - 16)).Select(m => (object)new { role = m.Role, content = m.Text }));
+            // весь разговор, пока он помещается в ~14 тыс. символов (бесплатным тарифам вроде Groq важен размер запроса);
+            // если сервис всё равно скажет «слишком много» — ниже история укоротится автоматически
+            msgs.AddRange(Fit(history, 14000).Select(m => (object)new { role = m.Role, content = m.Text }));
             int maxTokens = 800;
             string json = null;
             for (int attempt = 0; attempt < 3; attempt++)
@@ -199,6 +201,7 @@ namespace Isle.Services
                 req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
                 using var resp = await Http.SendAsync(req, ct);
                 json = await resp.Content.ReadAsStringAsync(ct);
+                CheckLimits(resp);
                 if (resp.IsSuccessStatusCode) break;
                 using var err = ParseOrThrow(json, (int)resp.StatusCode);
                 var text = ErrorText(err.RootElement, (int)resp.StatusCode);
@@ -254,6 +257,118 @@ namespace Isle.Services
             }
             catch { }
             return code == 401 ? "неверный ключ (HTTP 401)" : code == 403 ? "доступ запрещён — возможно, сервис недоступен в вашей стране, попробуйте VPN (HTTP 403)" : "HTTP " + code;
+        }
+
+        /// <summary>Последние реплики разговора, которые помещаются в бюджет символов (первая всегда от пользователя).</summary>
+        public static List<ChatMessage> Fit(IReadOnlyList<ChatMessage> history, int budget)
+        {
+            int start = history.Count, total = 0;
+            while (start > 0 && (total + (history[start - 1].Text?.Length ?? 0) <= budget || start == history.Count))
+            {
+                start--;
+                total += history[start].Text?.Length ?? 0;
+            }
+            while (start < history.Count - 1 && history[start].Role != "user") start++;
+            return history.Skip(start).ToList();
+        }
+
+        private static DateTime _limitWarned = DateTime.MinValue;
+
+        /// <summary>
+        /// Предупреждение о лимитах: сервисы присылают, сколько запросов/токенов осталось (Groq, OpenAI, Anthropic, OpenRouter).
+        /// Когда почти кончилось или уже кончилось (HTTP 429) — плашка в острове, не чаще раза в 10 минут.
+        /// </summary>
+        public static void CheckLimits(HttpResponseMessage resp)
+        {
+            try
+            {
+                string H(string name) => resp.Headers.TryGetValues(name, out var v) ? v.FirstOrDefault() : null;
+                string title = null, sub = null;
+                if ((int)resp.StatusCode == 429)
+                {
+                    var retry = resp.Headers.RetryAfter?.Delta;
+                    title = "Лимит ИИ закончился";
+                    sub = retry is { } r && r.TotalSeconds > 0
+                        ? "Сервис снова ответит через " + (r.TotalMinutes >= 1 ? Math.Ceiling(r.TotalMinutes) + " мин" : Math.Ceiling(r.TotalSeconds) + " с")
+                        : "Подожди немного или выбери другую модель в настройках ИИ";
+                }
+                else
+                {
+                    foreach (var (rem, lim, what) in new[]
+                    {
+                        ("x-ratelimit-remaining-requests", "x-ratelimit-limit-requests", "запросов"),
+                        ("x-ratelimit-remaining-tokens", "x-ratelimit-limit-tokens", "токенов"),
+                        ("anthropic-ratelimit-requests-remaining", "anthropic-ratelimit-requests-limit", "запросов"),
+                        ("anthropic-ratelimit-tokens-remaining", "anthropic-ratelimit-tokens-limit", "токенов"),
+                        ("x-ratelimit-remaining", "x-ratelimit-limit", "запросов"),
+                    })
+                    {
+                        if (!double.TryParse(H(rem), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var left)
+                            || !double.TryParse(H(lim), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var max) || max <= 0) continue;
+                        if (left / max <= 0.1)
+                        {
+                            title = "Лимит ИИ почти закончился";
+                            sub = "Осталось " + Math.Max(0, left).ToString("0") + " из " + max.ToString("0") + " " + what;
+                            break;
+                        }
+                    }
+                }
+                if (title == null || DateTime.Now - _limitWarned < TimeSpan.FromMinutes(10)) return;
+                _limitWarned = DateTime.Now;
+                System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+                    ToastBus.Show(new Toast { Title = title, Subtitle = sub, Icon = Icons.Info, ReplaceKey = "ai-limit", Important = true, Duration = TimeSpan.FromSeconds(6) }));
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Переписать текст по просьбе («сделай официальнее», «исправь ошибки», «переведи на английский»).
+        /// Возвращает только готовый текст; при ошибке бросает исключение с понятным текстом.
+        /// </summary>
+        public static async Task<string> RewriteAsync(string request, string text)
+        {
+            var s = AppSettings.Current;
+            if (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama") throw new Exception("нужен API-ключ: Настройки → ИИ");
+            const string sys = "Ты редактор текста. Пользователь даёт текст и просьбу, что с ним сделать (сделать официальнее, исправить ошибки, " +
+                               "сократить, перевести и т. п.). Выполни просьбу и верни ТОЛЬКО итоговый текст — без кавычек, пояснений и вступлений. " +
+                               "Сохраняй язык текста, если не просят перевести.";
+            var user = "Просьба: " + request + "\n\nТекст:\n" + text;
+            BusyChanged?.Invoke(true);
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+                string result;
+                if (s.AiProvider == "anthropic")
+                {
+                    var body = new { model = s.AiModel, max_tokens = 2000, system = sys, messages = new[] { new { role = "user", content = user } } };
+                    using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+                    AddAuth(req, "anthropic", s.AiKey);
+                    req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                    using var resp = await Http.SendAsync(req, cts.Token);
+                    CheckLimits(resp);
+                    using var doc = ParseOrThrow(await resp.Content.ReadAsStringAsync(cts.Token), (int)resp.StatusCode);
+                    if (!resp.IsSuccessStatusCode) throw new Exception(ErrorText(doc.RootElement, (int)resp.StatusCode));
+                    result = string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
+                        .Where(b => b.TryGetProperty("type", out var t) && t.GetString() == "text").Select(b => b.GetProperty("text").GetString()));
+                }
+                else
+                {
+                    var body = new { model = s.AiModel, max_tokens = 2000, temperature = 0.3, messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } } };
+                    using var req = new HttpRequestMessage(HttpMethod.Post, s.AiBaseUrl.TrimEnd('/') + "/chat/completions");
+                    AddAuth(req, "openai", s.AiKey);
+                    req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                    using var resp = await Http.SendAsync(req, cts.Token);
+                    CheckLimits(resp);
+                    using var doc = ParseOrThrow(await resp.Content.ReadAsStringAsync(cts.Token), (int)resp.StatusCode);
+                    if (!resp.IsSuccessStatusCode) throw new Exception(ErrorText(doc.RootElement, (int)resp.StatusCode));
+                    result = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+                }
+                result = StripThinking(result).Trim().Trim('"', '«', '»').Trim();
+                if (result.Length == 0) throw new Exception("ИИ вернул пустой текст");
+                return result;
+            }
+            catch (OperationCanceledException) { throw new Exception("сервис не ответил вовремя"); }
+            finally { BusyChanged?.Invoke(false); }
         }
 
         private static string Trim(string s, int n) => s.Length > n ? s.Substring(0, n) + "…" : s;
