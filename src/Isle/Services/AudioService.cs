@@ -113,8 +113,10 @@ namespace Isle.Services
             {
                 var list = SessionsFor(appId);
                 if (list.Count == 0) return null;
-                // у браузеров несколько сессий — показываем самую громкую
-                return list.Max(x => x.SimpleAudioVolume.Volume);
+                // у плеера бывает несколько сессий (старые, тихие) — берём ту, что сейчас звучит
+                var playing = list.Where(x => x.State == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive).ToList();
+                var pick = (playing.Count > 0 ? playing : list).OrderByDescending(x => { try { return x.AudioMeterInformation.MasterPeakValue; } catch { return 0f; } }).First();
+                return pick.SimpleAudioVolume.Volume;
             }
             catch { return null; }
         }
