@@ -159,6 +159,14 @@ namespace Isle.Helpers
         }
         public string DanceName => DanceNames[_dance];
 
+        /// <summary>Включить конкретный танец (для съёмки анимации в README); обычно танец выбирается сам.</summary>
+        public void ForceDance(int dance)
+        {
+            _dance = Math.Clamp(dance, 0, DanceCount - 1);
+            _danceStart = _dtime;
+            _nextDance = DateTime.Now.AddHours(1);
+        }
+
         /// <summary>Сдвиг ручки по вертикали в пикселях спрайта для текущего танца (минус — выше).</summary>
         /// <summary>
         /// Танец по музыке: медленная — покачивание и лунная походка, средняя — классика, диско и робот,

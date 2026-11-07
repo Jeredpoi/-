@@ -16,8 +16,13 @@ namespace Isle
         private TrayIcon _tray;
         private bool _started;
 
+        /// <summary>Режим съёмки для README (--readme-shots папка): без диалогов, после съёмки выходим.</summary>
+        private string _shotsDir;
+
         protected override void OnStartup(StartupEventArgs e)
         {
+            int si = Array.IndexOf(e.Args, "--readme-shots");
+            if (si >= 0 && si + 1 < e.Args.Length) _shotsDir = Path.GetFullPath(e.Args[si + 1]);
             _single = new Mutex(true, MutexName, out bool first);
             Trace("запуск " + typeof(App).Assembly.GetName().Version + ", " + Environment.OSVersion + ", " + Environment.ProcessPath, first);
             if (!first)
@@ -34,7 +39,7 @@ namespace Isle
                 return;
             }
 
-            if (SwitchToInstalledCopy()) { Shutdown(); return; }
+            if (_shotsDir == null && SwitchToInstalledCopy()) { Shutdown(); return; }
 
             try { SystemControls.RepairAutostartPath(); }
             catch (Exception ex) { Log("autostart repair: " + ex.Message); }
@@ -51,6 +56,7 @@ namespace Isle
                 w.Show();
                 Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
+                if (_shotsDir != null) _ = ReadmeShots.RunAsync(w, _shotsDir);
             }
             catch (Exception ex)
             {
@@ -87,6 +93,12 @@ namespace Isle
         {
             Log("FATAL: " + ex);
             Trace("ОШИБКА ЗАПУСКА: " + ex.Message);
+            if (_shotsDir != null)
+            {
+                try { Directory.CreateDirectory(_shotsDir); File.WriteAllText(Path.Combine(_shotsDir, "error.txt"), ex.ToString()); } catch { }
+                Shutdown();
+                return;
+            }
             MessageBox.Show(
                 "Isle не смог запуститься.\n\n" + ex.GetType().Name + ": " + ex.Message +
                 "\n\nПодробности записаны в " + Path.Combine(Storage.Dir, "errors.log"),

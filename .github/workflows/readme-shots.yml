@@ -1,0 +1,47 @@
+name: README screenshots
+
+# Настоящие снимки интерфейса для README: Isle сам открывает вкладки и снимает их,
+# плюс кадры танцующего Клоди -> анимация. Запуск вручную или пушем в ветку readme-shots*.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["readme-shots*"]
+
+jobs:
+  shots:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish
+        run: dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true -o out/app
+
+      - name: Снимки
+        shell: pwsh
+        run: |
+          $dir = Join-Path $PWD "shots"
+          $p = Start-Process -FilePath "out/app/Isle.exe" -ArgumentList "--readme-shots", "`"$dir`"" -PassThru
+          if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
+          Get-ChildItem $dir -Recurse | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }
+          if (Test-Path "$dir/error.txt") { Get-Content "$dir/error.txt" }
+          $log = Join-Path $env:APPDATA "Isle/errors.log"
+          if (Test-Path $log) { Write-Host "--- errors.log"; Get-Content $log -Tail 60 }
+
+      - name: Анимация Клоди
+        shell: pwsh
+        run: |
+          python -m pip install --quiet pillow
+          python .github/scripts/make_gif.py shots/clawd shots/clawd-dance.gif
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readme-shots
+          path: |
+            shots/*.png
+            shots/*.gif
+            shots/*.txt
