@@ -171,6 +171,8 @@ namespace Isle.Services
         public string HotkeyCollapse { get; set; } = "Escape";
         /// <summary>Клавиша PrintScreen делает снимок через Isle (выделение области, карточка в чёлке).</summary>
         public bool PrintScreenIsle { get; set; }
+        /// <summary>Сохранять снимки Isle в «Изображения\\Isle» (а не только в буфер обмена).</summary>
+        public bool SaveScreenshots { get; set; } = true;
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;

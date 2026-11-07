@@ -256,6 +256,14 @@ namespace Isle.Native
 
         [DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner();
 
+        public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+        [StructLayout(LayoutKind.Sequential)]
+        public struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr dwExtraInfo; }
+        [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+        [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+        [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string name);
+
         /// <summary>Процесс, положивший данные в буфер (пусто — системная клавиша PrintScreen).</summary>
         public static string ClipboardOwnerProcess()
         {
