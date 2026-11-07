@@ -973,17 +973,27 @@ namespace Isle
 
         private async void OnLangClick(object sender, RoutedEventArgs e)
         {
-            var target = Win32.GetForegroundWindow();
-            if (target == _hwnd || target == IntPtr.Zero) target = PreviousForeground;
-            if (target == IntPtr.Zero) return;
-            // Переключаем так же, как это делает сам пользователь: возвращаем фокус в его окно и жмём Win+Пробел.
-            // Просьба окну (WM_INPUTLANGCHANGEREQUEST) в Windows 10/11 часто игнорируется — поэтому только системный способ.
-            Win32.ForceForeground(target);
-            await Task.Delay(90);
+            // Клик по кнопке не забирает фокус у твоего окна (остров не активируется), поэтому достаточно нажать Win+Пробел —
+            // Windows переключит раскладку там, где ты печатаешь. Раньше Isle ещё и «возвращал фокус» в прошлое окно:
+            // если им был рабочий стол, это дёргало обои (Wallpaper Engine мигал), а значок раскладки показывал не то.
+            var fg = Win32.GetForegroundWindow();
+            if (fg == _hwnd && PreviousForeground != IntPtr.Zero && !IsDesktopWindow(PreviousForeground))
+            {
+                Win32.ForceForeground(PreviousForeground); // остров был активен (печатали в нём) — вернуть фокус в обычное окно
+                await Task.Delay(90);
+            }
             Win32.PressWinSpace();
-            await Task.Delay(250);
-            var code = Win32.LangCode(Win32.LayoutOf(Win32.FocusWindowOf(target)));
-            if (code != null) LangChip.Text = code;
+            // значок обновит наблюдатель раскладки, когда Windows действительно переключит её
+            await Task.Delay(300);
+            LangChip.Text = AppHost.Watchers.LanguageCode;
+        }
+
+        private static bool IsDesktopWindow(IntPtr h)
+        {
+            var sb = new System.Text.StringBuilder(64);
+            Win32.GetClassName(h, sb, sb.Capacity);
+            var c = sb.ToString();
+            return c is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd";
         }
 
         private async void OnVpnClick(object sender, RoutedEventArgs e)
