@@ -936,7 +936,7 @@ namespace Isle
             {
                 // второе нажатие в режиме «нажал-нажал»
                 _voiceKeyPoll.Stop();
-                _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t), command: true);
                 return;
             }
             AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм» или «сделай текст официальнее»");
@@ -954,7 +954,7 @@ namespace Isle
                     if (held) return;
                     _voiceKeyPoll.Stop();
                     if (DateTime.Now - _voiceKeyDown < TimeSpan.FromMilliseconds(400)) return; // короткое нажатие — запись идёт до второго нажатия
-                    _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                    _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t), command: true);
                 };
             }
             _voiceKeyPoll.Start();
@@ -971,7 +971,9 @@ namespace Isle
             ToastBus.Show(new Toast { Title = "«" + text + "»", Subtitle = "Думаю…", Icon = Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
             _voiceContext.RemoveAll(c => DateTime.Now - c.at > TimeSpan.FromMinutes(5));
             var history = _voiceContext.Select(c => c.msg).ToList();
-            history.Add(new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" });
+            history.Add(new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой. " +
+                "Если просят переписать, исправить, перевести, сократить или оформить текст, который пользователь набрал или выделил, — " +
+                "ты его не видишь, Isle сам возьмёт его из поля ввода: НЕ проси прислать текст, ответь только строкой [[edit: что сделать с текстом]].)" });
             string answer;
             try { answer = await AiService.AskAsync(Views.ChatView.BuildHistory(history)); }
             catch (Exception ex) { answer = "Ошибка: " + ex.Message; }
@@ -983,6 +985,13 @@ namespace Isle
                 if (_voiceContext.Count > 12) _voiceContext.RemoveRange(0, _voiceContext.Count - 12);
             }
             var (clean, actions) = AiActions.Extract(answer ?? "");
+            // ИИ понял, что это правка набранного текста — берём текст из поля, переписываем и вставляем на место
+            var edit = actions.FirstOrDefault(a => a.Name == "edit");
+            if (edit != null)
+            {
+                await TextEditor.EditFocusedAsync(string.IsNullOrWhiteSpace(edit.Arg) ? text : edit.Arg);
+                return;
+            }
             var reports = new List<string>();
             var confirm = new List<AiAction>();
             foreach (var a in actions)

@@ -126,6 +126,8 @@ namespace Isle.Tests
         [InlineData("Сделай этот текст более официальным", true)]
         [InlineData("исправь ошибки в сообщении", true)]
         [InlineData("переведи текст на английский", true)]
+        [InlineData("преобразуй то, что я написал, в официальную форму", true)]
+        [InlineData("чтобы текст был преобразован в официальной форме", true)]
         [InlineData("открой телеграм", false)]
         [InlineData("сделай таймер на 5 минут", false)]
         public void VoiceEditRequests(string command, bool edit) =>
