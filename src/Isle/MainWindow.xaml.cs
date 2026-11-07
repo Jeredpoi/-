@@ -53,7 +53,11 @@ namespace Isle
         public IslandState State { get; private set; } = IslandState.Collapsed;
         /// <summary>Окно, которое было активным до того, как пользователь кликнул в остров (туда вставляем из буфера).</summary>
         public IntPtr PreviousForeground { get; private set; }
-        public bool SuppressAutoCollapse { get; set; }
+        private bool _suppressCollapse;
+        /// <summary>Не сворачивать остров сам: открыто меню или выпадающий список.</summary>
+        public bool SuppressAutoCollapse { get => _suppressCollapse || _openMenus > 0; set => _suppressCollapse = value; }
+        /// <summary>Сколько наших меню сейчас открыто — пока они открыты, остров не поднимается поверх них.</summary>
+        private static int _openMenus;
 
         public MainWindow()
         {
@@ -62,6 +66,9 @@ namespace Isle
             // пока видна подсказка — не поднимаем остров поверх неё (иначе она «уходит за чёлку»)
             AddHandler(ToolTipService.ToolTipOpeningEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.Now.AddSeconds(8)), true);
             AddHandler(ToolTipService.ToolTipClosingEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.MinValue), true);
+            // любое меню приложения: пока открыто — не сворачиваемся и не перекрываем его чёлкой (раньше оно «уходило за окно»)
+            EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.OpenedEvent, new RoutedEventHandler((_, __) => _openMenus++));
+            EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.ClosedEvent, new RoutedEventHandler((_, __) => _openMenus = Math.Max(0, _openMenus - 1)));
             var s = AppSettings.Current;
             ScaleT.ScaleX = ScaleT.ScaleY = Math.Clamp(s.Scale, 0.7, 1.6);
 
@@ -913,7 +920,7 @@ namespace Isle
                 _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
                 return;
             }
-            AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм»");
+            AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм» или «сделай текст официальнее»");
             if (!AppHost.Voice.Recording) return;
             _voiceKeyDown = DateTime.Now;
             if (_voiceKeyPoll.Tag == null)
@@ -934,17 +941,28 @@ namespace Isle
             _voiceKeyPoll.Start();
         }
 
+        /// <summary>Последние голосовые команды и ответы: ИИ помнит их 5 минут («а теперь на 10 минут», «повтори»).</summary>
+        private readonly List<(DateTime at, ChatMessage msg)> _voiceContext = new();
+
         private async Task RunVoiceCommand(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
+            // «сделай этот текст официальнее», «исправь ошибки в сообщении» — правим текст в поле ввода, где стоит курсор
+            if (TextEditor.IsEditRequest(text)) { await TextEditor.EditFocusedAsync(text); return; }
             ToastBus.Show(new Toast { Title = "«" + text + "»", Subtitle = "Думаю…", Icon = Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
-            var history = new List<ChatMessage>
-            {
-                new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" }
-            };
+            _voiceContext.RemoveAll(c => DateTime.Now - c.at > TimeSpan.FromMinutes(5));
+            var history = _voiceContext.Select(c => c.msg).ToList();
+            history.Add(new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" });
             string answer;
-            try { answer = await AiService.AskAsync(history); }
+            try { answer = await AiService.AskAsync(Views.ChatView.BuildHistory(history)); }
             catch (Exception ex) { answer = "Ошибка: " + ex.Message; }
+            bool ok = !(answer ?? "").StartsWith("Ошибка") && !(answer ?? "").StartsWith("Нужен API-ключ");
+            if (ok)
+            {
+                _voiceContext.Add((DateTime.Now, new ChatMessage { Role = "user", Text = text }));
+                _voiceContext.Add((DateTime.Now, new ChatMessage { Role = "assistant", Text = answer }));
+                if (_voiceContext.Count > 12) _voiceContext.RemoveRange(0, _voiceContext.Count - 12);
+            }
             var (clean, actions) = AiActions.Extract(answer ?? "");
             var reports = new List<string>();
             var confirm = new List<AiAction>();
@@ -973,18 +991,26 @@ namespace Isle
 
         private async void OnLangClick(object sender, RoutedEventArgs e)
         {
-            // Клик по кнопке не забирает фокус у твоего окна (остров не активируется), поэтому достаточно нажать Win+Пробел —
-            // Windows переключит раскладку там, где ты печатаешь. Раньше Isle ещё и «возвращал фокус» в прошлое окно:
-            // если им был рабочий стол, это дёргало обои (Wallpaper Engine мигал), а значок раскладки показывал не то.
-            var fg = Win32.GetForegroundWindow();
-            if (fg == _hwnd && PreviousForeground != IntPtr.Zero && !IsDesktopWindow(PreviousForeground))
+            // Клик по острову не забирает фокус у твоего окна, поэтому переключаем раскладку именно там.
+            // Win+Пробел больше не жмём: он открывает системную плашку языка, и из-за неё мигали живые обои.
+            var target = Win32.GetForegroundWindow();
+            if (target == _hwnd && PreviousForeground != IntPtr.Zero && !IsDesktopWindow(PreviousForeground))
             {
-                Win32.ForceForeground(PreviousForeground); // остров был активен (печатали в нём) — вернуть фокус в обычное окно
+                Win32.ForceForeground(PreviousForeground); // печатали в острове — вернуть фокус в обычное окно
                 await Task.Delay(90);
+                target = PreviousForeground;
             }
-            Win32.PressWinSpace();
-            // значок обновит наблюдатель раскладки, когда Windows действительно переключит её
-            await Task.Delay(300);
+            var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
+            // 1) вежливо просим окно включить следующую раскладку (так делают переключатели вроде Punto)
+            Win32.RequestNextLayout(target);
+            await Task.Delay(150);
+            // 2) окно проигнорировало просьбу (бывает у консолей и некоторых игр) — жмём сочетание пользователя
+            if (Win32.LayoutOf(Win32.FocusWindowOf(target)) == before)
+            {
+                Win32.PressLayoutHotkey();
+                await Task.Delay(150);
+            }
+            AppHost.Watchers.RefreshLanguage();
             LangChip.Text = AppHost.Watchers.LanguageCode;
         }
 
@@ -1611,7 +1637,7 @@ namespace Isle
         {
             if (_hwnd == IntPtr.Zero || !IsVisible) return;
             // открыта подсказка или выпадающий список — не поднимаем остров над ними, иначе они «уходят за чёлку»
-            if (DateTime.Now < _tipUntil || CursorOverOurPopup()) return;
+            if (DateTime.Now < _tipUntil || _openMenus > 0 || CursorOverOurPopup()) return;
             // HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER
             SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010 | 0x0200);
         }

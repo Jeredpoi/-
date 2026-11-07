@@ -16,9 +16,23 @@ namespace Isle.Services
         private int _lastLang = -1;
         private IntPtr _lastFg;
 
-        private static readonly string[] ShellClasses = { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "Windows.UI.Core.CoreWindow" };
+        private static readonly string[] ShellClasses = { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "Windows.UI.Core.CoreWindow",
+            // консоль отдаёт раскладку по умолчанию, а не ту, что включена — из-за неё значок врал «EN»
+            "ConsoleWindowClass" };
 
+        private static IntPtr _skipHwnd;
+        private static bool _skipResult;
+
+        /// <summary>Окно, чья раскладка не настоящая (рабочий стол, обои, сам остров). Кэшируем по окну — проверка дорогая.</summary>
         private static bool IsShellOrOwn(IntPtr hwnd)
+        {
+            if (hwnd == _skipHwnd) return _skipResult;
+            _skipResult = IsShellOrOwnUncached(hwnd);
+            _skipHwnd = hwnd;
+            return _skipResult;
+        }
+
+        private static bool IsShellOrOwnUncached(IntPtr hwnd)
         {
             try
             {
@@ -39,7 +53,8 @@ namespace Isle.Services
         private bool _warnedLow;
         private bool _lastFullscreen;
 
-        public string LanguageCode { get; private set; } = "EN";
+        // до первого «настоящего» окна берём раскладку ввода по умолчанию, а не всегда «EN»
+        public string LanguageCode { get; private set; } = LangCode((int)((long)Win32.GetKeyboardLayout(0) & 0xFFFF));
         public int BatteryPercent { get; private set; } = -1;
         public bool Charging { get; private set; }
         public bool HasBattery { get; private set; }
@@ -56,10 +71,11 @@ namespace Isle.Services
             Slow();
         }
 
-        private void Fast()
-        {
-            var s = AppSettings.Current;
+        /// <summary>Перечитать раскладку сейчас (после нажатия кнопки раскладки в острове).</summary>
+        public void RefreshLanguage() => ReadLanguage(AppSettings.Current.LayoutToasts);
 
+        private void ReadLanguage(bool toasts)
+        {
             // Раскладка — того поля, где стоит курсор ввода, а не просто «окна»
             try
             {
@@ -79,7 +95,7 @@ namespace Isle.Services
                     LanguageChanged?.Invoke();
                     // плашку показываем только если раскладка сменилась в том же окне (её переключили),
                     // а не потому, что перешли в другое окно со своей раскладкой
-                    if (!first && sameWindow && s.LayoutToasts)
+                    if (!first && sameWindow && toasts)
                         ToastBus.Show(new Toast
                         {
                             Kind = ToastKind.Layout, Title = LanguageCode + "  ·  " + LangName(langId), Icon = Icons.Keyboard,
@@ -88,6 +104,14 @@ namespace Isle.Services
                 }
             }
             catch { }
+
+        }
+
+        private void Fast()
+        {
+            var s = AppSettings.Current;
+
+            ReadLanguage(s.LayoutToasts);
 
             // Caps Lock
             bool caps = (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;

@@ -10,8 +10,8 @@ namespace Isle.Helpers
     /// </summary>
     public class VoiceWave : FrameworkElement
     {
-        private const int Bars = 44;
-        private const double Step = 0.05; // новый столбик каждые 50 мс
+        private const int Bars = 32;
+        private const double Step = 0.12; // новый столбик каждые 120 мс — волна идёт спокойно, не мельтешит
         private readonly double[] _levels = new double[Bars];
         private double _pending, _acc, _shown;
         private bool _subscribed;
@@ -40,8 +40,9 @@ namespace Isle.Helpers
             {
                 _acc -= Step;
                 Array.Copy(_levels, 1, _levels, 0, Bars - 1);
-                // тихая речь тоже должна быть заметна: усиливаем и «сжимаем» корнем
-                _levels[Bars - 1] = Math.Sqrt(Math.Min(1, _pending * 3.5));
+                // тихая речь тоже должна быть заметна: усиливаем и «сжимаем» корнем; сглаживаем с соседним столбиком
+                double v = Math.Sqrt(Math.Min(1, _pending * 3.5));
+                _levels[Bars - 1] = _levels[Bars - 2] * 0.35 + v * 0.65;
                 _pending = 0;
             }
             _shown = _acc / Step; // плавный сдвиг между столбиками

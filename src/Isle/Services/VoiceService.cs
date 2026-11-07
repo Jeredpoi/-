@@ -107,8 +107,13 @@ namespace Isle.Services
             cap.DataAvailable -= OnData;
             cap.Dispose();
             RecordingChanged?.Invoke(false);
-            var pcm = _pcm.ToArray();
+            var pcm = TrimSilence(_pcm.ToArray());
             _pcm = null;
+            if (pcm == null)
+            {
+                ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                return;
+            }
             if (pcm.Length < 16000) // меньше половины секунды
             {
                 ToastBus.Show(new Toast { Title = "Слишком коротко", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
@@ -176,7 +181,7 @@ namespace Isle.Services
             var file = new ByteArrayContent(wav);
             file.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             form.Add(file, "file", "voice.wav");
-            form.Add(new StringContent(string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3-turbo" : s.VoiceModel), "model");
+            form.Add(new StringContent(string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3" : s.VoiceModel), "model");
             if (!string.IsNullOrEmpty(s.VoiceLanguage)) form.Add(new StringContent(s.VoiceLanguage), "language");
             form.Add(new StringContent("json"), "response_format");
             // подсказка-образец с пунктуацией: Whisper подстраивается под стиль и сам ставит точки, запятые и вопросы
@@ -188,6 +193,7 @@ namespace Isle.Services
             req.Headers.Add("Authorization", "Bearer " + key.Trim());
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();
+            AiService.CheckLimits(resp); // у Groq лимит распознавания тоже кончается — предупредим
             JsonDocument doc;
             try { doc = JsonDocument.Parse(json); }
             catch { throw new Exception("сервис ответил не по делу (код " + (int)resp.StatusCode + ") — попробуй ещё раз или включи VPN"); }
@@ -195,6 +201,7 @@ namespace Isle.Services
             {
                 if (!resp.IsSuccessStatusCode) throw new Exception(AiService.ErrorText(doc.RootElement, (int)resp.StatusCode));
                 var text = doc.RootElement.TryGetProperty("text", out var t) ? (t.GetString() ?? "").Trim() : "";
+                text = StripJunk(text);
                 return IsHallucination(text, hint) ? "" : text;
             }
         }
@@ -206,16 +213,128 @@ namespace Isle.Services
         public static bool IsHallucination(string text, string hint)
         {
             if (string.IsNullOrWhiteSpace(text)) return true;
-            string Norm(string x) => new string(x.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            string Norm(string x) => NormText(x);
             var t = Norm(text);
             if (t.Length == 0) return true;
             if (!string.IsNullOrEmpty(hint) && (t.Length >= 15 && Norm(hint).Contains(t) || t.Contains(Norm(hint)))) return true; // короткое «привет» — это ты, а не подсказка
-            string[] junk =
+            return t.Length < 60 && Junk.Any(t.Contains);
+        }
+
+        // «титры» из роликов, которые Whisper дописывает на тишине (часто в конце настоящей фразы)
+        private static readonly string[] Junk =
+        {
+            "продолжениеследует", "субтитр", "дубровск", "dimatorzok", "диматорзок", "редакторсубтитров",
+            "спасибозапросмотр", "подписывайтесь", "ставьтелайк", "amaraorg", "thanksforwatching", "subtitles", "pleasesubscribe"
+        };
+
+        private static string NormText(string x) => new string(x.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+
+        /// <summary>Убирает из текста предложения-«титры», оставляя то, что ты сказал.</summary>
+        public static string StripJunk(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+            var parts = System.Text.RegularExpressions.Regex.Split(text, @"(?<=[.!?…])\s+");
+            return string.Join(" ", parts.Where(p => { var n = NormText(p); return !Junk.Any(n.Contains); })).Trim();
+        }
+
+        /// <summary>
+        /// Обрезает тишину в начале и в конце записи (16 кГц, 16 бит): Whisper на тишине выдумывает фразы.
+        /// Если громкой речи нет совсем — null.
+        /// </summary>
+        private static byte[] TrimSilence(byte[] pcm)
+        {
+            const int win = 320 * 2; // окна по 20 мс
+            int n = pcm.Length / win;
+            if (n == 0) return null;
+            var lvl = new double[n];
+            double max = 0;
+            for (int w = 0; w < n; w++)
             {
-                "продолжениеследует", "субтитрысделал", "субтитрыделал", "редакторсубтитров", "спасибозапросмотр",
-                "подписывайтесьнаканал", "ставьтелайки", "thanksforwatching", "subtitlesby", "pleasesubscribe"
-            };
-            return t.Length < 60 && junk.Any(t.Contains);
+                double sum = 0;
+                for (int i = w * win; i < (w + 1) * win; i += 2)
+                {
+                    double v = (short)(pcm[i] | pcm[i + 1] << 8) / 32768.0;
+                    sum += v * v;
+                }
+                lvl[w] = Math.Sqrt(sum / 320);
+                max = Math.Max(max, lvl[w]);
+            }
+            if (max < 0.012) return null; // только шум микрофона
+            double gate = Math.Max(0.008, max * 0.08);
+            int first = Array.FindIndex(lvl, v => v >= gate), last = Array.FindLastIndex(lvl, v => v >= gate);
+            first = Math.Max(0, first - 15); last = Math.Min(n - 1, last + 20); // запас 0,3 с до и 0,4 с после
+            int len = (last - first + 1) * win;
+            if (len < 16000) len = Math.Min(pcm.Length - first * win, 16000); // Whisper не любит совсем короткие куски
+            var res = new byte[len];
+            Array.Copy(pcm, first * win, res, 0, len);
+            return res;
+        }
+
+        public sealed record VoiceModelInfo(string Id, string Title, double Price, string PriceText, bool PaidOnly);
+
+        /// <summary>
+        /// Модели распознавания у выбранного сервиса: только «голос → текст» (вход — звук, выход — текст),
+        /// от дешёвых к дорогим. У Pollinations сотни моделей — остальные (картинки, чат, озвучка) отбрасываем.
+        /// </summary>
+        public static async Task<System.Collections.Generic.List<VoiceModelInfo>> ModelsAsync(string baseUrl)
+        {
+            var s = AppSettings.Current;
+            using var req = new HttpRequestMessage(HttpMethod.Get, baseUrl.TrimEnd('/') + "/models");
+            var key = KeyFor(s);
+            if (!string.IsNullOrWhiteSpace(key)) req.Headers.Add("Authorization", "Bearer " + key.Trim());
+            using var resp = await Http.SendAsync(req);
+            var json = await resp.Content.ReadAsStringAsync();
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(json); }
+            catch { throw new Exception("сервис ответил не по делу (код " + (int)resp.StatusCode + ")"); }
+            using (doc)
+            {
+                if (!resp.IsSuccessStatusCode) throw new Exception(AiService.ErrorText(doc.RootElement, (int)resp.StatusCode));
+                var list = new System.Collections.Generic.List<VoiceModelInfo>();
+                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) return list;
+                foreach (var m in data.EnumerateArray())
+                {
+                    var id = m.TryGetProperty("id", out var i) ? i.GetString() ?? "" : "";
+                    if (id.Length == 0 || !IsSpeechToText(m, id)) continue;
+                    var title = m.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : "";
+                    bool paid = m.TryGetProperty("paid_only", out var p) && p.ValueKind == JsonValueKind.True;
+                    var (price, text) = Price(m);
+                    list.Add(new VoiceModelInfo(id, title, price, text, paid));
+                }
+                // сначала с известной ценой — от дешёвых к дорогим, без цены — в конце по алфавиту
+                return list.OrderBy(x => double.IsNaN(x.Price) ? 1 : 0).ThenBy(x => double.IsNaN(x.Price) ? 0 : x.Price).ThenBy(x => x.Id).ToList();
+            }
+        }
+
+        /// <summary>Вход — звук, выход — текст: по списку поддерживаемых адресов, по модальностям или по имени (Whisper и т. п.).</summary>
+        internal static bool IsSpeechToText(JsonElement m, string id)
+        {
+            static bool Has(JsonElement el, string prop, string value) =>
+                el.TryGetProperty(prop, out var a) && a.ValueKind == JsonValueKind.Array &&
+                a.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && (x.GetString() ?? "").Contains(value, StringComparison.OrdinalIgnoreCase));
+            if (Has(m, "supported_endpoints", "audio/transcriptions")) return true;
+            if (m.TryGetProperty("supported_endpoints", out _)) return false; // сервис сам перечислил, что модель умеет — распознавания нет
+            if (Has(m, "input_modalities", "audio") && Has(m, "output_modalities", "text") && !Has(m, "output_modalities", "audio")
+                && !(m.TryGetProperty("category", out var c) && c.GetString() == "text")) return true;
+            var low = id.ToLowerInvariant();
+            return low.Contains("whisper") || low.Contains("transcribe") || low.Contains("speech-to-text") || low.Contains("stt");
+        }
+
+        /// <summary>Цена модели из её «pricing» (у Pollinations — в пыльце за единицу). NaN — сервис цену не сообщил.</summary>
+        private static (double, string) Price(JsonElement m)
+        {
+            if (!m.TryGetProperty("pricing", out var pr) || pr.ValueKind != JsonValueKind.Object) return (double.NaN, "");
+            double sum = 0; bool any = false;
+            string currency = pr.TryGetProperty("currency", out var cur) && cur.ValueKind == JsonValueKind.String ? cur.GetString() : "";
+            foreach (var f in pr.EnumerateObject())
+            {
+                double v = f.Value.ValueKind == JsonValueKind.Number ? f.Value.GetDouble()
+                    : f.Value.ValueKind == JsonValueKind.String && double.TryParse(f.Value.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0;
+                if (v > 0) { sum += v; any = true; }
+            }
+            if (!any) return (0, "бесплатно");
+            var unit = string.IsNullOrEmpty(currency) || currency.Equals("pollen", StringComparison.OrdinalIgnoreCase) ? "пыльцы" : currency;
+            return (sum, sum.ToString(sum < 0.001 ? "0.#######" : "0.####", System.Globalization.CultureInfo.InvariantCulture) + " " + unit);
         }
 
         /// <summary>Проверка: отправляем секунду тишины — если ключ верный, сервис ответит.</summary>
@@ -224,9 +343,15 @@ namespace Isle.Services
             try
             {
                 await TranscribeAsync(Wav(new byte[32000]));
-                return "Работает: сервис принял запись";
+                return "Работает: модель " + AppSettings.Current.VoiceModel + " приняла запись";
             }
-            catch (Exception ex) { return "Ошибка: " + ex.Message; }
+            catch (Exception ex)
+            {
+                var msg = ex.Message;
+                if (msg.Contains("model", StringComparison.OrdinalIgnoreCase) || msg.Contains("модел", StringComparison.OrdinalIgnoreCase))
+                    msg += " — нажми «Модели» и выбери из списка";
+                return "Ошибка: " + msg;
+            }
         }
     }
 }

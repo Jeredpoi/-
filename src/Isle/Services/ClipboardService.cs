@@ -96,8 +96,12 @@ namespace Isle.Services
             || process.StartsWith("SnippingTool", StringComparison.OrdinalIgnoreCase)
             || process.Equals("ScreenSketch", StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>До этого момента копирования делает сам Isle (правка текста ИИ) — в историю их не пишем.</summary>
+        public static DateTime IgnoreUntil { get; set; }
+
         private async Task OnChangedAsync()
         {
+            if (DateTime.Now < IgnoreUntil) return;
             var s = AppSettings.Current;
             string owner = Win32.ClipboardOwnerProcess(); // сразу, пока владелец ещё тот
             await Task.Delay(40);

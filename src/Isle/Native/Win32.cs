@@ -145,6 +145,39 @@ namespace Isle.Native
             keybd_event(0x5B, 0, 2, IntPtr.Zero);
         }
 
+        /// <summary>
+        /// Нажать сочетание, которым у пользователя переключается раскладка (Alt+Shift, Ctrl+Shift или Ё),
+        /// без клавиши Win: Win открывает системную плашку языка, и из-за неё мигают живые обои (Wallpaper Engine).
+        /// Если сочетание отключено в Windows — остаётся только Win+Пробел.
+        /// </summary>
+        public static void PressLayoutHotkey()
+        {
+            string v = null;
+            try
+            {
+                v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Keyboard Layout\Toggle", "Language Hotkey", null) as string
+                    ?? Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Keyboard Layout\Toggle", "Hotkey", null) as string;
+            }
+            catch { }
+            switch ((v ?? "1").Trim())
+            {
+                case "2": // Ctrl+Shift
+                    keybd_event(0xA2, 0, 0, IntPtr.Zero); keybd_event(0xA0, 0, 0, IntPtr.Zero);
+                    keybd_event(0xA0, 0, 2, IntPtr.Zero); keybd_event(0xA2, 0, 2, IntPtr.Zero);
+                    break;
+                case "4": // Ё (`)
+                    keybd_event(0xC0, 0, 0, IntPtr.Zero); keybd_event(0xC0, 0, 2, IntPtr.Zero);
+                    break;
+                case "3": // сочетание отключено
+                    PressWinSpace();
+                    break;
+                default: // Alt+Shift (по умолчанию в Windows)
+                    keybd_event(0xA4, 0, 0, IntPtr.Zero); keybd_event(0xA0, 0, 0, IntPtr.Zero);
+                    keybd_event(0xA0, 0, 2, IntPtr.Zero); keybd_event(0xA4, 0, 2, IntPtr.Zero);
+                    break;
+            }
+        }
+
         /// <summary>Переключить раскладку в активном окне на следующую.</summary>
         public static void NextKeyboardLayout(IntPtr target)
         {
