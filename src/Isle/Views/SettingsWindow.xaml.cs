@@ -660,6 +660,17 @@ namespace Isle.Views
                 }
             };
             KeysList.Children.Add(prtRow);
+
+            // сохранять ли снимки Isle файлом или только в буфер обмена
+            var saveRow = new Grid { Margin = new Thickness(0, 6, 0, 4) };
+            saveRow.ColumnDefinitions.Add(new ColumnDefinition());
+            saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            saveRow.Children.Add(new TextBlock { Text = "Сохранять снимки Isle в «Изображения\\Isle» (выключено — только в буфер обмена)", FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+            var save = new CheckBox { IsChecked = S.SaveScreenshots, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            save.Click += (_, __) => { S.SaveScreenshots = save.IsChecked == true; S.Save(); };
+            Grid.SetColumn(save, 1);
+            saveRow.Children.Add(save);
+            KeysList.Children.Add(saveRow);
         }
 
         private string GetHotkey(string name) => name switch

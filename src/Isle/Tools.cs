@@ -14,13 +14,23 @@ namespace Isle
     {
         private static readonly Color Green = Color.FromRgb(0x4A, 0xDE, 0x80);
 
+        private static bool _capturing;
+
         private static async Task<object> Capture(CaptureMode mode)
         {
-            AppHost.Window.Collapse();
-            AppHost.Window.Visibility = Visibility.Hidden;
-            await Task.Delay(180); // даём чёлке спрятаться, чтобы не попала в снимок
-            try { return await CaptureOverlay.Run(mode); }
-            finally { AppHost.Window.Visibility = Visibility.Visible; }
+            if (_capturing) return null; // повторное нажатие PrintScreen во время выделения — не открываем второй слой
+            _capturing = true;
+            try
+            {
+                AppHost.Window.Collapse();
+                AppHost.Window.Visibility = Visibility.Hidden;
+                // Если остров и так скрыт от захвата экрана (настройка по умолчанию), ждать не нужно — снимок мгновенный.
+                // Иначе даём чёлке исчезнуть с экрана, чтобы не попала на снимок.
+                if (AppSettings.Current.ShowInCaptures) await Task.Delay(150); else await Task.Yield();
+                try { return await CaptureOverlay.Run(mode); }
+                finally { AppHost.Window.Visibility = Visibility.Visible; }
+            }
+            finally { _capturing = false; }
         }
 
         public static async Task RegionShot()
@@ -43,7 +53,7 @@ namespace Isle
         {
             ScreenTools.CopyImage(bmp);
             string path = null;
-            try { path = ScreenTools.SavePng(bmp); } catch { }
+            if (AppSettings.Current.SaveScreenshots) { try { path = ScreenTools.SavePng(bmp); } catch { } }
             ToastBus.Show(new Toast
             {
                 Kind = ToastKind.Success, Title = "Снимок скопирован",

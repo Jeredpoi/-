@@ -315,18 +315,56 @@ namespace Isle
             foreach (var spec in HotkeySpecs(AppSettings.Current))
                 if (spec.Id != 0 && TryParseHotkey(spec.Value, out uint modifiers, out uint key) && Win32.RegisterHotKey(_hwnd, spec.Id, modifiers | Win32.MOD_NOREPEAT, key))
                     _registeredHotkeys.Add(spec.Id);
-            // PrintScreen без модификаторов — снимок через Isle (по желанию, в настройках клавиш)
-            if (AppSettings.Current.PrintScreenIsle && Win32.RegisterHotKey(_hwnd, HkPrint, Win32.MOD_NOREPEAT, 0x2C))
-                _registeredHotkeys.Add(HkPrint);
+            ApplyPrintScreenHook();
         }
 
-        /// <summary>Включить/выключить перехват PrintScreen. false — Windows не дала занять клавишу.</summary>
+        // ---------- PrintScreen через Isle ----------
+        // Обычная горячая клавиша не помогает: Windows 11 сама ловит PrintScreen и открывает «Ножницы» —
+        // получалось два окна захвата сразу, медленно и вперемешку. Низкоуровневый перехват клавиатуры
+        // забирает нажатие раньше Windows: «Ножницы» не открываются, сразу выделение области Isle.
+        // Alt+PrintScreen и Win+PrintScreen не трогаем — они работают как в Windows.
+        private IntPtr _kbHook;
+        private Win32.LowLevelKeyboardProc _kbProc;
+
+        private void ApplyPrintScreenHook()
+        {
+            bool want = AppSettings.Current.PrintScreenIsle;
+            if (want && _kbHook == IntPtr.Zero)
+            {
+                _kbProc = KeyboardHook;
+                _kbHook = Win32.SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, _kbProc, Win32.GetModuleHandle(null), 0);
+            }
+            else if (!want && _kbHook != IntPtr.Zero)
+            {
+                Win32.UnhookWindowsHookEx(_kbHook);
+                _kbHook = IntPtr.Zero;
+            }
+        }
+
+        private IntPtr KeyboardHook(int code, IntPtr wParam, IntPtr lParam)
+        {
+            if (code >= 0)
+            {
+                var k = System.Runtime.InteropServices.Marshal.PtrToStructure<Win32.KBDLLHOOKSTRUCT>(lParam);
+                bool alt = (k.flags & 0x20) != 0;                                             // LLKHF_ALTDOWN
+                bool win = (Win32.GetAsyncKeyState(0x5B) & 0x8000) != 0 || (Win32.GetAsyncKeyState(0x5C) & 0x8000) != 0;
+                if (k.vkCode == 0x2C && !alt && !win)                                          // VK_SNAPSHOT
+                {
+                    int msg = wParam.ToInt32();
+                    if (msg == 0x0100 || msg == 0x0104) Dispatcher.BeginInvoke(new Action(() => _ = Tools.RegionShot())); // WM_KEYDOWN / WM_SYSKEYDOWN
+                    return new IntPtr(1); // Windows эту клавишу уже не увидит — «Ножницы» не откроются
+                }
+            }
+            return Win32.CallNextHookEx(_kbHook, code, wParam, lParam);
+        }
+
+        /// <summary>Включить/выключить PrintScreen через Isle. false — Windows не дала поставить перехват.</summary>
         public bool SetPrintScreen(bool on)
         {
             AppSettings.Current.PrintScreenIsle = on;
-            ApplyHotkeys();
-            bool ok = !on || _registeredHotkeys.Contains(HkPrint);
-            if (!ok) { AppSettings.Current.PrintScreenIsle = false; ApplyHotkeys(); }
+            ApplyPrintScreenHook();
+            bool ok = !on || _kbHook != IntPtr.Zero;
+            if (!ok) AppSettings.Current.PrintScreenIsle = false;
             AppSettings.Current.Save();
             return ok;
         }
@@ -412,6 +450,7 @@ namespace Isle
         protected override void OnClosed(EventArgs e)
         {
             foreach (var id in _registeredHotkeys) Win32.UnregisterHotKey(_hwnd, id);
+            if (_kbHook != IntPtr.Zero) { Win32.UnhookWindowsHookEx(_kbHook); _kbHook = IntPtr.Zero; }
             AppHost.Audio?.Dispose();
             AppHost.Spectrum?.Dispose();
             base.OnClosed(e);
