@@ -250,16 +250,14 @@ namespace Isle.Views
             {
                 PlacementTarget = HistoryBtn,
                 Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
-                MaxHeight = 380,
-                Background = (System.Windows.Media.Brush)FindResource("Card"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("CardBorder"),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(4)
+                VerticalOffset = -6,
+                // меню не выше, чем место над кнопкой внутри острова — иначе оно уезжает за край экрана
+                MaxHeight = Math.Clamp(SpaceAbove(HistoryBtn) - 14, 120, 380)
             };
             AppHost.Window.SuppressAutoCollapse = true;
             menu.Closed += (_, __) => AppHost.Window.SuppressAutoCollapse = false;
             var all = ChatHistory.All();
-            if (all.Count == 0) menu.Items.Add(new MenuItem { Header = "Пока нет сохранённых разговоров", IsEnabled = false, Style = (Style)FindResource("HistoryMenuItem") });
+            if (all.Count == 0) menu.Items.Add(new MenuItem { Header = "Пока нет сохранённых разговоров", IsEnabled = false });
             foreach (var c in all)
             {
                 // строка истории: название и дата, справа — крестик «удалить этот разговор»
@@ -272,7 +270,7 @@ namespace Isle.Views
                 DockPanel.SetDock(del, Dock.Right);
                 row.Children.Add(del);
                 row.Children.Add(new TextBlock { Text = c.Title + "   ·   " + c.Updated.ToString("dd.MM HH:mm"), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-                var item = new MenuItem { Header = row, IsChecked = c.Id == _session.Id, Style = (Style)FindResource("HistoryMenuItem") };
+                var item = new MenuItem { Header = row, IsChecked = c.Id == _session.Id };
                 var chat = c;
                 item.Click += (_, __) => OpenSession(chat);
                 del.PreviewMouseLeftButtonDown += (_, ev) =>
@@ -286,12 +284,23 @@ namespace Isle.Views
             }
             if (all.Count > 0)
             {
-                menu.Items.Add(new Separator { Style = (Style)FindResource("HistorySeparator") });
-                var clear = new MenuItem { Header = "Очистить историю", Style = (Style)FindResource("HistoryMenuItem") };
+                menu.Items.Add(new Separator());
+                var clear = new MenuItem { Header = "Очистить историю" };
                 clear.Click += (_, __) => ClearHistory();
                 menu.Items.Add(clear);
             }
             menu.IsOpen = true;
+        }
+
+        /// <summary>Сколько места (в пикселях окна) над элементом — чтобы меню не выходило за остров.</summary>
+        private static double SpaceAbove(FrameworkElement el)
+        {
+            try
+            {
+                var w = Window.GetWindow(el);
+                return w == null ? 380 : el.TranslatePoint(new Point(0, 0), w).Y;
+            }
+            catch { return 380; }
         }
 
         /// <summary>Удалить один разговор; если он открыт — вернуться к приветствию.</summary>

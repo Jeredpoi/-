@@ -80,7 +80,7 @@ namespace Isle.Views
                 AddSun(width, cloudy ? 0.72 : 1.0);
             if (!weather.IsDay && weather.Code is 0 or 1 or 2) AddStars(width, height);
             if (cloudy) AddCloud(width, weather.Code);
-            if (weather.Code == 3 || rain || snow || IsThunder(weather.Code)) AddCloud(width * 0.45, weather.Code, 0.75, 46, 0.7); // пасмурно — второе облако
+            if (weather.Code == 3 || rain || snow || IsThunder(weather.Code)) AddCloud(width - 64, weather.Code, 0.7, 62, 0.4); // пасмурно — второе облако, правее градусов
             if (snow) AddSnow(width, height);
             else if (rain) AddRain(width, height);
             else if (weather.Code is 45 or 48) AddMist(width, height);
@@ -102,12 +102,12 @@ namespace Isle.Views
             sun.BeginAnimation(OpacityProperty, pulse);
         }
 
-        private void AddCloud(double width, int code) => AddCloud(width, code, 1, 24, 0.92);
+        private void AddCloud(double width, int code) => AddCloud(width, code, 1, 18, 0.55);
 
         /// <summary>Облако, которое медленно плывёт туда-сюда.</summary>
         private void AddCloud(double width, int code, double scale, double top, double opacity)
         {
-            var color = code >= 95 ? Color.FromRgb(0xC6, 0xC8, 0xD9) : Color.FromRgb(0xE6, 0xF1, 0xFA);
+            var color = code >= 95 ? Color.FromRgb(0x8E, 0x95, 0xAC) : Color.FromRgb(0xB4, 0xC3, 0xD4); // приглушённые, чтобы белые градусы читались
             // One continuous silhouette avoids visible seams between translucent lobes.
             var cloud = new System.Windows.Shapes.Path
             {
@@ -116,7 +116,8 @@ namespace Isle.Views
                 Fill = new SolidColorBrush(color),
                 Data = Geometry.Parse("M 16,54 C 7,54 2,47 2,39 C 2,31 8,25 16,24 C 19,11 30,4 43,4 C 55,4 64,11 68,22 C 72,18 78,16 84,16 C 97,16 107,25 109,37 C 120,37 128,44 128,53 C 128,61 122,64 113,64 L 17,64 C 8,64 3,60 3,55 Z")
             };
-            Canvas.SetLeft(cloud, Math.Max(8, width - 142 * scale)); Canvas.SetTop(cloud, top);
+            // облака — только в правой части карточки, слева крупные белые градусы
+            Canvas.SetLeft(cloud, Math.Max(WeatherFx.ActualWidth * 0.5, width - 142 * scale)); Canvas.SetTop(cloud, top);
             WeatherFx.Children.Add(cloud);
             var drift = new DoubleAnimation(-14, 10, TimeSpan.FromSeconds(7 + _weatherRandom.NextDouble() * 4))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
