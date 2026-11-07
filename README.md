@@ -1,49 +1,82 @@
 <div align="center">
 
+<img src="docs/icon.png" width="128" alt="Isle">
+
 # Isle
 
-**«Чёлка» для Windows — чёрная капсула сверху по центру экрана**
+### «Чёлка» для Windows
 
-Время, погода, музыка, загрузки и уведомления — в маленькой капсуле.<br>
-Навёл курсор — она раскрывается в панель с инструментами, ИИ и плеером.
+Чёрная капсула сверху по центру экрана — время, погода, музыка, загрузки и уведомления.<br>
+Навёл курсор — она раскрывается в панель с плеером, инструментами и ИИ.
 
-[![Последняя версия](https://img.shields.io/github/v/release/Jeredpoi/-?label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F&color=111114)](https://github.com/Jeredpoi/-/releases/latest)
-&nbsp;Windows 10 (19041+) и Windows 11
+<br>
 
-### [⬇ Скачать Isle-Setup.exe](https://github.com/Jeredpoi/-/releases/latest)
+[![Версия](https://img.shields.io/github/v/release/Jeredpoi/-?style=for-the-badge&label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F&color=111114&labelColor=1c1c21)](https://github.com/Jeredpoi/-/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-111114?style=for-the-badge&labelColor=1c1c21)](https://github.com/Jeredpoi/-/releases/latest)
+[![.NET](https://img.shields.io/badge/.NET-8-111114?style=for-the-badge&labelColor=1c1c21)](https://dotnet.microsoft.com/)
+
+<br>
+
+<a href="https://github.com/Jeredpoi/-/releases/latest"><b>⬇&nbsp;&nbsp;Скачать Isle-Setup.exe</b></a>
+&nbsp;&nbsp;·&nbsp;&nbsp;
+<a href="#-установка"><b>Как установить</b></a>
+&nbsp;&nbsp;·&nbsp;&nbsp;
+<a href="#-что-умеет"><b>Что умеет</b></a>
 
 </div>
 
----
-
-## Как выглядит
-
-<!-- Скриншоты лежат в docs/screenshots. Только настоящие снимки программы. -->
-
-| Свёрнутая чёлка | Играет музыка |
-|:---:|:---:|
-| <img src="docs/screenshots/collapsed.png" width="380"> | <img src="docs/screenshots/music.png" width="380"> |
-| **Загрузка в Steam** | **Всплывашка** |
-| <img src="docs/screenshots/download.png" width="380"> | <img src="docs/screenshots/toast.png" width="380"> |
-
-<p align="center"><b>Раскрытая панель</b></p>
-<p align="center"><img src="docs/screenshots/home.png" width="760"></p>
-
-<details>
-<summary><b>Ещё скриншоты: чат с ИИ, погода, заметки, настройки</b></summary>
 <br>
 
-| Чат с ИИ | Погода |
-|:---:|:---:|
-| <img src="docs/screenshots/chat.png" width="380"> | <img src="docs/screenshots/weather.png" width="380"> |
-| **Заметки и таймер** | **Настройки** |
-| <img src="docs/screenshots/notes.png" width="380"> | <img src="docs/screenshots/settings.png" width="380"> |
+<table>
+<tr>
+<td width="33%" valign="top">
 
-</details>
+### 🎵 Музыка
+Обложка, текст песни, волна в такт. Крутилка громкости самого плеера — Spotify, браузер, Яндекс Музыка.
+
+</td>
+<td width="33%" valign="top">
+
+### 🎙 Голос и ИИ
+Диктовка в любое поле, голосовые команды и правка набранного текста: «сделай официальнее» — и готово.
+
+</td>
+<td width="33%" valign="top">
+
+### ⬇️ Загрузки
+Steam и браузеры прямо в чёлке: картинка игры, кольцо прогресса, скорость и сколько осталось.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📋 Буфер и полка
+История копирования с поиском, полка для файлов, исправление «ghbdtn → привет».
+
+</td>
+<td valign="top">
+
+### 🌦 Погода
+Сейчас, по часам и на неделю, живой анимированный фон и предупреждения о непогоде.
+
+</td>
+<td valign="top">
+
+### 👾 Клоди
+Маленький друг в чёлке: танцует под музыку, спит ночью, думает вместе с ИИ.
+
+</td>
+</tr>
+</table>
 
 ---
 
-## Что умеет
+<!--
+  Скриншоты: положи настоящие снимки в docs/screenshots и верни сюда блок «Как выглядит».
+-->
+
+## ✨ Что умеет
 
 <details open>
 <summary><b>🏝 Свёрнутая чёлка</b></summary>
@@ -124,7 +157,7 @@
 
 ---
 
-## Установка
+## 📦 Установка
 
 <details open>
 <summary><b>1. Скачать и установить</b></summary>
@@ -211,7 +244,7 @@ dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true 
 
 <br>
 
-<img src="docs/screenshots/clawd-dance.gif" width="520">
+<img src="docs/icon.png" width="220" alt="Клоди">
 
 # Клоди
 
