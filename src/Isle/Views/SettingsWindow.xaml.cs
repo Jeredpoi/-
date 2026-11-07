@@ -633,6 +633,25 @@ namespace Isle.Views
                 g.Children.Add(desc);
                 KeysList.Children.Add(g);
             }
+
+            // PrintScreen → снимок через Isle: выделение области, миниатюра в чёлке, файл в Изображения\Isle
+            var prtRow = new Grid { Margin = new Thickness(0, 14, 0, 4) };
+            prtRow.ColumnDefinitions.Add(new ColumnDefinition());
+            prtRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            prtRow.Children.Add(new TextBlock { Text = "PrintScreen делает снимок через Isle (вместо «Ножниц» Windows)", FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+            var prt = new CheckBox { IsChecked = S.PrintScreenIsle, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            Grid.SetColumn(prt, 1);
+            prtRow.Children.Add(prt);
+            prt.Click += (_, __) =>
+            {
+                if (!AppHost.Window.SetPrintScreen(prt.IsChecked == true))
+                {
+                    prt.IsChecked = false;
+                    MessageBox.Show("Windows не дал занять PrintScreen. Выключи «Использовать PrintScreen для открытия Ножниц» в Параметры → Специальные возможности → Клавиатура и попробуй снова.",
+                                    "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            };
+            KeysList.Children.Add(prtRow);
         }
 
         private string GetHotkey(string name) => name switch

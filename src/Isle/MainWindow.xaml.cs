@@ -19,7 +19,7 @@ namespace Isle
 
     public partial class MainWindow : Window
     {
-        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5, HkVoiceCmd = 6;
+        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5, HkVoiceCmd = 6, HkPrint = 7;
         private static readonly Size ExpandedSize = new(900, 470);
 
         private HwndSource _src;
@@ -302,6 +302,20 @@ namespace Isle
             foreach (var spec in HotkeySpecs(AppSettings.Current))
                 if (spec.Id != 0 && TryParseHotkey(spec.Value, out uint modifiers, out uint key) && Win32.RegisterHotKey(_hwnd, spec.Id, modifiers | Win32.MOD_NOREPEAT, key))
                     _registeredHotkeys.Add(spec.Id);
+            // PrintScreen без модификаторов — снимок через Isle (по желанию, в настройках клавиш)
+            if (AppSettings.Current.PrintScreenIsle && Win32.RegisterHotKey(_hwnd, HkPrint, Win32.MOD_NOREPEAT, 0x2C))
+                _registeredHotkeys.Add(HkPrint);
+        }
+
+        /// <summary>Включить/выключить перехват PrintScreen. false — Windows не дала занять клавишу.</summary>
+        public bool SetPrintScreen(bool on)
+        {
+            AppSettings.Current.PrintScreenIsle = on;
+            ApplyHotkeys();
+            bool ok = !on || _registeredHotkeys.Contains(HkPrint);
+            if (!ok) { AppSettings.Current.PrintScreenIsle = false; ApplyHotkeys(); }
+            AppSettings.Current.Save();
+            return ok;
         }
 
         public bool TrySetHotkey(string name, string gesture, out string error)
@@ -424,6 +438,7 @@ namespace Isle
                         VoiceCommandKey();
                         break;
                     case HkShot:
+                    case HkPrint:
                         _ = Tools.RegionShot();
                         break;
                 }

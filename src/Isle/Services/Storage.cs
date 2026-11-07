@@ -167,6 +167,8 @@ namespace Isle.Services
         public string HotkeyVoice { get; set; } = "Ctrl+Alt+D";
         public string HotkeyVoiceCommand { get; set; } = "Ctrl+Alt+A";
         public string HotkeyCollapse { get; set; } = "Escape";
+        /// <summary>Клавиша PrintScreen делает снимок через Isle (выделение области, карточка в чёлке).</summary>
+        public bool PrintScreenIsle { get; set; }
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;

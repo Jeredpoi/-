@@ -45,7 +45,7 @@ namespace Isle.Services
     {
         private sealed record Profile(string Browser, string HistoryPath);
         private sealed record Row(string Key, string Browser, string Path, long Received, long Total, int State, long StartTime, long EndTime);
-        private sealed record Sample(long Bytes, DateTime At);
+        private sealed record Sample(long Bytes, DateTime At, double Rate);
 
         private static readonly object Gate = new();
         private static readonly Dictionary<string, Sample> Samples = new(StringComparer.OrdinalIgnoreCase);
@@ -114,13 +114,23 @@ namespace Isle.Services
             double rate = 0;
             if (calculateSpeed)
             {
-                if (Samples.TryGetValue(row.Key, out var previous))
+                // Браузер обновляет received_bytes в базе рывками. Скорость считаем от момента ПРОШЛОГО изменения
+                // байт (а не от прошлого опроса), сглаживаем и держим, пока браузер не записал новое значение.
+                if (Samples.TryGetValue(row.Key, out var previous) && row.Received >= previous.Bytes)
                 {
-                    var seconds = (now - previous.At).TotalSeconds;
-                    if (seconds >= 0.5 && row.Received >= previous.Bytes)
-                        rate = (row.Received - previous.Bytes) / seconds;
+                    if (row.Received == previous.Bytes)
+                    {
+                        rate = (now - previous.At).TotalSeconds <= 15 ? previous.Rate : 0;
+                    }
+                    else
+                    {
+                        var seconds = (now - previous.At).TotalSeconds;
+                        double fresh = seconds >= 0.5 ? (row.Received - previous.Bytes) / seconds : previous.Rate;
+                        rate = previous.Rate > 0 ? previous.Rate * 0.4 + fresh * 0.6 : fresh;
+                        Samples[row.Key] = new Sample(row.Received, now, rate);
+                    }
                 }
-                Samples[row.Key] = new Sample(row.Received, now);
+                else Samples[row.Key] = new Sample(row.Received, now, 0);
             }
 
             var remaining = rate > 0 && row.Total > row.Received

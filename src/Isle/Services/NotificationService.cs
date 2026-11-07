@@ -63,6 +63,11 @@ namespace Isle.Services
                     var binding = n.Notification?.Visual?.GetBinding(Notif.KnownNotificationBindings.ToastGeneric);
                     var texts = binding?.GetTextElements()?.Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? new List<string>();
                     var title = texts.Count > 0 ? texts[0] : app;
+                    // «Ножницы» сообщают о снимке, который Isle уже показал своей карточкой с миниатюрой — не дублируем
+                    if (DateTime.Now - ClipboardService.LastScreenshotToast < TimeSpan.FromSeconds(15)
+                        && (app.Contains("Ножниц", StringComparison.OrdinalIgnoreCase) || app.Contains("Snipping", StringComparison.OrdinalIgnoreCase)
+                            || app.Contains("Набросок", StringComparison.OrdinalIgnoreCase) || app.Contains("Snip", StringComparison.OrdinalIgnoreCase)))
+                        continue;
                     var body = string.Join(" ", texts.Skip(1));
                     ToastBus.Show(new Toast
                     {

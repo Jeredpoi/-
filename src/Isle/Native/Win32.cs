@@ -254,6 +254,22 @@ namespace Isle.Native
             SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
         }
 
+        [DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner();
+
+        /// <summary>Процесс, положивший данные в буфер (пусто — системная клавиша PrintScreen).</summary>
+        public static string ClipboardOwnerProcess()
+        {
+            try
+            {
+                var h = GetClipboardOwner();
+                if (h == IntPtr.Zero) return "";
+                GetWindowThreadProcessId(h, out uint pid);
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                return p.ProcessName;
+            }
+            catch { return ""; }
+        }
+
         public static string ForegroundProcessName()
         {
             try

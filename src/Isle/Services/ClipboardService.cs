@@ -87,11 +87,22 @@ namespace Isle.Services
             return IntPtr.Zero;
         }
 
+        /// <summary>Когда Isle последний раз сам показал «Снимок экрана» (чтобы не дублировать уведомление Windows).</summary>
+        public static DateTime LastScreenshotToast { get; private set; }
+
+        /// <summary>Снимок системными «Ножницами» / Win+Shift+S / PrintScreen: владелец буфера — инструмент снимков или никто.</summary>
+        public static bool IsScreenshotOwner(string process) =>
+            process.Length == 0 || process.Equals("ScreenClippingHost", StringComparison.OrdinalIgnoreCase)
+            || process.StartsWith("SnippingTool", StringComparison.OrdinalIgnoreCase)
+            || process.Equals("ScreenSketch", StringComparison.OrdinalIgnoreCase);
+
         private async Task OnChangedAsync()
         {
             var s = AppSettings.Current;
-            if (!s.ClipboardHistory) return;
+            string owner = Win32.ClipboardOwnerProcess(); // сразу, пока владелец ещё тот
             await Task.Delay(40);
+            await DetectScreenshotAsync(owner);
+            if (!s.ClipboardHistory) return;
 
             // Менеджеры паролей помечают секретные копии — такие не сохраняем.
             try
@@ -117,6 +128,28 @@ namespace Isle.Services
 
             if (hasText) await AddTextAsync();
             else if (hasImage && s.ClipboardImages) AddImage();
+        }
+
+        /// <summary>
+        /// Снимок экрана средствами Windows всегда даёт карточку в чёлке с миниатюрой —
+        /// не полагаемся на уведомление «Ножниц», которое приходит не всегда.
+        /// </summary>
+        private async Task DetectScreenshotAsync(string owner)
+        {
+            if (!IsScreenshotOwner(owner)) return;
+            BitmapSource img = null;
+            for (int i = 0; i < 5 && img == null; i++)
+            {
+                try { if (!Clipboard.ContainsImage()) return; img = Clipboard.GetImage(); }
+                catch { await Task.Delay(60); }
+            }
+            if (img == null) return;
+            LastScreenshotToast = DateTime.Now;
+            ToastBus.Show(new Toast
+            {
+                Kind = ToastKind.Success, Title = "Снимок экрана", Subtitle = "В буфере обмена · " + img.PixelWidth + "×" + img.PixelHeight,
+                Image = img, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(3), ReplaceKey = "screenshot"
+            });
         }
 
         private async Task AddTextAsync()

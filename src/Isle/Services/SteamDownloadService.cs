@@ -220,11 +220,17 @@ namespace Isle.Services
                 if (current == null || current.Updated == DateTime.MinValue) return null;
                 var samples = rates.Where(x => x.At >= current.StartedAt && x.At <= now).OrderBy(x => x.At).ToList();
                 var manifest = ReadManifestProgress(root, current.Id);
-                var rateBytes = !current.Paused ? GetManifestRate(current.Id, manifest?.Downloaded ?? 0, now) : 0;
+                // 1) «Current download rate» из лога Steam — то же, что показывает сам клиент (среднее последних записей);
+                // 2) прирост байт в appmanifest; 3) входящий трафик системы (помечается «~»).
+                double manifestRate = !current.Paused ? GetManifestRate(current.Id, manifest?.Downloaded ?? 0, now) : 0;
+                double rateBytes = 0;
                 bool estimatedSpeed = false;
+                var fresh = samples.Where(x => now - x.At < TimeSpan.FromSeconds(20)).TakeLast(3).ToList();
+                if (current.Downloading && fresh.Count > 0) rateBytes = fresh.Average(x => x.BytesPerSecond);
+                if (rateBytes <= 0) rateBytes = manifestRate;
                 if (rateBytes <= 0 && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90))
                 {
-                    rateBytes = samples[^1].BytesPerSecond;
+                    rateBytes = samples[^1].BytesPerSecond; // последняя известная скорость из лога — как оценка
                     estimatedSpeed = rateBytes > 0;
                 }
                 if (rateBytes <= 0 && current.Downloading)
@@ -372,23 +378,25 @@ namespace Isle.Services
             return match.Success && long.TryParse(match.Groups[1].Value, out var value) ? Math.Max(0, value) : 0;
         }
 
-        private static double GetManifestRate(int appId, long downloaded, DateTime now)
+        /// <summary>
+        /// Скорость по appmanifest: Steam пишет его редко, поэтому делим прирост байт на время
+        /// с ПРОШЛОГО ИЗМЕНЕНИЯ (а не с прошлого опроса) — иначе получались всплески в разы больше реальных.
+        /// </summary>
+        internal static double GetManifestRate(int appId, long downloaded, DateTime now)
         {
             if (downloaded <= 0) return 0;
-            if (DownloadSamples.TryGetValue(appId, out var previous))
+            if (!DownloadSamples.TryGetValue(appId, out var previous) || downloaded < previous.Bytes)
             {
-                var elapsed = (now - previous.At).TotalSeconds;
-                if (downloaded > previous.Bytes && elapsed >= 0.5 && elapsed <= 20)
-                {
-                    var rate = (downloaded - previous.Bytes) / elapsed;
-                    DownloadSamples[appId] = (downloaded, now, rate);
-                    return rate;
-                }
-                if (downloaded == previous.Bytes && (now - previous.At).TotalSeconds <= 12)
-                    return previous.Rate;
+                DownloadSamples[appId] = (downloaded, now, 0);
+                return 0;
             }
-            DownloadSamples[appId] = (downloaded, now, 0);
-            return 0;
+            if (downloaded == previous.Bytes)
+                return (now - previous.At).TotalSeconds <= 45 ? previous.Rate : 0; // держим последнюю скорость, пока Steam не обновил файл
+            var elapsed = (now - previous.At).TotalSeconds;
+            double rate = elapsed >= 1 ? (downloaded - previous.Bytes) / elapsed : previous.Rate;
+            if (previous.Rate > 0) rate = previous.Rate * 0.4 + rate * 0.6;
+            DownloadSamples[appId] = (downloaded, now, rate);
+            return rate;
         }
 
         /// <summary>При отсутствии свежей Steam-выборки оценивает входящий трафик активного скачивания по сетевым счётчикам Windows.</summary>
