@@ -30,10 +30,6 @@
                 </Border.Effect>
             </Border>
 
-            <!-- «Жидкий» нижний край: спектр музыки, тянется к курсору, капли -->
-            <h:LiquidEdge x:Name="Edge" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,33,24,0"
-                          Width="{Binding ActualWidth, ElementName=Island}"/>
-
             <Border x:Name="Island" Background="{StaticResource Bg}" CornerRadius="0,0,18,18"
                     Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
                     SnapsToDevicePixels="True">
@@ -267,6 +263,11 @@
                   Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
                   Width="{Binding ActualWidth, ElementName=Island}" Height="{Binding ActualHeight, ElementName=Island}"
                   Opacity="{Binding Opacity, ElementName=Island}" SnapsToDevicePixels="False"/>
+
+            <!-- «Жидкий» нижний край: спектр музыки, тянется к курсору, капли. Поверх обводки острова:
+                 где край вытягивается, обводка идёт по его изгибу (иначе на чёрном фоне OLED его не видно) -->
+            <h:LiquidEdge x:Name="Edge" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,33,24,0"
+                          Width="{Binding ActualWidth, ElementName=Island}"/>
         </Grid>
     </Grid>
 </Window>

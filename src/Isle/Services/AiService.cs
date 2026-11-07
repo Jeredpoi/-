@@ -292,6 +292,18 @@ namespace Isle.Services
         {
             Data.Chats.Clear();
             Storage.Save("chats.json", Data);
+            Changed?.Invoke();
         }
+
+        /// <summary>Удалить один разговор.</summary>
+        public static void Delete(string id)
+        {
+            if (Data.Chats.RemoveAll(c => c.Id == id) == 0) return;
+            Storage.Save("chats.json", Data);
+            Changed?.Invoke();
+        }
+
+        /// <summary>История изменилась (очистка, удаление) — список «Недавние разговоры» перерисовывается сразу.</summary>
+        public static event System.Action Changed;
     }
 }

@@ -223,19 +223,18 @@ namespace Isle.Services
                 // 1) «Current download rate» из лога Steam — то же, что показывает сам клиент (среднее последних записей);
                 // 2) прирост байт в appmanifest; 3) входящий трафик системы (помечается «~»).
                 double manifestRate = !current.Paused ? GetManifestRate(current.Id, manifest?.Downloaded ?? 0, now) : 0;
-                double rateBytes = 0;
+                // Главная скорость — входящий трафик сети: это ровно то, что Steam показывает как «Сеть».
+                // «Current download rate» в логе Steam пишет редко и усреднённо, поэтому он занижал скорость в 2–3 раза.
+                // Лог и appmanifest — запасные варианты, если трафик измерить не удалось.
+                double netRate = !current.Paused && !current.Staging ? SmoothNetRate(GetSystemReceiveRate(now)) : 0;
+                double rateBytes = netRate;
                 bool estimatedSpeed = false;
                 var fresh = samples.Where(x => now - x.At < TimeSpan.FromSeconds(20)).TakeLast(3).ToList();
-                if (current.Downloading && fresh.Count > 0) rateBytes = fresh.Average(x => x.BytesPerSecond);
+                if (rateBytes <= 0 && current.Downloading && fresh.Count > 0) rateBytes = fresh.Average(x => x.BytesPerSecond);
                 if (rateBytes <= 0) rateBytes = manifestRate;
                 if (rateBytes <= 0 && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90))
                 {
                     rateBytes = samples[^1].BytesPerSecond; // последняя известная скорость из лога — как оценка
-                    estimatedSpeed = rateBytes > 0;
-                }
-                if (rateBytes <= 0 && current.Downloading)
-                {
-                    rateBytes = GetSystemReceiveRate(now);
                     estimatedSpeed = rateBytes > 0;
                 }
                 var useStage = current.Staging || (!current.Downloading && manifest?.Staged > 0);
@@ -331,6 +330,9 @@ namespace Isle.Services
                 ? DateTime.SpecifyKind(time, DateTimeKind.Local) : DateTime.MinValue;
         }
 
+        /// <summary>Все библиотеки Steam (для поиска программ, установленных через Steam, например OBS).</summary>
+        public static List<string> SteamLibraries() { var root = FindSteamRoot(); return root == null ? new List<string>() : Libraries(root); }
+
         private static List<string> Libraries(string root)
         {
             var result = new List<string> { root };
@@ -414,6 +416,16 @@ namespace Isle.Services
         }
 
         /// <summary>При отсутствии свежей Steam-выборки оценивает входящий трафик активного скачивания по сетевым счётчикам Windows.</summary>
+        private static double _netEma;
+
+        /// <summary>Сглаживание скорости сети (без скачков от секунды к секунде), как на графике Steam.</summary>
+        private static double SmoothNetRate(double rate)
+        {
+            if (rate <= 0) return _netEma *= 0.6; // пауза в трафике — плавно вниз, а не сразу в ноль
+            _netEma = _netEma <= 0 ? rate : _netEma * 0.55 + rate * 0.45;
+            return _netEma;
+        }
+
         private static double GetSystemReceiveRate(DateTime now)
         {
             double bestRate = 0;

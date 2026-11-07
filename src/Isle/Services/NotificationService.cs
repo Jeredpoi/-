@@ -80,12 +80,16 @@ namespace Isle.Services
                             || app.Contains("Набросок", StringComparison.OrdinalIgnoreCase) || app.Contains("Snip", StringComparison.OrdinalIgnoreCase)))
                         continue;
                     var body = string.Join(" ", texts.Skip(1));
+                    string appId = null;
+                    try { appId = n.AppInfo?.AppUserModelId; } catch { }
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Notification,
                         Title = string.IsNullOrEmpty(app) || app == title ? title : title + "  ·  " + app,
                         Subtitle = body,
                         Icon = Icons.Bell,
+                        Image = await AppLogoAsync(n, app), // значок приложения, которое прислало уведомление
+                        LaunchAppId = appId,                 // клик — открыть это приложение
                         Duration = TimeSpan.FromSeconds(5),
                         ReplaceKey = updated ? "win-notification-" + n.Id : null
                     });
@@ -98,6 +102,52 @@ namespace Isle.Services
             }
             catch (Exception ex) { App.Log("notification poll: " + ex.Message); }
             finally { _polling = false; }
+        }
+
+        private static readonly Dictionary<string, System.Windows.Media.ImageSource> Logos = new();
+
+        /// <summary>Логотип приложения из уведомления Windows (кэшируется по приложению). null — нет логотипа.</summary>
+        private static async Task<System.Windows.Media.ImageSource> AppLogoAsync(Notif.UserNotification n, string app)
+        {
+            string key = app ?? "";
+            try { key = n.AppInfo?.AppUserModelId ?? key; } catch { }
+            if (Logos.TryGetValue(key, out var cached)) return cached;
+            System.Windows.Media.ImageSource result = null;
+            try
+            {
+                var logo = n.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(64, 64));
+                if (logo != null)
+                {
+                    using var stream = await logo.OpenReadAsync();
+                    using var net = System.IO.WindowsRuntimeStreamExtensions.AsStreamForRead(stream);
+                    var ms = new System.IO.MemoryStream();
+                    await net.CopyToAsync(ms);
+                    ms.Position = 0;
+                    var img = new System.Windows.Media.Imaging.BitmapImage();
+                    img.BeginInit();
+                    img.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    img.StreamSource = ms;
+                    img.DecodePixelWidth = 64;
+                    img.EndInit();
+                    img.Freeze();
+                    result = img;
+                }
+            }
+            catch { }
+            Logos[key] = result;
+            return result;
+        }
+
+        /// <summary>Открыть приложение по его AppUserModelId (через shell:AppsFolder — так же, как из меню «Пуск»).</summary>
+        public static bool LaunchApp(string appId)
+        {
+            if (string.IsNullOrWhiteSpace(appId)) return false;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "shell:AppsFolder\\" + appId) { UseShellExecute = true });
+                return true;
+            }
+            catch { return false; }
         }
 
         private static string Fingerprint(Notif.UserNotification n)

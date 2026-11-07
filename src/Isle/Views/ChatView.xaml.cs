@@ -45,6 +45,7 @@ namespace Isle.Views
             }
             UpdateModelLine();
             AppHost.Voice.RecordingChanged += rec => Dispatcher.InvokeAsync(() => SetMicState(rec));
+            ChatHistory.Changed += () => Dispatcher.InvokeAsync(BuildRecent); // очистка/удаление сразу убирают «Недавние разговоры»
             BuildRecent();
         }
 
@@ -63,7 +64,18 @@ namespace Isle.Views
                 };
                 var chat = c;
                 b.Click += (_, __) => OpenSession(chat);
-                RecentChats.Children.Add(b);
+                // рядом — крестик: убрать разговор из истории
+                var del = new Button
+                {
+                    Style = (Style)FindResource("Ghost"), Width = 20, Height = 20, Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 2),
+                    ToolTip = "Удалить этот разговор", VerticalAlignment = VerticalAlignment.Center,
+                    Content = new Isle.Helpers.Icon { Kind = "Close", Width = 9, Height = 9 }
+                };
+                del.Click += (_, __) => DeleteChat(chat);
+                var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+                row.Children.Add(b);
+                row.Children.Add(del);
+                RecentChats.Children.Add(row);
             }
         }
 
@@ -250,9 +262,26 @@ namespace Isle.Views
             if (all.Count == 0) menu.Items.Add(new MenuItem { Header = "Пока нет сохранённых разговоров", IsEnabled = false, Style = (Style)FindResource("HistoryMenuItem") });
             foreach (var c in all)
             {
-                var item = new MenuItem { Header = c.Title + "   ·   " + c.Updated.ToString("dd.MM HH:mm"), IsChecked = c.Id == _session.Id, Style = (Style)FindResource("HistoryMenuItem") };
+                // строка истории: название и дата, справа — крестик «удалить этот разговор»
+                var row = new DockPanel { LastChildFill = true, MinWidth = 260 };
+                var del = new Button
+                {
+                    Style = (Style)FindResource("Ghost"), Width = 22, Height = 22, Padding = new Thickness(0), Margin = new Thickness(10, 0, 0, 0),
+                    ToolTip = "Удалить этот разговор", Content = new Isle.Helpers.Icon { Kind = "Close", Width = 10, Height = 10 }
+                };
+                DockPanel.SetDock(del, Dock.Right);
+                row.Children.Add(del);
+                row.Children.Add(new TextBlock { Text = c.Title + "   ·   " + c.Updated.ToString("dd.MM HH:mm"), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+                var item = new MenuItem { Header = row, IsChecked = c.Id == _session.Id, Style = (Style)FindResource("HistoryMenuItem") };
                 var chat = c;
                 item.Click += (_, __) => OpenSession(chat);
+                del.PreviewMouseLeftButtonDown += (_, ev) =>
+                {
+                    ev.Handled = true; // не открывать разговор, который удаляем
+                    DeleteChat(chat);
+                    menu.Items.Remove(item);
+                    if (!menu.Items.OfType<MenuItem>().Any(m => m.Header is DockPanel)) menu.IsOpen = false;
+                };
                 menu.Items.Add(item);
             }
             if (all.Count > 0)
@@ -263,6 +292,22 @@ namespace Isle.Views
                 menu.Items.Add(clear);
             }
             menu.IsOpen = true;
+        }
+
+        /// <summary>Удалить один разговор; если он открыт — вернуться к приветствию.</summary>
+        private void DeleteChat(ChatSession chat)
+        {
+            if (chat.Id == _session.Id)
+            {
+                _cts?.Cancel();
+                _busy = false;
+                SendBtn.IsEnabled = true;
+                _session = new ChatSession();
+                _msgs.Clear();
+                Welcome.Visibility = Visibility.Visible;
+                Scroll.Visibility = Visibility.Collapsed;
+            }
+            ChatHistory.Delete(chat.Id);
         }
 
         private void ClearHistory()

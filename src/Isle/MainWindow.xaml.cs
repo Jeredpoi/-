@@ -157,7 +157,8 @@ namespace Isle
             // Загрузки по событиям: Steam/браузер записал файл — проверяем через 0,3 с (несколько записей подряд склеиваются).
             // Таймер остаётся подстраховкой: раз в секунду, пока что-то качается (скорость, остаток), и раз в 8 с в простое.
             _downloadKick.Tick += (_, __) => { _downloadKick.Stop(); RefreshSteamDownload(); };
-            DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { _downloadKick.Stop(); _downloadKick.Start(); });
+            // не перезапускаем таймер на каждое событие: браузер пишет файл непрерывно, и проверка иначе откладывалась бы бесконечно
+            DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { if (!_downloadKick.IsEnabled) _downloadKick.Start(); });
 
             Island.MouseEnter += (_, __) =>
             {
@@ -166,11 +167,16 @@ namespace Isle
                 _ungrow.Stop();
                 if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
                 bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
+                // навёл на всплывашку — она не исчезает, пока курсор на ней (и не превращается в панель)
+                if (State == IslandState.Toast) { _toastTimer.Stop(); return; }
                 if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer && !TimerRow.IsMouseOver) _hoverOpen.Start();
             };
             Island.MouseLeave += (_, __) =>
             {
                 _hoverOpen.Stop();
+                // ушёл со всплывашки — она ещё немного побудет и закроется
+                if (State == IslandState.Toast && _currentToast != null && !AlarmService.Ringing)
+                { _toastTimer.Stop(); _toastTimer.Interval = TimeSpan.FromSeconds(2.5); _toastTimer.Start(); }
                 if (State == IslandState.Expanded && !_pinned && !IsActive && !SuppressAutoCollapse) _leaveClose.Start();
                 // не сжимаемся сразу: курсор на самой границе иначе дёргает остров туда-сюда
                 if (State == IslandState.Collapsed && _hoverGrown) { _ungrow.Stop(); _ungrow.Start(); }
@@ -486,6 +492,16 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // клик по уведомлению другого приложения — открываем это приложение
+            if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.LaunchAppId is string appId
+                && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
+            {
+                NotificationService.LaunchApp(appId);
+                _toastTimer.Stop();
+                NextToast();
+                e.Handled = true;
+                return;
+            }
             if (AlarmService.Ringing && State != IslandState.Expanded)
             {
                 AlarmService.Stop(); // клик по звенящей чёлке (в любом виде) — выключить будильник
@@ -1339,7 +1355,11 @@ namespace Isle
                     var steamPaused = new List<SteamDownload>();
                     while (SteamDownloadService.TakePaused() is { } paused) steamPaused.Add(paused);
                     var browser = BrowserDownloadService.ReadSnapshot();
-                    return (steam, steamCompleted, steamPaused, browser);
+                    // загрузки браузера по недокачанным файлам в папке «Загрузки» — работают, даже если историю браузера прочитать не вышло
+                    var partials = PartialDownloadService.Scan();
+                    var partialDone = new List<FinishedDownload>();
+                    while (PartialDownloadService.TakeFinished() is { } f) partialDone.Add(f);
+                    return (steam, steamCompleted, steamPaused, browser, partials, partialDone);
                 });
 
                 foreach (var completed in result.steamCompleted)
@@ -1352,8 +1372,22 @@ namespace Isle
                         FolderPath = completed.FolderPath,
                         Icon = Icons.Check,
                         Important = true,
-                        Duration = TimeSpan.FromSeconds(4)
+                        Duration = TimeSpan.FromSeconds(8) // чтобы успеть заметить и нажать «папку»
                     });
+
+                // завершённые по файлам — если история браузера уже не сообщила о том же файле
+                foreach (var done in result.partialDone)
+                {
+                    if (result.browser.Completed.Any(c => string.Equals(c.FileName, done.Name, StringComparison.OrdinalIgnoreCase))) continue;
+                    if (_recentDone.TryGetValue(done.Name, out var doneAt) && DateTime.Now - doneAt < TimeSpan.FromMinutes(1)) continue;
+                    _recentDone[done.Name] = DateTime.Now;
+                    ToastBus.Show(new Toast
+                    {
+                        Kind = ToastKind.Success, Title = "Загрузка завершена", Subtitle = done.Browser + " · " + done.Name,
+                        Icon = Icons.Check, FolderPath = done.Folder, Important = true, Duration = TimeSpan.FromSeconds(7)
+                    });
+                }
+                foreach (var c in result.browser.Completed) _recentDone[c.FileName] = DateTime.Now;
 
                 foreach (var completed in result.browser.Completed)
                     ToastBus.Show(new Toast
@@ -1363,7 +1397,7 @@ namespace Isle
                         Subtitle = completed.Browser + " · " + completed.FileName,
                         Icon = Icons.Check,
                         Important = true,
-                        Duration = TimeSpan.FromSeconds(4)
+                        Duration = TimeSpan.FromSeconds(7)
                     });
 
                 foreach (var paused in result.steamPaused)
@@ -1385,7 +1419,14 @@ namespace Isle
                 if (steam is { IsPaused: false })
                     SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon));
                 else if (download != null)
-                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, download.SpeedText, download.EtaText, null));
+                {
+                    // скорость из истории браузера рваная — если есть недокачанный файл, берём его скорость (по росту файла)
+                    var firstPartial = result.partials.FirstOrDefault();
+                    var speed = firstPartial != null && firstPartial.BytesPerSecond > 0 ? firstPartial.SpeedText : download.SpeedText;
+                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, speed, download.EtaText, null));
+                }
+                else if (result.partials.FirstOrDefault() is { } part)
+                    SetDownload(new DownloadState(part.Name, part.Browser, null, part.SpeedText, part.SizeText, null)); // размер неизвестен — «крутилка» и сколько скачано
                 else SetDownload(null);
             }
             catch (Exception ex) { App.Trace("ошибка отслеживания загрузок: " + ex.Message); }
@@ -1393,6 +1434,8 @@ namespace Isle
         }
 
         /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>
+        private readonly Dictionary<string, DateTime> _recentDone = new(StringComparer.OrdinalIgnoreCase);
+
         private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art);
         private DownloadState _download;
         private double _dlShown;      // плавно догоняет настоящий прогресс
