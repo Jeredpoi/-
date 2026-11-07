@@ -263,7 +263,21 @@ namespace Isle.Views
 
         private void OnAutostart(object s, RoutedEventArgs e)
         {
-            try { SystemControls.Autostart = Autostart.IsChecked == true; } catch { }
+            try
+            {
+                SystemControls.Autostart = Autostart.IsChecked == true;
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Success,
+                    Title = Autostart.IsChecked == true ? "Автозапуск включён" : "Автозапуск выключен",
+                    Icon = Icons.Check
+                });
+            }
+            catch (Exception ex)
+            {
+                Autostart.IsChecked = SystemControls.Autostart;
+                ToastBus.Show(new Toast { Title = "Не удалось изменить автозапуск", Subtitle = ex.Message, Icon = Icons.Info, Important = true });
+            }
         }
 
         private void OnOled(object s, RoutedEventArgs e)
@@ -557,32 +571,94 @@ namespace Isle.Views
         {
             var keys = new[]
             {
-                ("Ctrl + Alt + Space", "Открыть / закрыть остров"),
-                ("Ctrl + Alt + K", "Командная строка: калькулятор, запуск программ, таймер, напоминание"),
-                ("Ctrl + Alt + V", "История буфера обмена"),
-                ("Ctrl + Alt + S", "Снимок области экрана"),
-                ("Ctrl + Alt + D", "Голос в текст: начать / закончить диктовку"),
-                ("Ctrl + Alt + A", "Голосовая команда ИИ: зажми, скажи («открой телеграм», «громкость 30») и отпусти"),
-                ("Esc", "Свернуть остров"),
-                ("Клик мимо острова", "Свернуть (и спрятать в OLED-режиме)"),
+                ("island", "Открыть / закрыть остров", S.Hotkey),
+                ("command", "Командная строка: калькулятор, запуск программ, таймер, напоминание", S.HotkeyCommand),
+                ("clipboard", "История буфера обмена", S.HotkeyClipboard),
+                ("screenshot", "Снимок области экрана", S.HotkeyScreenshot),
+                ("voice", "Голос в текст: начать / закончить диктовку", S.HotkeyVoice),
+                ("voiceCommand", "Голосовая команда ИИ", S.HotkeyVoiceCommand),
+                ("collapse", "Свернуть остров, когда он активен", S.HotkeyCollapse),
             };
-            foreach (var (k, d) in keys)
+            foreach (var (name, description, gesture) in keys)
             {
                 var g = new Grid { Margin = new Thickness(0, 8, 0, 8) };
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(205) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(230) });
                 g.ColumnDefinitions.Add(new ColumnDefinition());
-                var key = new Border
+                var key = new TextBox
                 {
-                    Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20)), CornerRadius = new CornerRadius(8),
+                    Text = gesture, IsReadOnly = true, Focusable = true, Cursor = Cursors.Hand,
+                    Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20)),
+                    Foreground = (Brush)FindResource("Fg"), BorderThickness = new Thickness(0),
                     Padding = new Thickness(10, 5, 10, 5), HorizontalAlignment = HorizontalAlignment.Left,
-                    Child = new TextBlock { Text = k, FontWeight = FontWeights.SemiBold, FontSize = 12 }
+                    ToolTip = "Нажми сюда, затем нажми новое сочетание клавиш"
                 };
-                var desc = new TextBlock { Text = d, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-                Grid.SetColumn(desc, 1);
+                key.PreviewMouseLeftButtonDown += (_, __) => { key.Focus(); key.Text = "Нажми сочетание…"; };
+                // ушли из поля, ничего не нажав, — возвращаем текущее сочетание
+                key.LostKeyboardFocus += (_, __) => { if (key.Text == "Нажми сочетание…") key.Text = GetHotkey(name); };
+                key.PreviewKeyDown += (_, e) =>
+                {
+                    var k = e.Key == Key.System ? e.SystemKey : e.Key;
+                    if (k is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
+                    { e.Handled = true; return; }
+                    var mods = Keyboard.Modifiers;
+                    var parts = new System.Collections.Generic.List<string>();
+                    if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+                    if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+                    if (mods.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+                    if (mods.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+                    parts.Add(k.ToString());
+                    var next = string.Join("+", parts);
+                    if (AppHost.Window.TrySetHotkey(name, next, out var error)) key.Text = next;
+                    else { key.Text = GetHotkey(name); MessageBox.Show(error, "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information); }
+                    e.Handled = true;
+                };
+                var reset = new Button { Content = "Сбросить", Style = (Style)FindResource("Ghost"), Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+                reset.Click += (_, __) =>
+                {
+                    var defaults = new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        ["island"] = "Ctrl+Alt+Space", ["command"] = "Ctrl+Alt+K", ["clipboard"] = "Ctrl+Alt+V",
+                        ["screenshot"] = "Ctrl+Alt+S", ["voice"] = "Ctrl+Alt+D", ["voiceCommand"] = "Ctrl+Alt+A",
+                        ["collapse"] = "Escape"
+                    };
+                    if (AppHost.Window.TrySetHotkey(name, defaults[name], out var error)) key.Text = defaults[name];
+                    else MessageBox.Show(error, "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information);
+                };
+                var desc = new TextBlock { Text = description, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+                Grid.SetColumn(reset, 1);
+                Grid.SetColumn(desc, 2);
                 g.Children.Add(key);
+                g.Children.Add(reset);
                 g.Children.Add(desc);
                 KeysList.Children.Add(g);
             }
+
+            // PrintScreen → снимок через Isle: выделение области, миниатюра в чёлке, файл в Изображения\Isle
+            var prtRow = new Grid { Margin = new Thickness(0, 14, 0, 4) };
+            prtRow.ColumnDefinitions.Add(new ColumnDefinition());
+            prtRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            prtRow.Children.Add(new TextBlock { Text = "PrintScreen делает снимок через Isle (вместо «Ножниц» Windows)", FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+            var prt = new CheckBox { IsChecked = S.PrintScreenIsle, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            Grid.SetColumn(prt, 1);
+            prtRow.Children.Add(prt);
+            prt.Click += (_, __) =>
+            {
+                if (!AppHost.Window.SetPrintScreen(prt.IsChecked == true))
+                {
+                    prt.IsChecked = false;
+                    MessageBox.Show("Windows не дал занять PrintScreen. Выключи «Использовать PrintScreen для открытия Ножниц» в Параметры → Специальные возможности → Клавиатура и попробуй снова.",
+                                    "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            };
+            KeysList.Children.Add(prtRow);
         }
+
+        private string GetHotkey(string name) => name switch
+        {
+            "island" => S.Hotkey, "command" => S.HotkeyCommand, "clipboard" => S.HotkeyClipboard,
+            "screenshot" => S.HotkeyScreenshot, "voice" => S.HotkeyVoice, "voiceCommand" => S.HotkeyVoiceCommand,
+            "collapse" => S.HotkeyCollapse, _ => ""
+        };
     }
 }

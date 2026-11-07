@@ -11,16 +11,19 @@
 
         <!-- Заметки -->
         <DockPanel>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                <ItemsControl x:Name="NoteTabs">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-                <Button Style="{StaticResource Flat}" Width="28" Height="26" Padding="0" Click="OnAddNote" ToolTip="Новая заметка">
+            <Grid DockPanel.Dock="Top" Margin="0,0,0,8" Height="34">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly">
+                    <ItemsControl x:Name="NoteTabs">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
+                <Button Grid.Column="1" Style="{StaticResource Flat}" Width="28" Height="26" Padding="0" Click="OnAddNote" ToolTip="Новая заметка">
                     <h:Icon Kind="Plus" Width="12" Height="12"/>
                 </Button>
-            </StackPanel>
+            </Grid>
             <DockPanel DockPanel.Dock="Bottom" Margin="2,8,0,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Style="{StaticResource Ghost}" Click="OnRemindLine" ToolTip="Сделать напоминание из текущей строки">

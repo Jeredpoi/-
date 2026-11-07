@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
@@ -150,9 +152,28 @@ namespace Isle.Services
             set
             {
                 using var k = Registry.CurrentUser.CreateSubKey(RunKey);
-                if (value) k.SetValue("Isle", "\"" + Environment.ProcessPath + "\"");
+                if (value)
+                {
+                    var exe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+                    if (string.IsNullOrWhiteSpace(exe)) throw new InvalidOperationException("Не удалось определить путь к Isle.exe");
+                    // При запуске через dotnet run / dotnet Isle.dll в Run нужно записать DLL как аргумент,
+                    // иначе Windows запустит только хост dotnet и окно Isle не появится.
+                    var entry = Assembly.GetEntryAssembly()?.Location;
+                    var command = string.Equals(Path.GetFileNameWithoutExtension(exe), "dotnet", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(entry)
+                        ? "\"" + exe + "\" \"" + entry + "\""
+                        : "\"" + exe + "\"";
+                    k.SetValue("Isle", command, RegistryValueKind.String);
+                }
                 else k.DeleteValue("Isle", false);
             }
+        }
+
+        /// <summary>Repairs an existing Run entry after the executable was moved or updated.</summary>
+        public static void RepairAutostartPath()
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+            if (key?.GetValue("Isle") != null) Autostart = true;
         }
     }
 }

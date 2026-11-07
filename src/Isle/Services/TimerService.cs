@@ -75,19 +75,48 @@ namespace Isle.Services
             var colon = System.Text.RegularExpressions.Regex.Match(t, @"^(\d+):(\d{1,2})(?::(\d{1,2}))?$");
             if (colon.Success)
             {
-                int a = int.Parse(colon.Groups[1].Value), b = int.Parse(colon.Groups[2].Value);
-                return colon.Groups[3].Success ? new TimeSpan(a, b, int.Parse(colon.Groups[3].Value)) : new TimeSpan(0, a, b);
+                if (!int.TryParse(colon.Groups[1].Value, out int a) || !int.TryParse(colon.Groups[2].Value, out int b)) return null;
+                int seconds = 0;
+                if (colon.Groups[3].Success)
+                {
+                    if (b >= 60 || !int.TryParse(colon.Groups[3].Value, out seconds) || seconds >= 60) return null;
+                    try
+                    {
+                        var hms = new TimeSpan(a, b, seconds);
+                        return hms > TimeSpan.Zero && hms < TimeSpan.FromHours(24) ? hms : null;
+                    }
+                    catch (ArgumentOutOfRangeException) { return null; }
+                }
+                if (b >= 60) return null;
+                try
+                {
+                    var ms = TimeSpan.FromMinutes(a).Add(TimeSpan.FromSeconds(b));
+                    return ms > TimeSpan.Zero && ms < TimeSpan.FromHours(24) ? ms : null;
+                }
+                catch (ArgumentOutOfRangeException) { return null; }
             }
+            if (t.Contains(':')) return null;
             var total = TimeSpan.Zero; bool any = false;
-            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(t, @"(\d+(?:\.\d+)?)\s*([a-zа-яё]*)"))
+            var matches = System.Text.RegularExpressions.Regex.Matches(t, @"(\d+(?:\.\d+)?)\s*([a-zа-яё]*)");
+            var residue = System.Text.RegularExpressions.Regex.Replace(t, @"(\d+(?:\.\d+)?)\s*([a-zа-яё]*)", "").Trim();
+            if (residue.Length > 0 || matches.Count == 0) return null;
+            try
             {
-                double n = double.Parse(m.Groups[1].Value, inv);
-                var u = m.Groups[2].Value;
-                total += u.StartsWith("с") || u.StartsWith("s") ? TimeSpan.FromSeconds(n)
-                       : u.StartsWith("ч") || u.StartsWith("h") ? TimeSpan.FromHours(n)
-                       : TimeSpan.FromMinutes(n);
-                any = true;
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    if (!double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, inv, out double n) || !double.IsFinite(n) || n <= 0) return null;
+                    var u = m.Groups[2].Value;
+                    TimeSpan part;
+                    if (u.Length == 0 || u.StartsWith("м") || u.StartsWith("m")) part = TimeSpan.FromMinutes(n);
+                    else if (u.StartsWith("с") || u.StartsWith("s")) part = TimeSpan.FromSeconds(n);
+                    else if (u.StartsWith("ч") || u.StartsWith("h")) part = TimeSpan.FromHours(n);
+                    else return null;
+                    total += part;
+                    if (total >= TimeSpan.FromHours(24)) return null;
+                    any = true;
+                }
             }
+            catch (OverflowException) { return null; }
             return any && total > TimeSpan.Zero && total < TimeSpan.FromHours(24) ? total : null;
         }
 

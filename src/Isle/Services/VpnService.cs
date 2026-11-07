@@ -151,7 +151,7 @@ namespace Isle.Services
                     Title = active ? "VPN подключён" + (Country.Length > 0 ? " · " + Country : "") : "VPN отключён",
                     Subtitle = active ? (CountryName.Length > 0 ? CountryName + " · " : "") + Name : (CountryName.Length > 0 ? "Сейчас вы: " + CountryName : ""),
                     Icon = Icons.Shield,
-                    Accent = active ? System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80) : System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71)
+                    Accent = active ? System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80) : System.Windows.Media.Color.FromRgb(0xA1, 0xA1, 0xAB)
                 });
         }
 

@@ -148,15 +148,21 @@ namespace Isle.Views
             var thinking = new ChatMessage { Role = "assistant", Text = "…" };
             _msgs.Add(thinking);
             Scroll.ScrollToEnd();
-            _cts = new CancellationTokenSource();
+            var requestCts = new CancellationTokenSource();
+            _cts = requestCts;
             string answer;
             try
             {
                 var history = BuildHistory(_msgs.Where(m => !ReferenceEquals(m, thinking) && !m.HasPending && (m.Role == "user" || m.Role == "assistant")
                                                && !IsServiceError(m.Text))); // свои ошибки ИИ не показываем как его ответы
-                answer = await AiService.AskAsync(history, _cts.Token);
+                answer = await AiService.AskAsync(history, requestCts.Token);
             }
+            // отмену сделал сам пользователь (другой чат, очистка) — молча выходим; иначе это тайм-аут запроса
+            catch (OperationCanceledException) when (requestCts.IsCancellationRequested) { return; }
+            catch (OperationCanceledException) { answer = "Ошибка сети: сервис не ответил вовремя — попробуй ещё раз"; }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
+            // A cleared or switched conversation must not be repopulated by a late API response.
+            if (requestCts.IsCancellationRequested) return;
             var (clean, actions) = AiActions.Extract(answer ?? "");
             var reports = new System.Collections.Generic.List<string>();
             var confirm = new System.Collections.Generic.List<AiAction>();
@@ -228,26 +234,49 @@ namespace Isle.Views
 
         private void OnHistory(object s, RoutedEventArgs e)
         {
-            var menu = new ContextMenu { PlacementTarget = HistoryBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Top, MaxHeight = 380 };
+            var menu = new ContextMenu
+            {
+                PlacementTarget = HistoryBtn,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
+                MaxHeight = 380,
+                Background = (System.Windows.Media.Brush)FindResource("Card"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("CardBorder"),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(4)
+            };
             AppHost.Window.SuppressAutoCollapse = true;
             menu.Closed += (_, __) => AppHost.Window.SuppressAutoCollapse = false;
             var all = ChatHistory.All();
-            if (all.Count == 0) menu.Items.Add(new MenuItem { Header = "Пока нет сохранённых разговоров", IsEnabled = false });
+            if (all.Count == 0) menu.Items.Add(new MenuItem { Header = "Пока нет сохранённых разговоров", IsEnabled = false, Style = (Style)FindResource("HistoryMenuItem") });
             foreach (var c in all)
             {
-                var item = new MenuItem { Header = c.Title + "   ·   " + c.Updated.ToString("dd.MM HH:mm"), IsChecked = c.Id == _session.Id };
+                var item = new MenuItem { Header = c.Title + "   ·   " + c.Updated.ToString("dd.MM HH:mm"), IsChecked = c.Id == _session.Id, Style = (Style)FindResource("HistoryMenuItem") };
                 var chat = c;
                 item.Click += (_, __) => OpenSession(chat);
                 menu.Items.Add(item);
             }
             if (all.Count > 0)
             {
-                menu.Items.Add(new Separator());
-                var clear = new MenuItem { Header = "Очистить историю" };
-                clear.Click += (_, __) => ChatHistory.Clear();
+                menu.Items.Add(new Separator { Style = (Style)FindResource("HistorySeparator") });
+                var clear = new MenuItem { Header = "Очистить историю", Style = (Style)FindResource("HistoryMenuItem") };
+                clear.Click += (_, __) => ClearHistory();
                 menu.Items.Add(clear);
             }
             menu.IsOpen = true;
+        }
+
+        private void ClearHistory()
+        {
+            _cts?.Cancel();
+            _cts = null;
+            _busy = false;
+            SendBtn.IsEnabled = true;
+            ChatHistory.Clear();
+            _session = new ChatSession();
+            _msgs.Clear();
+            BuildRecent();
+            Welcome.Visibility = Visibility.Visible;
+            Scroll.Visibility = Visibility.Collapsed;
         }
 
         private void OpenSession(ChatSession c)

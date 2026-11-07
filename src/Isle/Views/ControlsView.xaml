@@ -95,44 +95,48 @@
         <UniformGrid Grid.Row="4" Columns="4">
             <Button x:Name="LockBtn" Style="{StaticResource Power}" Margin="0,0,5,0" Click="OnPower" Tag="lock">
                 <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Lock" Width="16" Height="16" HorizontalAlignment="Center"/>
                         <TextBlock x:Name="LockText" Text="Блокировка" Margin="0,5,0,0" HorizontalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="LockBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="LockBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
             </Button>
             <Button x:Name="SleepBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="sleep">
                 <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Moon" Width="16" Height="16" HorizontalAlignment="Center"/>
                         <TextBlock x:Name="SleepText" Text="Сон" Margin="0,5,0,0" HorizontalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="SleepBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="SleepBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
             </Button>
             <Button x:Name="RestartBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="restart">
                 <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Restart" Width="16" Height="16" HorizontalAlignment="Center"/>
                         <TextBlock x:Name="RestartText" Text="Перезагрузка" Margin="0,5,0,0" HorizontalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="RestartBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="RestartBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
             </Button>
             <Button x:Name="ShutdownBtn" Style="{StaticResource Power}" Margin="5,0,0,0" Click="OnPower" Tag="shutdown">
                 <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Power" Width="16" Height="16" HorizontalAlignment="Center"/>
                         <TextBlock x:Name="ShutdownText" Text="Выключение" Margin="0,5,0,0" HorizontalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="ShutdownBar" Height="3" VerticalAlignment="Bottom" Margin="10,0,10,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="ShutdownBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>

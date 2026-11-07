@@ -1,5 +1,7 @@
 using System.Linq;
 using System;
+using System.IO;
+using System.Text.Json;
 using Isle.Helpers;
 using Isle.Services;
 using Isle.Views;
@@ -7,6 +9,31 @@ using Xunit;
 
 namespace Isle.Tests
 {
+    public class WeatherForecastParsingTests
+    {
+        [Fact]
+        public void MetNorwaySymbolsAndForecastDetailsAreMapped()
+        {
+            var now = DateTimeOffset.Now;
+            string stamp1 = now.AddMinutes(-5).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            string stamp2 = now.AddHours(2).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            string json = "{\"properties\":{\"timeseries\":[" +
+                "{\"time\":\"" + stamp1 + "\",\"data\":{\"instant\":{\"details\":{\"air_temperature\":4,\"relative_humidity\":88,\"wind_speed\":3.2,\"wind_from_direction\":270}},\"next_1_hours\":{\"summary\":{\"symbol_code\":\"lightrain_day\"},\"details\":{\"precipitation_amount\":0.4,\"probability_of_precipitation\":70}}}}," +
+                "{\"time\":\"" + stamp2 + "\",\"data\":{\"instant\":{\"details\":{\"air_temperature\":1,\"relative_humidity\":90,\"wind_speed\":2,\"wind_from_direction\":280}},\"next_1_hours\":{\"summary\":{\"symbol_code\":\"snow_day\"},\"details\":{\"precipitation_amount\":0.8,\"probability_of_precipitation\":80}}}}]}}";
+            using var doc = JsonDocument.Parse(json);
+
+            var weather = WeatherService.ParseLocationForecast(doc.RootElement, "Москва");
+
+            Assert.Equal("Москва", weather.City);
+            Assert.Equal(61, weather.Code);
+            Assert.Equal(4, weather.Temp);
+            Assert.Equal(3.2, weather.Wind);
+            Assert.Equal(70, weather.Hours[0].PrecipitationProbability);
+            Assert.True(weather.NextSnowAt.HasValue);
+            Assert.Contains(weather.Days, d => d.Precip > 0);
+        }
+    }
+
     public class ReminderParserTests
     {
         // среда, 4 ноября 2026, 14:00
@@ -146,6 +173,173 @@ namespace Isle.Tests
             Assert.Equal("two", l[1].Text);
             Assert.Equal(TimeSpan.FromSeconds(62), l[1].At);
         }
+    }
+}
+
+namespace Isle.Tests
+{
+    public class SteamDownloadTrackingTests
+    {
+        private static readonly DateTime PausedAt = new(2026, 11, 6, 16, 45, 0, DateTimeKind.Local);
+
+        [Fact]
+        public void ProgressTextUsesSteamStyleIntegerPercentage()
+        {
+            Assert.Equal("10%", new SteamDownload { Progress = 0.109 }.ProgressText);
+        }
+
+        [Fact]
+        public void PausedUpdateIsNotKeptAsAnActiveDownloadPill()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), PausedLog(appId));
+                var download = SteamDownloadService.ReadCurrent(root, PausedAt);
+
+                Assert.Null(download);
+                Assert.Null(SteamDownloadService.TakePaused());
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void PausingAnObservedDownloadEmitsOneNotification()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var logPath = Path.Combine(root, "logs", "content_log.txt");
+                File.WriteAllText(logPath, ActiveLog(appId));
+                Assert.NotNull(SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 40, DateTimeKind.Local)));
+
+                File.AppendAllText(logPath,
+                    $"[2026-11-06 16:44:05] AppID {appId} update canceled : Disabled (Suspended)\n" +
+                    $"[2026-11-06 16:44:05] AppID {appId} App update changed : Running Update,Stopping,\n" +
+                    $"[2026-11-06 16:44:05] AppID {appId} App update changed : None\n" +
+                    $"[2026-11-06 16:44:06] AppID {appId} state changed : Update Required,Fully Installed,Update Paused,Update Started,\n");
+
+                Assert.Null(SteamDownloadService.ReadCurrent(root, PausedAt));
+                var notification = SteamDownloadService.TakePaused();
+                Assert.NotNull(notification);
+                Assert.True(notification.IsPaused);
+                Assert.Equal("16%", notification.ProgressText);
+                Assert.Null(SteamDownloadService.TakePaused());
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void ActiveUpdateShowsFileUpdatePercentAndLoadsSteamArtworkAndFolder()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var installFolder = Path.Combine(root, "steamapps", "common", "Test Game Folder");
+                Directory.CreateDirectory(installFolder);
+                var artFolder = Path.Combine(root, "appcache", "librarycache", appId.ToString());
+                Directory.CreateDirectory(artFolder);
+                File.WriteAllBytes(Path.Combine(artFolder, "library_header.jpg"), Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII="));
+                var manifestPath = Path.Combine(root, "steamapps", $"appmanifest_{appId}.acf");
+                File.AppendAllText(manifestPath, "");
+                var manifest = File.ReadAllText(manifestPath).Replace("\"name\" \"Test Game\"", "\"name\" \"Test Game\"\n\t\"installdir\" \"Test Game Folder\"");
+                File.WriteAllText(manifestPath, manifest);
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), ActiveLog(appId));
+
+                var download = SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 36, DateTimeKind.Local));
+
+                Assert.NotNull(download);
+                Assert.Equal("16%", download.ProgressText);
+                Assert.NotEmpty(download.SpeedText);
+                Assert.NotNull(download.Remaining);
+                Assert.NotNull(download.Icon);
+                Assert.Equal(installFolder, download.FolderPath);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void LongRunningActiveDownloadDoesNotExpireAfterTenMinutes()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), ActiveLog(appId));
+                var download = SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 17, 0, 0, DateTimeKind.Local));
+                Assert.NotNull(download);
+                Assert.Equal("16%", download.ProgressText);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void UserCancelledUpdateIsNoLongerShown()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var log = ActiveLog(appId) +
+                    $"[2026-11-06 16:44:05] AppID {appId} update canceled : User canceled\n" +
+                    $"[2026-11-06 16:44:05] AppID {appId} App update changed : None\n" +
+                    $"[2026-11-06 16:44:06] AppID {appId} state changed : Update Required,Fully Installed,Update Queued,Update Started,\n";
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), log);
+
+                Assert.Null(SteamDownloadService.ReadCurrent(root, PausedAt));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void FinishedDownloadEmitsOneCompletionEvent()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                var logPath = Path.Combine(root, "logs", "content_log.txt");
+                File.WriteAllText(logPath, ActiveLog(appId));
+                Assert.NotNull(SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 40, DateTimeKind.Local)));
+
+                File.AppendAllText(logPath,
+                    $"[2026-11-06 16:44:10] AppID {appId} update finished : No Error\n" +
+                    $"[2026-11-06 16:44:10] AppID {appId} state changed : Fully Installed,\n");
+                Assert.Null(SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 44, 11, DateTimeKind.Local)));
+                Assert.Equal("Test Game", SteamDownloadService.TakeCompleted()?.Name);
+                Assert.Null(SteamDownloadService.TakeCompleted());
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        private static string CreateSteamRoot(int appId)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "IsleSteamTest-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(root, "logs"));
+            Directory.CreateDirectory(Path.Combine(root, "steamapps"));
+            File.WriteAllText(Path.Combine(root, "steamapps", $"appmanifest_{appId}.acf"),
+                $"\"AppState\" {{\n\t\"appid\" \"{appId}\"\n\t\"name\" \"Test Game\"\n" +
+                "\t\"BytesToDownload\" \"1000\"\n\t\"BytesDownloaded\" \"220\"\n" +
+                "\t\"BytesToStage\" \"1000\"\n\t\"BytesStaged\" \"160\"\n}\n");
+            return root;
+        }
+
+        private static string ActiveLog(int appId) =>
+            $"[2026-11-06 16:43:34] AppID {appId} update started : download 0/1958392864, store 0/0, reuse 0/34740569739, delta 0/1043595302, stage 0/38428989932\n" +
+            $"[2026-11-06 16:43:34] AppID {appId} state changed : Update Required,Fully Installed,Update Queued,Update Running,Update Started,\n" +
+            $"[2026-11-06 16:43:34] AppID {appId} App update changed : Running Update,Downloading,Staging,\n" +
+            "[2026-11-06 16:43:35] Current download rate: 100.525 Mbps\n";
+
+        private static string PausedLog(int appId) => ActiveLog(appId) +
+            $"[2026-11-06 16:44:05] AppID {appId} update canceled : Disabled (Suspended)\n" +
+            $"[2026-11-06 16:44:05] AppID {appId} App update changed : Running Update,Stopping,\n" +
+            $"[2026-11-06 16:44:05] AppID {appId} App update changed : None\n" +
+            $"[2026-11-06 16:44:52] AppID {appId} state changed : Update Required,Fully Installed,Update Queued,Update Started, (Suspended)\n" +
+            $"[2026-11-06 16:44:52] AppID {appId} state changed : Update Required,Fully Installed,Update Paused,Update Started,\n";
     }
 }
 
@@ -303,6 +497,7 @@ namespace Isle.Tests
         [InlineData("1 сек", 1)]
         [InlineData("90 sec", 90)]
         [InlineData("1:30", 90)]
+        [InlineData("90:00", 5400)]
         [InlineData("2м", 120)]
         [InlineData("1ч 20м", 4800)]
         [InlineData("1.5ч", 5400)]
@@ -312,6 +507,29 @@ namespace Isle.Tests
         [InlineData("")]
         [InlineData("abc")]
         [InlineData("0")]
+        [InlineData("1:90")]
+        [InlineData("1:30:90")]
+        [InlineData("24:00:00")]
+        [InlineData("999999999999999999999:00")]
+        [InlineData("5 bananas")]
         public void Rejects(string text) => Assert.Null(TimerService.ParseDuration(text));
+    }
+
+    public class BrowserDownloadCompletionTests
+    {
+        [Fact]
+        public void QuickDownloadThatFinishedBetweenPollsStillNotifies() =>
+            Assert.True(BrowserDownloadService.ShouldNotifyCompletion(false,
+                new DateTime(2026, 11, 6, 12, 0, 2), new DateTime(2026, 11, 6, 12, 0, 0)));
+
+        [Fact]
+        public void OldHistoryDoesNotLookLikeANewCompletion() =>
+            Assert.False(BrowserDownloadService.ShouldNotifyCompletion(false,
+                new DateTime(2026, 11, 6, 11, 59, 59), new DateTime(2026, 11, 6, 12, 0, 0)));
+
+        [Fact]
+        public void PreviouslyObservedDownloadNotifiesEvenWithoutEndTimestamp() =>
+            Assert.True(BrowserDownloadService.ShouldNotifyCompletion(true, DateTime.MinValue,
+                new DateTime(2026, 11, 6, 12, 0, 0)));
     }
 }

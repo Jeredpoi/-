@@ -308,7 +308,8 @@ namespace Isle.Views
                 var tb = new TextBlock
                 {
                     Text = l.Text.Length == 0 ? "♪" : l.Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, FontWeight = FontWeights.SemiBold,
-                    Foreground = (System.Windows.Media.Brush)FindResource("Fg"), Opacity = 0.3, Margin = new Thickness(0, 0, 0, 10),
+                    // Keep a small right inset so glyph overhangs never touch the clipped viewport edge.
+                    Foreground = (System.Windows.Media.Brush)FindResource("Fg"), Opacity = 0.3, Margin = new Thickness(0, 0, 8, 10),
                     RenderTransformOrigin = new Point(0, 0.5), RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
                 };
                 _lines.Add(tb);
@@ -331,7 +332,9 @@ namespace Isle.Views
                 double sc = k == i ? 1.12 : 1;
                 _lines[k].BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(op, dur) { EasingFunction = ease });
                 var st = (System.Windows.Media.ScaleTransform)_lines[k].RenderTransform;
-                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, dur) { EasingFunction = ease });
+                // Scale vertically only: horizontal scaling pushed the final glyph beyond LyricsViewport's clip.
+                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+                st.ScaleX = 1;
                 st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, dur) { EasingFunction = ease });
             }
             double y = 0;

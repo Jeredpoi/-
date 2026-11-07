@@ -9,8 +9,11 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <Border CornerRadius="18" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Padding="16">
-            <DockPanel>
+        <Border CornerRadius="18" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Padding="0">
+            <Grid ClipToBounds="True">
+                <Border x:Name="HeroBackground" CornerRadius="17" Background="#243246"/>
+                <Canvas x:Name="WeatherFx" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnWeatherFxSizeChanged"/>
+                <DockPanel Margin="16">
                 <DockPanel DockPanel.Dock="Top">
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Click="OnRefresh" ToolTip="Обновить">
                         <h:Icon Kind="Restart" Width="13" Height="13" Foreground="#A1A1AB"/>
@@ -22,6 +25,7 @@
                     <TextBlock x:Name="Temp" Text="—" FontSize="50" FontWeight="SemiBold" Margin="10,0,0,0"/>
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium"/>
+                <TextBlock DockPanel.Dock="Top" x:Name="Snow" FontSize="11" Foreground="{DynamicResource Accent}" Margin="0,3,0,0"/>
                 <TextBlock DockPanel.Dock="Top" x:Name="Feels" FontSize="11" Foreground="#A1A1AB" Margin="0,2,0,0"/>
                 <TextBlock DockPanel.Dock="Bottom" x:Name="Sun" FontSize="11" Foreground="#A1A1AB" Margin="0,8,0,0"/>
                 <UniformGrid DockPanel.Dock="Bottom" Columns="3" VerticalAlignment="Bottom">
@@ -36,7 +40,8 @@
                     </Border>
                 </UniformGrid>
                 <Grid/>
-            </DockPanel>
+                </DockPanel>
+            </Grid>
         </Border>
 
         <DockPanel Grid.Column="2">
@@ -58,7 +63,7 @@
             </Border>
             <Border Style="{StaticResource CardBox}" Margin="0,10,0,0" Padding="14,10">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Bottom" Text="Данные Open-Meteo" Style="{StaticResource MutedText}" FontSize="9" HorizontalAlignment="Right"/>
+                    <TextBlock DockPanel.Dock="Bottom" Text="Данные MET Norway" Style="{StaticResource MutedText}" FontSize="9" HorizontalAlignment="Right"/>
                     <ItemsControl x:Name="Days">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

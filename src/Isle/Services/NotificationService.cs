@@ -16,7 +16,7 @@ namespace Isle.Services
     public class NotificationService
     {
         private Mgmt.UserNotificationListener _listener;
-        private readonly HashSet<uint> _seen = new();
+        private readonly Dictionary<uint, string> _seen = new();
         private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(2) };
         public bool Available { get; private set; }
         public string Status { get; private set; } = "Не запущено";
@@ -32,7 +32,7 @@ namespace Isle.Services
                     Status = "Windows не дал доступ к уведомлениям";
                     return;
                 }
-                foreach (var n in await _listener.GetNotificationsAsync(Notif.NotificationKinds.Toast)) _seen.Add(n.Id);
+                foreach (var n in await _listener.GetNotificationsAsync(Notif.NotificationKinds.Toast)) _seen[n.Id] = Fingerprint(n);
                 Available = true;
                 Status = "Работает";
                 _timer.Tick += async (_, __) => await Poll();
@@ -50,14 +50,24 @@ namespace Isle.Services
             try
             {
                 var list = await _listener.GetNotificationsAsync(Notif.NotificationKinds.Toast);
+                var activeIds = new HashSet<uint>(list.Select(x => x.Id));
+                foreach (var stale in _seen.Keys.Where(id => !activeIds.Contains(id)).ToList()) _seen.Remove(stale);
                 foreach (var n in list.OrderBy(x => x.CreationTime))
                 {
-                    if (!_seen.Add(n.Id)) continue;
+                    var fingerprint = Fingerprint(n);
+                    bool updated = _seen.TryGetValue(n.Id, out var previous);
+                    if (updated && previous == fingerprint) continue;
+                    _seen[n.Id] = fingerprint;
                     string app = "";
                     try { app = n.AppInfo?.DisplayInfo?.DisplayName ?? ""; } catch { }
                     var binding = n.Notification?.Visual?.GetBinding(Notif.KnownNotificationBindings.ToastGeneric);
                     var texts = binding?.GetTextElements()?.Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? new List<string>();
                     var title = texts.Count > 0 ? texts[0] : app;
+                    // «Ножницы» сообщают о снимке, который Isle уже показал своей карточкой с миниатюрой — не дублируем
+                    if (DateTime.Now - ClipboardService.LastScreenshotToast < TimeSpan.FromSeconds(15)
+                        && (app.Contains("Ножниц", StringComparison.OrdinalIgnoreCase) || app.Contains("Snipping", StringComparison.OrdinalIgnoreCase)
+                            || app.Contains("Набросок", StringComparison.OrdinalIgnoreCase) || app.Contains("Snip", StringComparison.OrdinalIgnoreCase)))
+                        continue;
                     var body = string.Join(" ", texts.Skip(1));
                     ToastBus.Show(new Toast
                     {
@@ -65,12 +75,28 @@ namespace Isle.Services
                         Title = string.IsNullOrEmpty(app) || app == title ? title : title + "  ·  " + app,
                         Subtitle = body,
                         Icon = Icons.Bell,
-                        Duration = TimeSpan.FromSeconds(5)
+                        Duration = TimeSpan.FromSeconds(5),
+                        ReplaceKey = updated ? "win-notification-" + n.Id : null
                     });
                 }
-                if (_seen.Count > 2000) _seen.Clear();
+                if (_seen.Count > 2000)
+                {
+                    _seen.Clear();
+                    foreach (var n in await _listener.GetNotificationsAsync(Notif.NotificationKinds.Toast)) _seen[n.Id] = Fingerprint(n);
+                }
             }
-            catch { }
+            catch (Exception ex) { App.Log("notification poll: " + ex.Message); }
+        }
+
+        private static string Fingerprint(Notif.UserNotification n)
+        {
+            try
+            {
+                var binding = n.Notification?.Visual?.GetBinding(Notif.KnownNotificationBindings.ToastGeneric);
+                var texts = binding?.GetTextElements()?.Select(t => t.Text) ?? Enumerable.Empty<string>();
+                return string.Join("\n", texts);
+            }
+            catch { return n.Id.ToString(); }
         }
     }
 }

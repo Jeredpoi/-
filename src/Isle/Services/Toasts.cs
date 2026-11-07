@@ -3,17 +3,20 @@ using System.Windows.Media;
 
 namespace Isle.Services
 {
-    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Timer, Reminder, Success, Alarm }
+    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Download, Timer, Reminder, Success, Alarm }
 
     public class Toast
     {
         public ToastKind Kind { get; set; }
         public string Title { get; set; } = "";
         public string Subtitle { get; set; } = "";
+        public string SpeedText { get; set; } = "";
+        public string EtaText { get; set; } = "";
         /// <summary>Путь-геометрия иконки (24x24, stroke).</summary>
         public string Icon { get; set; } = Icons.Info;
         public Color Accent { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public ImageSource Image { get; set; }
+        public string FolderPath { get; set; }
         public double? Progress { get; set; }
         public TimeSpan Duration { get; set; } = TimeSpan.FromSeconds(2.2);
         /// <summary>Тосты с ключом заменяют друг друга без мигания (громкость, раскладка).</summary>
@@ -42,7 +45,9 @@ namespace Isle.Services
         public const string Mute = "M4 9.5h3l4.5-4v13L7 14.5H4zM16 10l4 4M20 10l-4 4";
         public const string Bolt = "M13 3L5.5 13.5H11L10 21l8-10.5h-5.5z";
         public const string Battery = "M4.5 7.5h13A1.5 1.5 0 0 1 19 9v6a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 15V9a1.5 1.5 0 0 1 1.5-1.5zM21 10.5v3M6.5 10.5v3";
+        public const string Download = "M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14";
         public const string Bell = "M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15zM10 20.5h4";
+        public const string Snow = "M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M8.5 5l3.5 3 3.5-3M8.5 19l3.5-3 3.5 3M3.5 11l4.5-.5-.5-4.5M20.5 13l-4.5.5.5 4.5M3.5 13l4.5.5-.5 4.5M20.5 11l-4.5-.5.5-4.5";
         public const string Timer = "M12 7.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M12 11v3l2 1.5M10 3.5h4M18.5 7l1-1";
         public const string Home = "M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z";
         public const string Clipboard = "M9 3.5h6a1 1 0 0 1 1 1V6H8V4.5a1 1 0 0 1 1-1zM8 5H6.5A1.5 1.5 0 0 0 5 6.5v12A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 5H16M9 11h6M9 15h4";

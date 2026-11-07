@@ -25,6 +25,11 @@ namespace Isle.Native
         [DllImport("user32.dll")] public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+        public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+        [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
         [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
         [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint idThread);
         [DllImport("user32.dll")] public static extern short GetKeyState(int nVirtKey);
@@ -247,6 +252,22 @@ namespace Isle.Native
                 };
             }
             SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
+        }
+
+        [DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner();
+
+        /// <summary>Процесс, положивший данные в буфер (пусто — системная клавиша PrintScreen).</summary>
+        public static string ClipboardOwnerProcess()
+        {
+            try
+            {
+                var h = GetClipboardOwner();
+                if (h == IntPtr.Zero) return "";
+                GetWindowThreadProcessId(h, out uint pid);
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                return p.ProcessName;
+            }
+            catch { return ""; }
         }
 
         public static string ForegroundProcessName()
