@@ -863,7 +863,7 @@ namespace Isle
                 {
                     if (!AppHost.Voice.Recording) { _voiceKeyPoll.Stop(); return; }
                     // основная клавиша сочетания (по умолчанию A) ещё зажата — сочетание можно переназначить
-                    uint vk = TryParseHotkey(AppSettings.Current.HotkeyVoiceCommand, out _, out uint k) ? k : 0x41;
+                    uint vk = TryParseHotkey(AppSettings.Current.HotkeyVoiceCommand, out uint vkMods, out uint k) ? k : 0x41;
                     bool held = (Win32.GetAsyncKeyState((int)vk) & 0x8000) != 0;
                     if (held) return;
                     _voiceKeyPoll.Stop();
