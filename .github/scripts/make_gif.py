@@ -13,4 +13,4 @@ frames = [Image.open(f).convert("RGB") for f in files]
 pal = frames[len(frames) // 2].quantize(colors=64, method=Image.Quantize.MEDIANCUT)
 frames = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
 frames[0].save(out, save_all=True, append_images=frames[1:], duration=50, loop=0, optimize=True, disposal=1)
-print(out, len(frames), "кадров")
+print(out, len(frames), "frames")
