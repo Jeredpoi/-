@@ -107,8 +107,13 @@ namespace Isle.Services
             cap.DataAvailable -= OnData;
             cap.Dispose();
             RecordingChanged?.Invoke(false);
-            var pcm = _pcm.ToArray();
+            var pcm = TrimSilence(_pcm.ToArray());
             _pcm = null;
+            if (pcm == null)
+            {
+                ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                return;
+            }
             if (pcm.Length < 16000) // меньше половины секунды
             {
                 ToastBus.Show(new Toast { Title = "Слишком коротко", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
@@ -195,6 +200,7 @@ namespace Isle.Services
             {
                 if (!resp.IsSuccessStatusCode) throw new Exception(AiService.ErrorText(doc.RootElement, (int)resp.StatusCode));
                 var text = doc.RootElement.TryGetProperty("text", out var t) ? (t.GetString() ?? "").Trim() : "";
+                text = StripJunk(text);
                 return IsHallucination(text, hint) ? "" : text;
             }
         }
@@ -206,16 +212,61 @@ namespace Isle.Services
         public static bool IsHallucination(string text, string hint)
         {
             if (string.IsNullOrWhiteSpace(text)) return true;
-            string Norm(string x) => new string(x.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            string Norm(string x) => NormText(x);
             var t = Norm(text);
             if (t.Length == 0) return true;
             if (!string.IsNullOrEmpty(hint) && (t.Length >= 15 && Norm(hint).Contains(t) || t.Contains(Norm(hint)))) return true; // короткое «привет» — это ты, а не подсказка
-            string[] junk =
+            return t.Length < 60 && Junk.Any(t.Contains);
+        }
+
+        // «титры» из роликов, которые Whisper дописывает на тишине (часто в конце настоящей фразы)
+        private static readonly string[] Junk =
+        {
+            "продолжениеследует", "субтитр", "дубровск", "dimatorzok", "диматорзок", "редакторсубтитров",
+            "спасибозапросмотр", "подписывайтесь", "ставьтелайк", "amaraorg", "thanksforwatching", "subtitles", "pleasesubscribe"
+        };
+
+        private static string NormText(string x) => new string(x.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+
+        /// <summary>Убирает из текста предложения-«титры», оставляя то, что ты сказал.</summary>
+        public static string StripJunk(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+            var parts = System.Text.RegularExpressions.Regex.Split(text, @"(?<=[.!?…])\s+");
+            return string.Join(" ", parts.Where(p => { var n = NormText(p); return !Junk.Any(n.Contains); })).Trim();
+        }
+
+        /// <summary>
+        /// Обрезает тишину в начале и в конце записи (16 кГц, 16 бит): Whisper на тишине выдумывает фразы.
+        /// Если громкой речи нет совсем — null.
+        /// </summary>
+        private static byte[] TrimSilence(byte[] pcm)
+        {
+            const int win = 320 * 2; // окна по 20 мс
+            int n = pcm.Length / win;
+            if (n == 0) return null;
+            var lvl = new double[n];
+            double max = 0;
+            for (int w = 0; w < n; w++)
             {
-                "продолжениеследует", "субтитрысделал", "субтитрыделал", "редакторсубтитров", "спасибозапросмотр",
-                "подписывайтесьнаканал", "ставьтелайки", "thanksforwatching", "subtitlesby", "pleasesubscribe"
-            };
-            return t.Length < 60 && junk.Any(t.Contains);
+                double sum = 0;
+                for (int i = w * win; i < (w + 1) * win; i += 2)
+                {
+                    double v = (short)(pcm[i] | pcm[i + 1] << 8) / 32768.0;
+                    sum += v * v;
+                }
+                lvl[w] = Math.Sqrt(sum / 320);
+                max = Math.Max(max, lvl[w]);
+            }
+            if (max < 0.012) return null; // только шум микрофона
+            double gate = Math.Max(0.008, max * 0.08);
+            int first = Array.FindIndex(lvl, v => v >= gate), last = Array.FindLastIndex(lvl, v => v >= gate);
+            first = Math.Max(0, first - 15); last = Math.Min(n - 1, last + 20); // запас 0,3 с до и 0,4 с после
+            int len = (last - first + 1) * win;
+            if (len < 16000) len = Math.Min(pcm.Length - first * win, 16000); // Whisper не любит совсем короткие куски
+            var res = new byte[len];
+            Array.Copy(pcm, first * win, res, 0, len);
+            return res;
         }
 
         /// <summary>Проверка: отправляем секунду тишины — если ключ верный, сервис ответит.</summary>

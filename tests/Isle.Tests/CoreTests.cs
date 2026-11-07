@@ -115,6 +115,13 @@ namespace Isle.Tests
         public void WhisperHallucinations(string text, bool junk) =>
             Assert.Equal(junk, VoiceService.IsHallucination(text, "Привет! Как дела? У меня всё хорошо, спасибо. Давай встретимся завтра в девять, хорошо?"));
 
+        [Theory]
+        [InlineData("Напомни купить молоко. Спасибо за субтитры Алексею Дубровскому!", "Напомни купить молоко.")]
+        [InlineData("Спасибо за субтитры Алексею Дубровскому", "")]
+        [InlineData("Открой телеграм", "Открой телеграм")]
+        public void WhisperSubtitleTailIsRemoved(string text, string expected) =>
+            Assert.Equal(expected, VoiceService.StripJunk(text));
+
         [Fact]
         public void NoTimeReturnsNull()
         {
