@@ -408,10 +408,11 @@
                                 <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpGroq" Click="OnVoicePreset" Tag="groq">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="Groq · Whisper"/><Border Background="#1F2A22" CornerRadius="6" Padding="5,1" Margin="8,0,0,0"><TextBlock Text="бесплатно" FontSize="10" Foreground="#8BD49E"/></Border></StackPanel>
                                 </RadioButton>
+                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpPollinations" Click="OnVoicePreset" Tag="pollinations" Content="Pollinations · Whisper large v3"/>
                                 <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpOpenAi" Click="OnVoicePreset" Tag="openai" Content="OpenAI · Whisper"/>
                                 <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpCustom" Click="OnVoicePreset" Tag="custom" Content="Свой адрес"/>
                             </WrapPanel>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Groq: бесплатно, до 8 часов речи в день, отвечает за секунду и хорошо понимает русский. Тот же ключ, что и в разделе «ИИ»."/>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Groq: бесплатно, до 8 часов речи в день, отвечает за секунду и хорошо понимает русский. Pollinations: Whisper large v3 за ежедневную бесплатную «пыльцу», ключ sk_… с enter.pollinations.ai. Если в разделе «ИИ» выбран тот же сервис — ключ берётся оттуда."/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">
@@ -423,11 +424,12 @@
                                 <TextBox x:Name="VoiceModel" Grid.Column="1" Margin="8,0,0,0" LostFocus="OnVoiceFields"/>
                             </Grid>
                             <TextBlock Style="{StaticResource RowTitle}" Text="Ключ распознавания" Margin="0,16,0,0"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Можно оставить пустым, если в разделе «ИИ» выбран тот же сервис: у Groq и OpenAI один ключ подходит и для чата, и для диктовки."/>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Можно оставить пустым, если в разделе «ИИ» выбран тот же сервис: у Groq, Pollinations и OpenAI один ключ подходит и для чата, и для диктовки."/>
                             <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <PasswordBox x:Name="VoiceKey"/>
                                 <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnVoiceSaveKey"/>
+                                <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Удалить" Foreground="#F87171" Margin="6,0,0,0" Click="OnVoiceDeleteKey"/>
                             </Grid>
                             <TextBlock x:Name="VoiceKeyState" Style="{StaticResource RowNote}"/>
                         </StackPanel>

@@ -70,7 +70,7 @@ namespace Isle.Services
         public double Longitude { get; set; } = 37.6173;
 
         // ИИ
-        /// <summary>Сервис ИИ: groq | gemini | openrouter | deepseek | openai | anthropic | ollama | custom.</summary>
+        /// <summary>Сервис ИИ: groq | gemini | openrouter | pollinations | openai | anthropic | ollama | custom.</summary>
         public string AiPreset { get; set; } = "groq";
         /// <summary>Базовый адрес OpenAI-совместимого API (…/v1). Для Anthropic не используется.</summary>
         public string AiBaseUrl { get; set; } = "https://api.groq.com/openai/v1";
@@ -104,7 +104,7 @@ namespace Isle.Services
         public string AiModel { get; set; } = "llama-3.3-70b-versatile";
 
         // Голос в текст (Whisper)
-        public string VoicePreset { get; set; } = "groq"; // groq | openai | custom
+        public string VoicePreset { get; set; } = "groq"; // groq | pollinations | openai | custom
         public string VoiceBaseUrl { get; set; } = "https://api.groq.com/openai/v1";
         public string VoiceModel { get; set; } = "whisper-large-v3";
         public string VoiceKeyProtected { get; set; } = "";
@@ -182,6 +182,7 @@ namespace Isle.Services
         private static AppSettings Migrate(AppSettings s)
         {
             if (s != null && s.VoiceModel == "whisper-large-v3-turbo") s.VoiceModel = "whisper-large-v3";
+            if (s != null && s.AiPreset == "deepseek") s.AiPreset = "custom"; // DeepSeek убрали из списка — адрес и ключ остаются
             return s;
         }
         public void Save() => Storage.Save("settings.json", this);

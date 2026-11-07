@@ -27,7 +27,7 @@ namespace Isle.Services
     }
 
     /// <summary>
-    /// Чат с ИИ: Anthropic (Claude) или любой OpenAI-совместимый сервис (Groq, Gemini, OpenRouter, DeepSeek, OpenAI, Ollama…).
+    /// Чат с ИИ: Anthropic (Claude) или любой OpenAI-совместимый сервис (Groq, Gemini, OpenRouter, Pollinations, OpenAI, Ollama…).
     /// Ключ хранится только у пользователя в %AppData%\Isle\settings.json, зашифрованным.
     /// </summary>
     public static class AiService
@@ -42,8 +42,9 @@ namespace Isle.Services
                     KeyUrl = "https://aistudio.google.com/apikey", Note = "Бесплатный лимит, хорошо понимает русский." },
             new() { Id = "openrouter", Title = "OpenRouter", Free = true, BaseUrl = "https://openrouter.ai/api/v1", Model = "meta-llama/llama-3.3-70b-instruct:free",
                     KeyUrl = "https://openrouter.ai/keys", Note = "Сотни моделей через один ключ, есть бесплатные (с пометкой :free)." },
-            new() { Id = "deepseek", Title = "DeepSeek", BaseUrl = "https://api.deepseek.com/v1", Model = "deepseek-chat",
-                    KeyUrl = "https://platform.deepseek.com/api_keys", Note = "Дёшево и умно." },
+            new() { Id = "pollinations", Title = "Pollinations", Free = true, BaseUrl = "https://gen.pollinations.ai/v1", Model = "openai/gpt-5.4-nano",
+                    KeyUrl = "https://enter.pollinations.ai/keys",
+                    Note = "Много моделей через один ключ (sk_…), есть ежедневная бесплатная «пыльца». Тот же ключ подходит для голоса в текст (Whisper large v3)." },
             new() { Id = "openai", Title = "OpenAI", BaseUrl = "https://api.openai.com/v1", Model = "gpt-4o-mini",
                     KeyUrl = "https://platform.openai.com/api-keys", Note = "Платно, по факту использования." },
             new() { Id = "anthropic", Title = "Claude", BaseUrl = "https://api.anthropic.com/v1", Model = "claude-haiku-5-5",

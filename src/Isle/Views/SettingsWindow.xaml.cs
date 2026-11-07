@@ -174,6 +174,7 @@ namespace Isle.Views
 
             VpGroq.IsChecked = S.VoicePreset == "groq";
             VpOpenAi.IsChecked = S.VoicePreset == "openai";
+            VpPollinations.IsChecked = S.VoicePreset == "pollinations";
             VpCustom.IsChecked = S.VoicePreset == "custom";
             VoiceBase.Text = S.VoiceBaseUrl;
             VoiceModel.Text = S.VoiceModel;
@@ -487,6 +488,7 @@ namespace Isle.Views
             S.VoicePreset = id;
             if (id == "groq") { S.VoiceBaseUrl = "https://api.groq.com/openai/v1"; S.VoiceModel = "whisper-large-v3"; }
             if (id == "openai") { S.VoiceBaseUrl = "https://api.openai.com/v1"; S.VoiceModel = "whisper-1"; }
+            if (id == "pollinations") { S.VoiceBaseUrl = "https://gen.pollinations.ai/v1"; S.VoiceModel = "openai/whisper-large-v3"; }
             S.Save();
             VoiceBase.Text = S.VoiceBaseUrl;
             VoiceModel.Text = S.VoiceModel;
@@ -506,6 +508,14 @@ namespace Isle.Views
             S.Save();
             VoiceKey.Password = "";
             VoiceKeyState.Text = string.IsNullOrEmpty(S.VoiceKey) ? "Используется ключ из раздела «ИИ», если сервис тот же" : "•••••••• свой ключ сохранён";
+        }
+
+        private void OnVoiceDeleteKey(object s, RoutedEventArgs e)
+        {
+            S.VoiceKey = "";
+            S.Save();
+            VoiceKey.Password = "";
+            VoiceKeyState.Text = "Свой ключ удалён · используется ключ из раздела «ИИ», если сервис тот же";
         }
 
         private void OnFps(object s, RoutedEventArgs e)
