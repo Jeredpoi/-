@@ -86,9 +86,7 @@ namespace Isle
             AppHost.Voice.Level += lvl => Dispatcher.InvokeAsync(() =>
             {
                 if (_currentToast?.ReplaceKey != "voice" || !AppHost.Voice.Recording) return;
-                ToastBar.Visibility = Visibility.Visible;
-                double barW = Math.Max(0, Island.ActualWidth - 16 * 2 - 36 - 12);
-                ToastBarFill.Width = Math.Clamp(lvl * 2.2, 0.03, 1) * barW;
+                VoiceWave.Push(lvl); // столбики волны: чем громче — тем выше
             });
             AppHost.Lyrics = new LyricsState(AppHost.Media);
             AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
@@ -1293,6 +1291,11 @@ namespace Isle
             if (t.Progress.HasValue) w = Math.Max(w, 280);
             if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
+            // запись голоса — вместо полоски волна, как в ChatGPT
+            bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
+            if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
+            VoiceWave.Visibility = voiceWave ? Visibility.Visible : Visibility.Collapsed;
+            if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 18; w = Math.Max(w, 320); }
             double imageSize = compact ? 26 : 36;
             // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
             ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
