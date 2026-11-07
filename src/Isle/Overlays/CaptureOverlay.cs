@@ -29,6 +29,8 @@ namespace Isle.Overlays
         private int _pw, _ph;
         private Point? _start;
         private readonly TaskCompletionSource<object> _tcs = new();
+        private readonly System.Windows.Threading.DispatcherTimer _escPoll = new() { Interval = TimeSpan.FromMilliseconds(30) };
+        private bool _escWasDown = true, _escArmed;
 
         private CaptureOverlay(BitmapSource shot, Int32Rect vs, CaptureMode mode)
         {
@@ -78,11 +80,24 @@ namespace Isle.Overlays
             {
                 var h = new WindowInteropHelper(this).Handle;
                 SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height, 0x0040);
+                // Windows не даёт фоновой программе забрать фокус обычным Activate() — без фокуса не доходил Esc
+                Isle.Native.Win32.ForceForeground(h);
                 Activate();
                 Focus();
+                Keyboard.Focus(this);
                 UpdateDim(Rect.Empty);
+                _escPoll.Start();
             };
             KeyDown += (_, e) => { if (e.Key == Key.Escape) Finish(null); };
+            // Подстраховка: Esc ловим напрямую с клавиатуры, даже если окно так и не получило фокус
+            _escPoll.Tick += (_, __) =>
+            {
+                bool down = (Isle.Native.Win32.GetAsyncKeyState(0x1B) & 0x8000) != 0;
+                if (down && !_escWasDown && _escArmed) Finish(null);
+                _escWasDown = down;
+                _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
+            };
+            Closed += (_, __) => _escPoll.Stop();
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;

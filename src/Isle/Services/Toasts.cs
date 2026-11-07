@@ -16,6 +16,8 @@ namespace Isle.Services
         public string Icon { get; set; } = Icons.Info;
         public Color Accent { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public ImageSource Image { get; set; }
+        /// <summary>Пипетка: слева квадратик с этим цветом в окантовке вместо иконки.</summary>
+        public Color? Swatch { get; set; }
         public string FolderPath { get; set; }
         /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
         public bool RoundImage { get; set; }

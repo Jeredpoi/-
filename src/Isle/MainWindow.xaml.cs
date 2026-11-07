@@ -1388,14 +1388,19 @@ namespace Isle
             bool weatherIcon = !string.IsNullOrEmpty(t.WeatherKind);
             if (weatherIcon) ToastWeather.Kind = t.WeatherKind;
             ToastWeather.Visibility = weatherIcon ? Visibility.Visible : Visibility.Collapsed; // анимированная погода в предупреждении
-            ToastIcon.Visibility = t.Image == null && !weatherIcon ? Visibility.Visible : Visibility.Collapsed;
+            bool swatch = t.Swatch.HasValue;
+            ToastSwatch.Visibility = swatch ? Visibility.Visible : Visibility.Collapsed;
+            if (swatch) ((Border)ToastSwatch.Child).Background = new SolidColorBrush(t.Swatch.Value);
+            // у квадратика цвета подложка острова не нужна — он сам по себе
+            ToastIconBox.Background = swatch ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x17));
+            ToastIcon.Visibility = t.Image == null && !weatherIcon && !swatch ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
             ToastRing.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             bool compact = string.IsNullOrEmpty(t.Subtitle) && string.IsNullOrEmpty(t.SpeedText) && !t.Progress.HasValue;
             ToastIconBox.Width = ToastIconBox.Height = compact ? 26 : 36;
-            ToastIconBox.CornerRadius = new CornerRadius(compact ? 13 : 18);
+            ToastIconBox.CornerRadius = new CornerRadius(swatch ? 8 : compact ? 13 : 18);
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
             ToastFolderButton.Tag = t.FolderPath;
             ToastFolderButton.Visibility = !string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath) ? Visibility.Visible : Visibility.Collapsed;

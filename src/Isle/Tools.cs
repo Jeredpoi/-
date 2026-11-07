@@ -111,8 +111,8 @@ namespace Isle
             ClipboardService.SetText(hex);
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = hex + " скопирован", Subtitle = "rgb(" + c.R + ", " + c.G + ", " + c.B + ")",
-                Icon = Icons.Pipette, Accent = c, Important = true, Duration = TimeSpan.FromSeconds(3)
+                Kind = ToastKind.Success, Title = hex, Subtitle = "rgb(" + c.R + ", " + c.G + ", " + c.B + ") · скопирован",
+                Icon = Icons.Pipette, Accent = c, Swatch = c, Important = true, Duration = TimeSpan.FromSeconds(3.5)
             });
         }
 
