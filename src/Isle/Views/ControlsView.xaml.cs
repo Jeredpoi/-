@@ -14,7 +14,8 @@ namespace Isle.Views
     {
         private static readonly TimeSpan ConfirmTime = TimeSpan.FromSeconds(3);
         private static readonly Brush On = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
-        private static readonly Brush Off = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20));
+        private static readonly Brush Off = Brushes.Black;
+        private static readonly Brush OnBorder = new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x52));
         private static readonly Brush DangerBg = new SolidColorBrush(Color.FromRgb(0x3A, 0x12, 0x14));
         private static readonly Brush DangerFg = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
 
@@ -35,7 +36,14 @@ namespace Isle.Views
             AppHost.Audio.DeviceChanged += () => { SyncVolume(); FillDevices(); };
         }
 
-        public async void OnShown()
+        public void OnShown()
+        {
+            Cascade();
+            Refresh();
+        }
+
+        /// <summary>Обновить состояния плиток (после переключения — без повторной анимации появления).</summary>
+        private async void Refresh()
         {
             SyncVolume();
             FillDevices();
@@ -45,15 +53,19 @@ namespace Isle.Views
             var net = SystemControls.Network();
             NetName.Text = net.name;
             NetStatus.Text = net.status;
-            SetTile(NetDot, null, net.up);
+            SetTile(NetBtn, NetDot, null, net.up);
+            SetBadge(NetBadgeText, net.up ? "Вкл" : "Нет сети");
 
             bool dark = SystemControls.IsDarkTheme;
             ThemeStatus.Text = dark ? "Включена" : "Выключена";
-            SetTile(ThemeDot, ThemeIcon, dark);
+            SetTile(ThemeTile, ThemeDot, ThemeIcon, dark);
+            SetBadge(ThemeBadgeText, dark ? "Вкл" : "Выкл");
+            SetBadge(TaskBadgeText, "Задачи");
 
             var bt = await SystemControls.GetRadio(Radios.RadioKind.Bluetooth);
             BtStatus.Text = bt == null ? "Нет адаптера" : bt.Value ? "Включён" : "Выключен";
-            SetTile(BtDot, BtIcon, bt == true);
+            SetTile(BtTile, BtDot, BtIcon, bt == true);
+            SetBadge(BtBadgeText, bt == null ? "Нет" : bt.Value ? "Вкл" : "Выкл");
             if (bt == true)
             {
                 // подключённые устройства: одно — по имени, несколько — числом (имена во всплывающей подсказке)
@@ -77,12 +89,38 @@ namespace Isle.Views
             return m10 == 1 && m100 != 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
         }
 
-        /// <summary>Включённое — белый кружок с чёрной иконкой, выключенное — тёмный.</summary>
-        private static void SetTile(Border dot, Helpers.Icon icon, bool on)
+        /// <summary>Включённое — белая плитка-иконка с чёрным глифом и светлой обводкой карточки, выключенное — чёрная с белым глифом.</summary>
+        private static void SetTile(Button tile, Border dot, Helpers.Icon icon, bool on)
         {
+            if (on) tile.BorderBrush = OnBorder; else tile.ClearValue(BorderBrushProperty);
             dot.Background = on ? On : Off;
             var ic = icon ?? (dot.Child as Helpers.Icon);
             if (ic != null) ic.Foreground = on ? Brushes.Black : new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
+        }
+
+        private static void SetBadge(TextBlock text, string value)
+        {
+            text.Text = value;
+            ((Border)text.Parent).Visibility = string.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>Плитки, строка громкости и кнопки питания появляются каскадом: сдвиг 12 px снизу, шаг 70 мс.</summary>
+        private void Cascade()
+        {
+            var items = new FrameworkElement[] { WifiTile, BtTile, ThemeTile, TaskTile, VolumeCard, PowerRow };
+            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
+            for (int i = 0; i < items.Length; i++)
+            {
+                var el = items[i];
+                var begin = TimeSpan.FromMilliseconds(i * 70);
+                var tt = el.RenderTransform as TranslateTransform;
+                if (tt == null) el.RenderTransform = tt = new TranslateTransform();
+                // до своей очереди элемент скрыт и сдвинут (базовые значения), анимация доводит до места и держит
+                tt.Y = 12;
+                el.Opacity = 0;
+                tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(450)) { BeginTime = begin, EasingFunction = ease });
+                el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(350)) { BeginTime = begin });
+            }
         }
 
         private void OnNetwork(object s, RoutedEventArgs e) => SystemControls.OpenSettings("ms-settings:network");
@@ -112,7 +150,7 @@ namespace Isle.Views
                     bool ok = await SystemControls.ConnectWifiAsync(ssid);
                     if (!ok) SystemControls.OpenSettings("ms-settings:network-wifi"); // новая сеть с паролем — пароль вводится в Windows
                     await System.Threading.Tasks.Task.Delay(1500);
-                    OnShown();
+                    Refresh();
                 };
                 menu.Items.Add(item);
             }
@@ -127,13 +165,13 @@ namespace Isle.Views
             BtStatus.Text = "…";
             var r = await SystemControls.ToggleRadio(Radios.RadioKind.Bluetooth);
             if (r == null) SystemControls.OpenSettings("ms-settings:bluetooth");
-            OnShown();
+            Refresh();
         }
 
         private void OnTheme(object s, RoutedEventArgs e)
         {
             SystemControls.SetDarkTheme(!SystemControls.IsDarkTheme);
-            OnShown();
+            Refresh();
         }
 
         private void OnTaskMgr(object s, RoutedEventArgs e) => SystemControls.TaskManager();
@@ -146,7 +184,7 @@ namespace Isle.Views
             var v = AppHost.Audio.Volume * 100;
             Volume.Value = v;
             VolText.Text = ((int)Math.Round(v)).ToString();
-            VolIcon.Kind = AppHost.Audio.Muted ? "Mute" : "Volume";
+            VolIcon.Kind = AppHost.Audio.Muted || v < 0.5 ? "Mute" : "Volume";
             _settingVolume = false;
         }
 
@@ -154,6 +192,7 @@ namespace Isle.Views
         {
             if (VolText == null) return;
             VolText.Text = ((int)Math.Round(e.NewValue)).ToString();
+            VolIcon.Kind = AppHost.Audio.Muted || e.NewValue < 0.5 ? "Mute" : "Volume"; // на нуле — перечёркнутый динамик
             if (_settingVolume) return;
             AppHost.Audio.Volume = (float)(e.NewValue / 100.0);
         }
