@@ -143,18 +143,20 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Border x:Name="ToastIconBox" Width="34" Height="34" CornerRadius="17" Background="#141417" VerticalAlignment="Center">
+                            <Border x:Name="ToastIconBox" Width="36" Height="36" CornerRadius="12" Background="#0E0E10" VerticalAlignment="Center">
                                 <Grid>
                                     <Image x:Name="ToastImage" Stretch="Uniform"/>
                                     <!-- пипетка: квадратик выбранного цвета с окантовкой -->
-                                    <Border x:Name="ToastSwatch" CornerRadius="8" BorderBrush="#4A4A55" BorderThickness="1.5" Visibility="Collapsed">
-                                        <Border CornerRadius="6" BorderBrush="#40000000" BorderThickness="1"/>
+                                    <Border x:Name="ToastSwatch" CornerRadius="14" BorderBrush="#1C1C20" BorderThickness="2.5" Visibility="Collapsed">
+                                        <Border x:Name="ToastSwatchFill" Margin="5.5" CornerRadius="9"/>
                                     </Border>
+                                    <!-- пипетка: зелёная «змейка» обегает плитку и замыкается — цвет скопирован -->
+                                    <Rectangle x:Name="ToastSnake" RadiusX="14" RadiusY="14" Stroke="#4ADE80" StrokeThickness="2.5" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
                                     <!-- «выключено»: косая черта поверх значка -->
                                     <Line x:Name="ToastOffSlash" X1="9" Y1="9" X2="25" Y2="25" Stroke="#F87171" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                           HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
-                                    <TextBlock x:Name="ToastBadge" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="ToastBadge" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     <h:WeatherGlyph x:Name="ToastWeather" Margin="2" Visibility="Collapsed"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>
@@ -164,18 +166,18 @@
                                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                 <Grid Grid.Row="0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="ToastTitle" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ToastTitle" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"/>
                                     <TextBlock x:Name="ToastSpeed" Grid.Column="1" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="10,0,0,0"/>
                                 </Grid>
                                 <Grid Grid.Row="1" Margin="0,2,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="ToastSub" FontSize="12" Foreground="#B9B9C3" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ToastSub" FontSize="13" Foreground="#8B8B95" TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"/>
                                     <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="#B9B9C3" Margin="10,0,0,0"/>
                                 </Grid>
                                 <!-- волна голоса во время диктовки (Ctrl+Alt+D / Ctrl+Alt+A / микрофон в чате) -->
                                 <h:VoiceWave x:Name="VoiceWave" Grid.Row="2" Height="20" Margin="0,5,0,0" Visibility="Collapsed"/>
-                                <Grid x:Name="ToastBar" Grid.Row="2" Height="4" Margin="0,4,0,0" Visibility="Collapsed">
-                                    <Border CornerRadius="2" Background="{StaticResource Track}"/>
+                                <Grid x:Name="ToastBar" Grid.Row="2" Height="4" Margin="0,8,0,0" Visibility="Collapsed">
+                                    <Border CornerRadius="2" Background="#1C1C20"/>
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
                                 </Grid>
                             </Grid>
