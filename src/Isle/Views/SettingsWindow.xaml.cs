@@ -237,6 +237,14 @@ namespace Isle.Views
             S.Save();
         }
 
+        private async void OnSteamRestart(object s, RoutedEventArgs e)
+        {
+            SteamExact.IsChecked = true;
+            S.SteamExactSpeed = true;
+            S.Save();
+            SteamExactStatus.Text = await Services.SteamClientApi.RestartNowAsync();
+        }
+
         private void OnSteamExact(object s, RoutedEventArgs e)
         {
             if (_loading) return;
