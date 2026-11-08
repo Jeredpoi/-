@@ -170,6 +170,7 @@ namespace Isle
             // Таймер остаётся подстраховкой: раз в секунду, пока что-то качается (скорость, остаток), и раз в 8 с в простое.
             _downloadKick.Tick += (_, __) => { _downloadKick.Stop(); RefreshSteamDownload(); };
             _dlDoneTimer.Tick += (_, __) => ClearDownloadDone();
+            SteamClientApi.Updated += o => Dispatcher.BeginInvoke(new Action(() => OnSteamOverview(o)));
             // не перезапускаем таймер на каждое событие: браузер пишет файл непрерывно, и проверка иначе откладывалась бы бесконечно
             DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { if (!_downloadKick.IsEnabled) _downloadKick.Start(); });
 
@@ -1746,8 +1747,6 @@ namespace Isle
         {
             try
             {
-                // точные цифры из самого Steam (если включено и Steam отвечает) — иначе считаем сами, как раньше
-                var exact = await SteamClientApi.ReadAsync();
                 var result = await Task.Run(() =>
                 {
                     var steam = SteamDownloadService.ReadCurrent();
@@ -1842,11 +1841,15 @@ namespace Isle
                     });
 
                 // Идущая загрузка живёт в самой чёлке (как музыка или таймер), а не всплывашками каждые 2 секунды
-                var steam = Exact(result.steam, exact);
+                // «Точная скорость Steam»: загрузку Steam показываем ТОЛЬКО по сводке самого Steam (живая подписка),
+                // свой подсчёт по логу не используется. Лог Steam нужен лишь для «Загружено» и «Приостановлено».
+                var steam = AppSettings.Current.SteamExactSpeed ? FromOverview(SteamClientApi.Last) : result.steam;
                 SteamClientApi.DownloadActive = steam != null;
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
-                    SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
+                    SetDownload(AppSettings.Current.SteamExactSpeed
+                        ? new DownloadState(steam.Name, "Steam", steam.Progress, steam.BytesPerSecond > 0 ? steam.SpeedText.TrimStart('~') : "", SteamEta(steam.Remaining), steam.Icon, steam.Got, steam.Total)
+                        : new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
                 else if (download != null)
                 {
                     // скорость из истории браузера рваная — если есть недокачанный файл, берём его скорость (по росту файла)
@@ -1863,26 +1866,57 @@ namespace Isle
         }
 
         /// <summary>
-        /// Подставляет цифры самого Steam (скорость сети, скачано / всего, остаток) в найденную по логу загрузку.
-        /// Новая установка — «Загрузка данных», обновление установленной игры — установка файлов (как главный процент в Steam).
+        /// Сводка Steam → загрузка для чёлки, один в один как на странице загрузок Steam:
+        /// пока качаются данные — «Загрузка данных X / Y», скорость сети и остаток от Steam; потом — «Установка файлов».
         /// </summary>
-        private static SteamDownload Exact(SteamDownload steam, SteamClientApi.Overview o)
+        private static SteamDownload FromOverview(SteamClientApi.Overview o)
         {
-            if (steam == null || steam.IsPaused || o == null || o.Paused || o.AppId != steam.AppId) return steam;
-            if (!string.Equals(o.State, "Updating", StringComparison.OrdinalIgnoreCase)) return steam;
+            if (o == null || o.AppId == 0 || o.Paused) return null;
+            if (string.Equals(o.State, "None", StringComparison.OrdinalIgnoreCase) || string.Equals(o.State, "Stopping", StringComparison.OrdinalIgnoreCase)) return null;
             bool downloading = o.ToDownload > 0 && o.Downloaded < o.ToDownload;
-            bool stage = !o.IsInstall ? o.ToStage > 0 : !downloading && o.ToStage > 0;
+            bool stage = !downloading && o.ToStage > 0;
             long got = stage ? o.Staged : o.Downloaded, total = stage ? o.ToStage : o.ToDownload;
-            if (total <= 0) return steam;
+            double progress = total > 0 ? Math.Clamp((double)got / total, 0, 1) : 0;
+            // новая игра: Steam параллельно распаковывает — процент больший из загрузки и установки
+            if (o.IsInstall && o.ToStage > 0) progress = Math.Max(progress, Math.Clamp((double)o.Staged / o.ToStage, 0, 1));
+            var info = SteamDownloadService.AppInfo(o.AppId);
             return new SteamDownload
             {
-                AppId = steam.AppId, Name = steam.Name, Icon = steam.Icon, FolderPath = steam.FolderPath,
-                // новая игра: процент — больший из «загрузки данных» и «установки файлов», как растёт в Steam
-                Progress = Math.Max(Math.Clamp((double)got / total, 0, 1), o.IsInstall && o.ToStage > 0 ? Math.Clamp((double)o.Staged / o.ToStage, 0, 1) : 0),
-                Got = got, Total = total,
+                AppId = o.AppId, Name = info.Name, Icon = info.Icon, FolderPath = info.Folder,
+                Progress = progress, Got = got, Total = total,
                 BytesPerSecond = downloading ? o.NetworkBytesPerSecond : 0,
                 Remaining = o.SecondsRemaining > 0 ? TimeSpan.FromSeconds(o.SecondsRemaining) : (TimeSpan?)null
             };
+        }
+
+        /// <summary>Остаток как в Steam: 1:16 или 1:02:03.</summary>
+        private static string SteamEta(TimeSpan? t) => t is not TimeSpan v ? null
+            : v.TotalHours >= 1 ? ((int)v.TotalHours) + ":" + v.Minutes.ToString("00") + ":" + v.Seconds.ToString("00")
+            : v.Minutes + ":" + v.Seconds.ToString("00");
+
+        private bool _steamLiveShown;
+        private DateTime _lastShownLog;
+
+        /// <summary>Живая сводка от Steam — сразу в чёлку, без ожидания таймера.</summary>
+        private void OnSteamOverview(SteamClientApi.Overview o)
+        {
+            if (!AppSettings.Current.SteamExactSpeed || _dlDone != null) return;
+            var s = FromOverview(o);
+            SteamClientApi.DownloadActive = s != null;
+            if (s == null)
+            {
+                if (_steamLiveShown) { _steamLiveShown = false; RefreshSteamDownload(); } // загрузка Steam закончилась — пусть решит общий опрос
+                return;
+            }
+            _steamLiveShown = true;
+            var state = new DownloadState(s.Name, "Steam", s.Progress, s.BytesPerSecond > 0 ? s.SpeedText.TrimStart('~') : "", SteamEta(s.Remaining), s.Icon, s.Got, s.Total);
+            SetDownload(state);
+            if (DateTime.Now - _lastShownLog >= TimeSpan.FromSeconds(1))
+            {
+                _lastShownLog = DateTime.Now;
+                Diag.Write("показано: «" + state.Name + "» " + (state.Progress is double p ? (int)Math.Floor(p * 100) + "%" : "—")
+                    + " · " + DlSpeed.Text + DlSub.Text);
+            }
         }
 
         /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -30,23 +31,17 @@ namespace Isle.Services
         private const string FlagFile = ".cef-enable-remote-debugging";
         private const string DebugHost = "http://127.0.0.1:8080";
 
-        // Обещание, которое отдаёт одну свежую сводку и сразу отписывается.
-        private const string OverviewJs =
-            "(()=>new Promise(r=>{let h=null,done=false;" +
-            "const fin=v=>{if(done)return;done=true;try{h&&h.unregister()}catch(e){}r(v)};" +
-            "const t=setTimeout(()=>fin(null),1500);" +
-            "try{h=SteamClient.Downloads.RegisterForDownloadOverview(o=>{clearTimeout(t);fin(JSON.stringify(o))});}catch(e){fin(null)}" +
-            "if(done){try{h&&h.unregister()}catch(e){}}}))()";
-
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(1.5) };
-        private static readonly SemaphoreSlim Gate = new(1, 1);
         private static ClientWebSocket _ws;
         private static int _id;
-        private static DateTime _retryAt = DateTime.MinValue;
+        private static Task _live;
+        private static CancellationTokenSource _liveCts;
         private static bool _restartLoop;
 
         /// <summary>Последняя сводка (null — недоступно: выключено, Steam закрыт или ещё не перезапущен).</summary>
         public static Overview Last { get; private set; }
+        /// <summary>Новая сводка от Steam (null — связь со Steam потеряна). Приходит сразу, как Steam её прислал.</summary>
+        public static event Action<Overview> Updated;
         /// <summary>Isle сейчас показывает загрузку Steam — перезапускать Steam нельзя (ставит MainWindow).</summary>
         public static volatile bool DownloadActive;
         public static DateTime LastAt { get; private set; }
@@ -60,6 +55,8 @@ namespace Isle.Services
         public static void Apply(bool enabled)
         {
             var root = SteamDownloadService.SteamRoot();
+            Diag.Write("Isle " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version + ": точная скорость Steam " + (enabled ? "включена" : "выключена")
+                + ", папка Steam: " + (root ?? "не найдена"));
             if (root == null) return;
             var flag = Path.Combine(root, FlagFile);
             try
@@ -68,15 +65,17 @@ namespace Isle.Services
                 {
                     if (File.Exists(flag)) File.Delete(flag);
                     PatchAutostart(false);
-                    CloseSocket();
-                    Last = null;
+                    PatchShortcuts(false);
+                    StopLive();
                     return;
                 }
                 if (!File.Exists(flag)) File.WriteAllText(flag, ""); // Linux/Steam Deck; на Windows нужен ключ запуска (ниже)
                 PatchAutostart(true);
+                PatchShortcuts(true); // ярлыки Steam (рабочий стол, «Пуск», панель задач) — тоже с ключом
             }
-            catch (Exception ex) { App.Trace("точная скорость Steam: не удалось записать файл: " + ex.Message); return; }
+            catch (Exception ex) { Log("точная скорость Steam: не удалось записать файл: " + ex.Message); return; }
             if (!_restartLoop) { _restartLoop = true; _ = Task.Run(() => RestartWhenSafeAsync(root)); }
+            StartLive();
         }
 
         /// <summary>
@@ -90,7 +89,7 @@ namespace Isle.Services
             bool first = true;
             DateTime handledStart = DateTime.MinValue;
             string lastNote = null;
-            void Note(string text) { if (text != lastNote) { lastNote = text; App.Trace("точная скорость Steam: " + text); } }
+            void Note(string text) { if (text != lastNote) { lastNote = text; Log("точная скорость Steam: " + text); } }
             try
             {
                 while (AppSettings.Current.SteamExactSpeed)
@@ -111,7 +110,7 @@ namespace Isle.Services
                     await Task.Delay(TimeSpan.FromSeconds(30));
                 }
             }
-            catch (Exception ex) { App.Trace("точная скорость Steam: перезапуск не удался: " + ex.Message); }
+            catch (Exception ex) { Log("точная скорость Steam: перезапуск не удался: " + ex.Message); }
             finally { _restartLoop = false; }
         }
 
@@ -125,6 +124,57 @@ namespace Isle.Services
 
         private const string DebugArg = "-cef-enable-debugging";
 
+        /// <summary>
+        /// Ярлыки Steam на рабочем столе, в меню «Пуск» и на панели задач: дописываем ключ в «Объект» ярлыка,
+        /// чтобы Steam, запущенный как обычно, сразу отдавал данные загрузок и перезапускать его не приходилось.
+        /// Общие ярлыки (для всех пользователей) без прав администратора не изменить — их просто пропускаем.
+        /// </summary>
+        private static void PatchShortcuts(bool add)
+        {
+            var app = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dirs = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+                Path.Combine(app, @"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"),
+                Path.Combine(app, @"Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"),
+            };
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null) return;
+            dynamic shell = null;
+            try
+            {
+                shell = Activator.CreateInstance(shellType);
+                foreach (var dir in dirs)
+                {
+                    if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+                    IEnumerable<string> links;
+                    try { links = Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories).ToList(); }
+                    catch { continue; }
+                    foreach (var link in links)
+                    {
+                        try
+                        {
+                            dynamic sc = shell.CreateShortcut(link);
+                            string target = sc.TargetPath ?? "";
+                            if (!Path.GetFileName(target).Equals("steam.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                            string args = sc.Arguments ?? "";
+                            bool has = args.Contains(DebugArg, StringComparison.OrdinalIgnoreCase);
+                            if (add == has) continue;
+                            sc.Arguments = add ? (args + " " + DebugArg).Trim() : args.Replace(DebugArg, "").Trim();
+                            sc.Save();
+                            Log("точная скорость Steam: ярлык " + (add ? "дополнен" : "возвращён") + ": " + link);
+                        }
+                        catch { } // общий ярлык без прав администратора — пропускаем
+                    }
+                }
+            }
+            catch (Exception ex) { Log("точная скорость Steam: ярлыки: " + ex.Message); }
+            finally { if (shell != null) try { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell); } catch { } }
+        }
+
         /// <summary>Автозапуск Steam вместе с Windows — с ключом, чтобы данные загрузок были доступны сразу.</summary>
         private static void PatchAutostart(bool add)
         {
@@ -136,7 +186,7 @@ namespace Isle.Services
                 if (add && !has) run.SetValue("Steam", cmd.TrimEnd() + " " + DebugArg);
                 else if (!add && has) run.SetValue("Steam", cmd.Replace(" " + DebugArg, "").Replace(DebugArg, "").TrimEnd());
             }
-            catch (Exception ex) { App.Trace("точная скорость Steam: автозапуск: " + ex.Message); }
+            catch (Exception ex) { Log("точная скорость Steam: автозапуск: " + ex.Message); }
         }
 
         private static bool SteamRunning()
@@ -174,19 +224,84 @@ namespace Isle.Services
         {
             var exe = Path.Combine(root, "steam.exe");
             if (!File.Exists(exe)) return;
-            App.Trace("точная скорость Steam: перезапускаю Steam");
+            Log("точная скорость Steam: перезапускаю Steam");
             Notify(DownloadActive ? "Steam перезапустится на минуту — загрузка продолжится сама" : "Steam перезапустится на минуту, свёрнутым в трей");
             Process.Start(new ProcessStartInfo(exe, "-shutdown") { UseShellExecute = false })?.Dispose();
             for (int i = 0; i < 60 && SteamRunning(); i++) await Task.Delay(1000); // Steam закрывается до минуты
-            if (SteamRunning()) { App.Trace("точная скорость Steam: Steam не закрылся за минуту — не трогаю"); return; }
+            if (SteamRunning()) { Log("точная скорость Steam: Steam не закрылся за минуту — не трогаю"); return; }
             await Task.Delay(1500);
             Process.Start(new ProcessStartInfo(exe, "-silent " + DebugArg) { UseShellExecute = false })?.Dispose(); // в трей, без окна
             for (int i = 0; i < 90; i++) // ждём, пока Steam поднимется
             {
                 await Task.Delay(2000);
-                if (await DebuggerUpAsync()) { App.Trace("точная скорость Steam: включена"); Notify("Точная скорость Steam включена"); return; }
+                if (await DebuggerUpAsync()) { Log("точная скорость Steam: включена"); Notify("Точная скорость Steam включена"); return; }
             }
-            App.Trace("точная скорость Steam: Steam запустился, но отладчик на 127.0.0.1:8080 не отвечает");
+            Log("точная скорость Steam: Steam запустился, но отладчик на 127.0.0.1:8080 не отвечает");
+        }
+
+        /// <summary>Отвечает ли встроенный браузер Steam (точная скорость работает).</summary>
+        public static Task<bool> IsWorkingAsync() => DebuggerUpAsync();
+
+        /// <summary>
+        /// Кнопка «Включить точную скорость»: ключ в ярлыки и автозапуск, Steam закрывается полностью
+        /// (вместе с играми и программами из Steam; не закрылся за 20 с — процессы завершаются),
+        /// запускается с ключом, и Isle ждёт, пока данные пойдут.
+        /// </summary>
+        public static async Task<bool> ActivateAsync(IProgress<string> report)
+        {
+            var root = SteamDownloadService.SteamRoot();
+            var exe = root == null ? null : Path.Combine(root, "steam.exe");
+            if (exe == null || !File.Exists(exe)) { report.Report("Steam не найден"); return false; }
+            AppSettings.Current.SteamExactSpeed = true;
+            await Task.Run(() => Apply(true));
+            if (await DebuggerUpAsync()) { report.Report("Готово — точная скорость уже работает"); return true; }
+
+            if (!await RestartGate.WaitAsync(0)) { report.Report("Steam уже перезапускается — подожди минуту"); return false; }
+            try
+            {
+                if (SteamRunning())
+                {
+                    report.Report("Закрываю Steam…");
+                    Process.Start(new ProcessStartInfo(exe, "-shutdown") { UseShellExecute = false })?.Dispose();
+                    for (int i = 0; i < 20 && SteamRunning(); i++) await Task.Delay(1000);
+                    if (SteamRunning())
+                    {
+                        report.Report("Steam не закрылся сам — завершаю его процессы…");
+                        await Task.Run(KillSteam);
+                        for (int i = 0; i < 10 && SteamRunning(); i++) await Task.Delay(1000);
+                    }
+                    if (SteamRunning()) { report.Report("Не получилось закрыть Steam — закрой его вручную (трей → «Выход») и нажми ещё раз"); return false; }
+                    await Task.Delay(1500);
+                }
+                report.Report("Запускаю Steam с точной скоростью…");
+                Process.Start(new ProcessStartInfo(exe, "-silent " + DebugArg) { UseShellExecute = false })?.Dispose();
+                for (int i = 0; i < 60; i++)
+                {
+                    await Task.Delay(2000);
+                    if (await DebuggerUpAsync())
+                    {
+                        Log("точная скорость Steam: включена кнопкой");
+                        report.Report("Готово — скорость, объём и время теперь берутся прямо из Steam");
+                        return true;
+                    }
+                }
+                report.Report("Steam запустился, но данные не отвечают. Пришли файл isle-trace.log");
+                Log("точная скорость Steam: после запуска с ключом отладчик на 127.0.0.1:8080 не отвечает");
+                return false;
+            }
+            catch (Exception ex) { report.Report("Ошибка: " + ex.Message); return false; }
+            finally { RestartGate.Release(); }
+        }
+
+        /// <summary>Завершить все процессы Steam (если сам не закрылся).</summary>
+        private static void KillSteam()
+        {
+            foreach (var name in new[] { "steam", "steamwebhelper", "steamservice", "gameoverlayui" })
+                foreach (var p in Process.GetProcessesByName(name))
+                {
+                    try { p.Kill(true); } catch { }
+                    finally { p.Dispose(); }
+                }
         }
 
         /// <summary>Перезапустить Steam сейчас (кнопка в Настройках) — если не идёт игра.</summary>
@@ -229,95 +344,185 @@ namespace Isle.Services
             catch { return false; }
         }
 
-        // ===================== чтение =====================
+        // ===================== живая сводка =====================
 
-        /// <summary>Свежая сводка загрузки из самого Steam или null.</summary>
-        public static async Task<Overview> ReadAsync()
+        // Подписка внутри Steam: каждую новую сводку загрузки Steam сам передаёт в Isle через «привязку» isleDl.
+        private const string SubscribeJs =
+            "(()=>{try{if(window.__isleDl&&window.__isleDl.unregister)window.__isleDl.unregister();}catch(e){}" +
+            "window.__isleDl=SteamClient.Downloads.RegisterForDownloadOverview(o=>{try{isleDl(JSON.stringify(o))}catch(e){}});" +
+            "return 'подписка оформлена';})()";
+        private const string ProbeJs =
+            "(typeof SteamClient!=='undefined'&&!!SteamClient.Downloads&&typeof SteamClient.Downloads.RegisterForDownloadOverview==='function')";
+
+        public static void StartLive()
         {
-            if (!AppSettings.Current.SteamExactSpeed || DateTime.Now < _retryAt) return null;
-            if (!await Gate.WaitAsync(0)) return Last;
-            try
-            {
-                if (_ws == null || _ws.State != WebSocketState.Open)
-                {
-                    CloseSocket();
-                    var url = await FindContextAsync();
-                    if (url == null) { _retryAt = DateTime.Now.AddSeconds(15); return null; }
-                    var ws = new ClientWebSocket();
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    await ws.ConnectAsync(new Uri(url), cts.Token);
-                    _ws = ws;
-                }
-                var json = await EvaluateAsync(OverviewJs);
-                if (json == null) return null;
-                using var doc = JsonDocument.Parse(json);
-                var o = doc.RootElement;
-                Last = new Overview(
-                    Int(o, "update_appid"), Str(o, "update_state"), Bool(o, "paused"), Bool(o, "update_is_install"),
-                    Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"),
-                    Long(o, "update_bytes_staged"), Long(o, "update_bytes_to_stage"),
-                    Num(o, "update_network_bytes_per_second"), Num(o, "update_disc_bytes_per_second"), Num(o, "update_seconds_remaining"));
-                LastAt = DateTime.Now;
-                return Last;
-            }
-            catch (Exception ex)
-            {
-                App.Trace("точная скорость Steam: " + ex.Message);
-                CloseSocket();
-                _retryAt = DateTime.Now.AddSeconds(10);
-                return null;
-            }
-            finally { Gate.Release(); }
+            if (_live != null && !_live.IsCompleted) return;
+            _liveCts = new CancellationTokenSource();
+            var token = _liveCts.Token;
+            _live = Task.Run(() => LiveLoopAsync(token));
         }
 
-        /// <summary>Страница «SharedJSContext» встроенного браузера Steam — там доступен объект SteamClient.</summary>
-        private static async Task<string> FindContextAsync()
+        private static void StopLive()
         {
-            try
+            try { _liveCts?.Cancel(); } catch { }
+            CloseSocket();
+            Last = null;
+            Updated?.Invoke(null);
+        }
+
+        private static async Task LiveLoopAsync(CancellationToken token)
+        {
+            Diag.Write("=== запуск живой сводки Steam ===");
+            string lastProblem = null;
+            while (!token.IsCancellationRequested && AppSettings.Current.SteamExactSpeed)
             {
-                var text = await Http.GetStringAsync(DebugHost + "/json");
-                using var doc = JsonDocument.Parse(text);
+                string problem;
+                try { problem = await ConnectAndListenAsync(token); }
+                catch (Exception ex) { problem = "обрыв: " + ex.GetType().Name + ": " + ex.Message; }
+                CloseSocket();
+                if (Last != null) { Last = null; Updated?.Invoke(null); }
+                if (problem != lastProblem) { Diag.Write(problem); lastProblem = problem; } // одну и ту же причину не повторяем каждые 5 с
+                try { await Task.Delay(5000, token); } catch { }
+            }
+            Diag.Write("=== живая сводка остановлена ===");
+        }
+
+        /// <summary>Подключиться к Steam и слушать сводку. Возвращает причину, по которой связь закончилась.</summary>
+        private static async Task<string> ConnectAndListenAsync(CancellationToken token)
+        {
+            // 1) отвечает ли встроенный браузер Steam
+            string version;
+            try { version = await Http.GetStringAsync(DebugHost + "/json/version", token); }
+            catch (Exception ex) { return "нет ответа от " + DebugHost + " (" + ex.Message + ") — Steam закрыт или запущен без ключа " + DebugArg; }
+            Diag.Write("отладчик Steam отвечает: " + OneLine(version, 300));
+
+            // 2) список страниц
+            string listText = await Http.GetStringAsync(DebugHost + "/json", token);
+            var pages = new System.Collections.Generic.List<(string title, string url, string ws)>();
+            using (var doc = JsonDocument.Parse(listText))
                 foreach (var t in doc.RootElement.EnumerateArray())
                 {
-                    var title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
-                    if ((title.Contains("SharedJSContext", StringComparison.OrdinalIgnoreCase) || title.Contains("Shared Context", StringComparison.OrdinalIgnoreCase))
-                        && t.TryGetProperty("webSocketDebuggerUrl", out var ws))
-                        return ws.GetString();
+                    string title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
+                    string url = t.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "";
+                    string ws = t.TryGetProperty("webSocketDebuggerUrl", out var w) ? w.GetString() : null;
+                    pages.Add((title, url, ws));
                 }
+            Diag.Write("страниц в Steam: " + pages.Count + " — " + string.Join(" | ", pages.Select(p => "«" + p.title + "» " + OneLine(p.url, 80) + (p.ws == null ? " (без отладки)" : ""))));
+            var ordered = pages.Where(p => p.ws != null)
+                .OrderByDescending(p => p.title.Contains("SharedJSContext", StringComparison.OrdinalIgnoreCase) || p.title.Contains("Shared Context", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (ordered.Count == 0) return "у Steam нет страниц с отладкой";
+
+            // 3) страница, где есть SteamClient.Downloads
+            foreach (var page in ordered)
+            {
+                token.ThrowIfCancellationRequested();
+                CloseSocket();
+                try
+                {
+                    var ws = new ClientWebSocket();
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token)) { cts.CancelAfter(3000); await ws.ConnectAsync(new Uri(page.ws), cts.Token); }
+                    _ws = ws;
+                    var probe = await CallAsync("Runtime.evaluate", new { expression = ProbeJs, returnByValue = true }, token);
+                    bool ok = probe.TryGetProperty("result", out var r1) && r1.TryGetProperty("value", out var v1) && v1.ValueKind == JsonValueKind.True;
+                    Diag.Write("страница «" + page.title + "»: SteamClient.Downloads " + (ok ? "есть" : "нет"));
+                    if (!ok) continue;
+
+                    // 4) подписка
+                    await CallAsync("Runtime.enable", new { }, token);
+                    await CallAsync("Runtime.addBinding", new { name = "isleDl" }, token);
+                    var sub = await CallAsync("Runtime.evaluate", new { expression = SubscribeJs, returnByValue = true }, token);
+                    Diag.Write("подписка на сводку загрузки: " + OneLine(sub.ToString(), 300));
+                    Notify("Точная скорость Steam подключена");
+
+                    // 5) слушаем
+                    while (!token.IsCancellationRequested)
+                    {
+                        using var msg = await ReceiveAsync(token, TimeSpan.FromMinutes(30));
+                        HandleEvent(msg.RootElement);
+                    }
+                    return "остановлено";
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { return "остановлено"; }
+                catch (Exception ex) { Diag.Write("страница «" + page.title + "»: ошибка " + ex.GetType().Name + ": " + ex.Message); }
             }
-            catch { }
-            return null;
+            return "ни на одной странице Steam нет SteamClient.Downloads (или подписка оборвалась)";
         }
 
-        private static async Task<string> EvaluateAsync(string expression)
+        private static DateTime _lastRawLog;
+        private static string _lastRaw;
+
+        /// <summary>Событие от Steam: если это наша сводка — разбираем и сразу отдаём окну.</summary>
+        private static void HandleEvent(JsonElement root)
+        {
+            if (!root.TryGetProperty("method", out var m) || m.GetString() != "Runtime.bindingCalled") return;
+            var p = root.GetProperty("params");
+            if (p.GetProperty("name").GetString() != "isleDl") return;
+            var json = p.GetProperty("payload").GetString();
+            using var doc = JsonDocument.Parse(json);
+            var o = doc.RootElement;
+            Last = new Overview(
+                Int(o, "update_appid"), Str(o, "update_state"), Bool(o, "paused"), Bool(o, "update_is_install"),
+                Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"),
+                Long(o, "update_bytes_staged"), Long(o, "update_bytes_to_stage"),
+                Num(o, "update_network_bytes_per_second"), Num(o, "update_disc_bytes_per_second"), Num(o, "update_seconds_remaining"));
+            LastAt = DateTime.Now;
+            // сырая сводка Steam в журнал: каждое изменение, но не чаще раза в секунду
+            if (json != _lastRaw && DateTime.Now - _lastRawLog >= TimeSpan.FromSeconds(1))
+            {
+                Diag.Write("Steam: " + json);
+                _lastRaw = json;
+                _lastRawLog = DateTime.Now;
+            }
+            Updated?.Invoke(Last);
+        }
+
+        /// <summary>Запрос к странице Steam; пока ждём ответ, события сводки тоже обрабатываются.</summary>
+        private static async Task<JsonElement> CallAsync(string method, object prms, CancellationToken token)
         {
             int id = Interlocked.Increment(ref _id);
-            var payload = JsonSerializer.Serialize(new
+            var payload = JsonSerializer.Serialize(new { id, method, @params = prms });
+            await _ws.SendAsync(Encoding.UTF8.GetBytes(payload), WebSocketMessageType.Text, true, token);
+            for (int i = 0; i < 500; i++)
             {
-                id, method = "Runtime.evaluate",
-                @params = new { expression, awaitPromise = true, returnByValue = true }
-            });
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            await _ws.SendAsync(Encoding.UTF8.GetBytes(payload), WebSocketMessageType.Text, true, cts.Token);
-            var buf = new byte[64 * 1024];
-            for (int i = 0; i < 50; i++)
-            {
-                var sb = new StringBuilder();
-                WebSocketReceiveResult r;
-                do
+                using var msg = await ReceiveAsync(token, TimeSpan.FromSeconds(5));
+                var root = msg.RootElement;
+                if (root.TryGetProperty("id", out var mid) && mid.GetInt32() == id)
                 {
-                    r = await _ws.ReceiveAsync(buf, cts.Token);
-                    if (r.MessageType == WebSocketMessageType.Close) throw new Exception("Steam закрыл подключение");
-                    sb.Append(Encoding.UTF8.GetString(buf, 0, r.Count));
-                } while (!r.EndOfMessage);
-                using var msg = JsonDocument.Parse(sb.ToString());
-                if (!msg.RootElement.TryGetProperty("id", out var mid) || mid.GetInt32() != id) continue; // чужие события
-                if (msg.RootElement.TryGetProperty("result", out var res) && res.TryGetProperty("result", out var val)
-                    && val.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String)
-                    return v.GetString();
-                return null;
+                    if (root.TryGetProperty("error", out var err)) throw new Exception(method + ": " + err.ToString());
+                    var result = root.TryGetProperty("result", out var res) ? res.Clone() : default;
+                    if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("exceptionDetails", out var ex))
+                        throw new Exception(method + ": исключение в Steam: " + OneLine(ex.ToString(), 400));
+                    return result;
+                }
+                HandleEvent(root);
             }
-            return null;
+            throw new Exception(method + ": нет ответа");
+        }
+
+        private static async Task<JsonDocument> ReceiveAsync(CancellationToken token, TimeSpan timeout)
+        {
+            var buf = new byte[64 * 1024];
+            var sb = new StringBuilder();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(timeout);
+            WebSocketReceiveResult r;
+            do
+            {
+                r = await _ws.ReceiveAsync(buf, cts.Token);
+                if (r.MessageType == WebSocketMessageType.Close) throw new Exception("Steam закрыл подключение");
+                sb.Append(Encoding.UTF8.GetString(buf, 0, r.Count));
+            } while (!r.EndOfMessage);
+            return JsonDocument.Parse(sb.ToString());
+        }
+
+        /// <summary>Строка и в общий журнал запуска, и в подробный журнал загрузок.</summary>
+        private static void Log(string text) { App.Trace(text); Diag.Write(text); }
+
+        private static string OneLine(string s, int max)
+        {
+            s = (s ?? "").Replace("\r", " ").Replace("\n", " ");
+            return s.Length > max ? s.Substring(0, max) + "…" : s;
         }
 
         private static void CloseSocket()
