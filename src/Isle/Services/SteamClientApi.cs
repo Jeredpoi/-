@@ -468,20 +468,9 @@ namespace Isle.Services
             var p = root.GetProperty("params");
             if (p.GetProperty("name").GetString() != "isleDl") return;
             var json = p.GetProperty("payload").GetString();
-            using var doc = JsonDocument.Parse(json);
-            var o = doc.RootElement;
-            // сводка о загрузке на ДРУГОМ компьютере (удалённое управление загрузками Steam) — не наша
-            if (o.TryGetProperty("remote_client_id", out var rc) && rc.ToString() != "0" && rc.ToString() != "") return;
-            var dl = Prog(o, 2); var wr = Prog(o, 3); var inst = Prog(o, 6);
-            // старые версии Steam присылали отдельные поля update_bytes_* — берём их, если массива progress нет
-            if (dl.total == 0 && Long(o, "update_bytes_to_download") > 0) dl = (Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"), 0);
-            if (wr.total == 0 && Long(o, "update_bytes_to_stage") > 0) wr = (Long(o, "update_bytes_staged"), Long(o, "update_bytes_to_stage"), 0);
-            double eta = o.TryGetProperty("overall_estimated_time_remaining_sec", out _) ? Num(o, "overall_estimated_time_remaining_sec") : Num(o, "update_seconds_remaining");
-            Last = new Overview(
-                Int(o, "update_appid"), Str(o, "update_state"), Bool(o, "paused"), Bool(o, "update_is_install"),
-                dl.got, dl.total, wr.got, wr.total, inst.got, inst.total,
-                Num(o, "update_network_bytes_per_second"), Num(o, "update_disc_bytes_per_second"),
-                Num(o, "overall_percent_complete"), eta);
+            var parsed = Parse(json);
+            if (parsed == null) return; // загрузка на другом компьютере
+            Last = parsed;
             LastAt = DateTime.Now;
             // в журнал: короткая выжимка + сырая сводка без «history» (история скорости — 18 КБ каждый раз)
             if (json != _lastRaw && DateTime.Now - _lastRawLog >= TimeSpan.FromSeconds(1))
@@ -549,6 +538,25 @@ namespace Isle.Services
         {
             try { _ws?.Abort(); _ws?.Dispose(); } catch { }
             _ws = null;
+        }
+
+        /// <summary>Разбор сводки Steam (null — сводка о загрузке на другом компьютере).</summary>
+        internal static Overview Parse(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var o = doc.RootElement;
+            // сводка о загрузке на ДРУГОМ компьютере (удалённое управление загрузками Steam) — не наша
+            if (o.TryGetProperty("remote_client_id", out var rc) && rc.ToString() != "0" && rc.ToString() != "") return null;
+            var dl = Prog(o, 2); var wr = Prog(o, 3); var inst = Prog(o, 6);
+            // старые версии Steam присылали отдельные поля update_bytes_* — берём их, если массива progress нет
+            if (dl.total == 0 && Long(o, "update_bytes_to_download") > 0) dl = (Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"), 0);
+            if (wr.total == 0 && Long(o, "update_bytes_to_stage") > 0) wr = (Long(o, "update_bytes_staged"), Long(o, "update_bytes_to_stage"), 0);
+            double eta = o.TryGetProperty("overall_estimated_time_remaining_sec", out _) ? Num(o, "overall_estimated_time_remaining_sec") : Num(o, "update_seconds_remaining");
+            return new Overview(
+                Int(o, "update_appid"), Str(o, "update_state"), Bool(o, "paused"), Bool(o, "update_is_install"),
+                dl.got, dl.total, wr.got, wr.total, inst.got, inst.total,
+                Num(o, "update_network_bytes_per_second"), Num(o, "update_disc_bytes_per_second"),
+                Num(o, "overall_percent_complete"), eta);
         }
 
         /// <summary>Этап из массива progress: сколько сделано, сколько всего, сколько секунд осталось.</summary>
