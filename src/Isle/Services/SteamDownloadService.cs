@@ -66,6 +66,7 @@ namespace Isle.Services
             public bool Finished;
             public bool Downloading;
             public bool Staging;
+            public bool Installed; // игра уже стоит — это обновление, а не новая установка
             public long Done, Total;
             public DateTime Updated;
             public DateTime StartedAt;
@@ -127,7 +128,7 @@ namespace Isle.Services
                         StartedAt = prior?.StartedAt ?? DateTime.MinValue,
                         Active = prior?.Active ?? false, Paused = prior?.Paused ?? false,
                         Cancelled = prior?.Cancelled ?? false, Finished = prior?.Finished ?? false,
-                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false
+                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false, Installed = prior?.Installed ?? false
                     };
                     var bytes = BytesLine.Match(detail);
                     if (bytes.Success && long.TryParse(bytes.Groups[1].Value.Replace(",", ""), out var done) && long.TryParse(bytes.Groups[2].Value.Replace(",", ""), out var total))
@@ -173,6 +174,7 @@ namespace Isle.Services
                     }
                     else if (kind == "state" && action == "changed")
                     {
+                        state.Installed = normalized.Contains("fully installed");
                         if (normalized.Contains("update paused") || normalized.Contains("suspended"))
                         { state.Active = false; state.Paused = true; }
                         else if (state.Cancelled)
@@ -249,10 +251,14 @@ namespace Isle.Services
                 long dlDone = manifest?.Downloaded ?? current.Done, dlTotal = manifest?.DownloadTotal ?? current.Total;
                 if (dlTotal <= 0 && current.Total > 0) { dlDone = current.Done; dlTotal = current.Total; }
                 bool downloadLeft = dlTotal > 0 && dlDone < dlTotal;
-                var useStage = !downloadLeft && manifest?.StageTotal > 0 && manifest.Staged < manifest.StageTotal;
-                long progressDone = useStage ? manifest.Staged : dlDone;
-                long progressTotal = useStage ? manifest.StageTotal : dlTotal;
-                if (useStage) { rateBytes = 0; estimatedSpeed = false; } // данные скачаны, идёт только установка — сеть не при чём
+                // Обновление установленной игры: почти всё берётся с диска, и главный процент в Steam — установка файлов.
+                // Новая установка: главное — «Загрузка данных», установка показывается, только когда скачивать уже нечего.
+                var useStage = current.Installed
+                    ? current.Staging || (!current.Downloading && manifest?.Staged > 0)
+                    : !downloadLeft && manifest?.StageTotal > 0 && manifest.Staged < manifest.StageTotal;
+                long progressDone = useStage ? manifest?.Staged ?? 0 : dlDone;
+                long progressTotal = useStage ? manifest?.StageTotal ?? 0 : dlTotal;
+                if (useStage && !downloadLeft) { rateBytes = 0; estimatedSpeed = false; } // данные скачаны, идёт только установка — сеть не при чём
                 // Steam пишет байты в appmanifest редко (раз в десятки секунд), поэтому проценты «прыгали».
                 // Между записями досчитываем по реальной скорости записи данных (не по сети — та чуть выше из-за заголовков).
                 double fillRate = manifestRate > 0 ? manifestRate : rateBytes;
@@ -262,8 +268,10 @@ namespace Isle.Services
                 // Остаток времени Steam считает по тому, как быстро реально растут скачанные данные
                 // (у него это ближе к «использованию диска», чем к скорости сети) — делаем так же.
                 double etaRate = manifestRate > 0 ? manifestRate : rateBytes;
-                var remaining = etaRate > 0 && remainingBytes > 0
-                    ? TimeSpan.FromSeconds(remainingBytes / etaRate)
+                // при обновлении время зависит от того, сколько ещё качать (установка с диска идёт параллельно)
+                long etaBytes = useStage ? (downloadLeft ? dlTotal - dlDone : 0) : remainingBytes;
+                var remaining = etaRate > 0 && etaBytes > 0
+                    ? TimeSpan.FromSeconds(etaBytes / etaRate)
                     : (TimeSpan?)null;
                 return new SteamDownload
                 {
