@@ -133,7 +133,8 @@ namespace Isle
                 int pct = (int)Math.Round(v * 100);
                 EnqueueToast(new Toast
                 {
-                    Kind = ToastKind.Volume, Title = muted ? "Звук выключен" : "Громкость " + pct, Icon = muted ? Icons.Mute : Icons.Volume, On = muted ? false : null,
+                    Kind = ToastKind.Volume, Title = muted ? "Звук выключен" : "Громкость", SpeedText = muted ? "0" : pct.ToString(),
+                    Icon = muted ? Icons.Mute : Icons.Volume, On = muted ? false : null,
                     Progress = muted ? 0 : v, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(1.3)
                 });
             };
@@ -1443,17 +1444,23 @@ namespace Isle
             ToastWeather.Visibility = weatherIcon ? Visibility.Visible : Visibility.Collapsed; // анимированная погода в предупреждении
             bool swatch = t.Swatch.HasValue;
             ToastSwatch.Visibility = swatch ? Visibility.Visible : Visibility.Collapsed;
-            if (swatch) ((Border)ToastSwatch.Child).Background = new SolidColorBrush(t.Swatch.Value);
-            // у квадратика цвета подложка острова не нужна — он сам по себе
-            ToastIconBox.Background = swatch ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x17));
+            if (swatch) ToastSwatchFill.Background = new SolidColorBrush(t.Swatch.Value);
+            // плитка значка — карточка #0E0E10; у квадратика цвета подложки нет, у него своя рамка
+            ToastIconBox.Background = swatch ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x10));
+            ToastTitle.Foreground = (Brush)FindResource("Fg");
+            ToastSpeed.Foreground = (Brush)FindResource("Fg");
             ToastIcon.Visibility = t.Image == null && !weatherIcon && !swatch ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
             ToastRing.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
-            bool compact = string.IsNullOrEmpty(t.Subtitle) && string.IsNullOrEmpty(t.SpeedText) && !t.Progress.HasValue;
-            ToastIconBox.Width = ToastIconBox.Height = compact ? 26 : 36;
-            ToastIconBox.CornerRadius = new CornerRadius(swatch ? 8 : compact ? 13 : 18);
+            bool compact = string.IsNullOrEmpty(t.Subtitle) && !t.Progress.HasValue;
+            // плитка-значок: скруглённый квадрат 36 (одна строка) / 40 (две строки) / 48 (пипетка), как в макете
+            double tile = swatch ? 48 : download ? 40 : compact ? 36 : 40;
+            ToastIconBox.Width = ToastIconBox.Height = tile;
+            ToastIconBox.CornerRadius = new CornerRadius(download || t.RoundImage ? tile / 2 : swatch ? 14 : 12);
+            ToastIcon.Width = ToastIcon.Height = tile >= 40 ? 18 : 17;
+            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2, tile / 2, tile / 2 - 1);
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
             ToastFolderButton.Tag = t;
             bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
@@ -1462,18 +1469,18 @@ namespace Isle
             ToastEditButton.Visibility = t.EditImage != null ? Visibility.Visible : Visibility.Collapsed;
             PlayToastStatus(t);
 
-            double textLen = Math.Max(t.Title.Length, (t.Subtitle ?? "").Length);
-            double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
-            if (t.Progress.HasValue) w = Math.Max(w, 280);
+            double textLen = Math.Max(t.Title.Length + (t.SpeedText?.Length ?? 0) + 2, (t.Subtitle ?? "").Length * 0.86);
+            double w = Math.Clamp(tile + 64 + textLen * 8.3, compact ? 230 : 280, 600);
+            if (t.Progress.HasValue) w = Math.Max(w, 360);
             if (ToastFolderButton.Visibility == Visibility.Visible || ToastEditButton.Visibility == Visibility.Visible) w += 38;
-            double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
+            double h = swatch ? 72 : compact ? 56 : 64;
             if (ToastFolderButton.Visibility == Visibility.Visible && ToastEditButton.Visibility == Visibility.Visible) h = Math.Max(h, 70);
             // запись голоса — вместо полоски волна, как в ChatGPT
             bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
             if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
             VoiceWave.Visibility = voiceWave ? Visibility.Visible : Visibility.Collapsed;
             if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 18; w = Math.Max(w, 320); }
-            double imageSize = compact ? 26 : 36;
+            double imageSize = tile;
             // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
             ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
             ToastImage.Clip = t.Image == null ? null : t.RoundImage
@@ -1481,10 +1488,51 @@ namespace Isle
                 : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
             if (t.Progress.HasValue)
             {
-                double barW = w - 16 * 2 - 36 - 12;
+                double barW = w - 16 * 2 - tile - 12;
                 ToastBarFill.BeginAnimation(WidthProperty, new DoubleAnimation(Math.Clamp(t.Progress.Value, 0, 1) * barW, TimeSpan.FromMilliseconds(160)));
             }
             AnimateSize(w, h, 360);
+            PlayToastEntrance(t);
+        }
+
+        private string _lastToastKey;
+
+        /// <summary>
+        /// Появление содержимого всплывашки: съезжает сверху и проявляется (360 мс, ease-out, как в макете).
+        /// Повторные всплывашки того же вида (громкость колёсиком, раскладка) не анимируются заново — только обновляются.
+        /// </summary>
+        private void PlayToastEntrance(Toast t)
+        {
+            string key = t.ReplaceKey ?? t.Kind + "|" + t.Title;
+            bool same = key == _lastToastKey && State == IslandState.Toast;
+            _lastToastKey = key;
+            if (ToastRow.RenderTransform is not TranslateTransform shift) ToastRow.RenderTransform = shift = new TranslateTransform();
+            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
+            if (!same)
+            {
+                ToastRow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+                shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(360)) { EasingFunction = ease });
+            }
+            // пипетка: зелёная «змейка» прорисовывается по краю плитки и замыкается (~1,1 с)
+            ToastSnake.Visibility = t.Swatch.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            if (t.Swatch.HasValue)
+            {
+                double perimeter = (4 * (48 - 28) + 2 * Math.PI * 14) / ToastSnake.StrokeThickness; // в толщинах линии
+                ToastSnake.StrokeDashArray = new DoubleCollection { perimeter, perimeter };
+                ToastSnake.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty, new DoubleAnimation(perimeter, 0, TimeSpan.FromMilliseconds(1100))
+                { BeginTime = TimeSpan.FromMilliseconds(120), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
+                if (ToastSwatchFill.RenderTransform is not ScaleTransform pop)
+                {
+                    ToastSwatchFill.RenderTransform = pop = new ScaleTransform(1, 1);
+                    ToastSwatchFill.RenderTransformOrigin = new Point(0.5, 0.5);
+                }
+                var grow = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(420) };
+                grow.KeyFrames.Add(new EasingDoubleKeyFrame(0.3, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                grow.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(260)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
+                grow.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                pop.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                pop.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            }
         }
 
         private void OnToastFolder(object sender, RoutedEventArgs e)
@@ -1524,30 +1572,27 @@ namespace Isle
             ToastBadge.Text = t.Badge ?? "";
             ToastBadge.Visibility = badge ? Visibility.Visible : Visibility.Collapsed;
             if (badge) ToastIcon.Visibility = Visibility.Collapsed;
-            ToastOffSlash.Visibility = t.On == false && !badge ? Visibility.Visible : Visibility.Collapsed;
+            // косая черта — только у микрофона (своего «выключенного» значка нет); остальные выключенные просто серые
+            ToastOffSlash.Visibility = t.On == false && !badge && t.Icon == Icons.Mic ? Visibility.Visible : Visibility.Collapsed;
+            var grey = new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x95));
             if (t.On.HasValue)
             {
                 double box = ToastIconBox.Width;
                 ToastOffSlash.X1 = ToastOffSlash.Y1 = box * 0.26; ToastOffSlash.X2 = ToastOffSlash.Y2 = box * 0.74;
-                ToastIconBox.Background = t.On.Value ? (Brush)FindResource("Fg") : new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x17));
-                ToastIcon.Foreground = t.On.Value ? Brushes.Black : new SolidColorBrush(Color.FromRgb(0x6B, 0x6B, 0x75));
-                ToastBadge.Foreground = t.On.Value ? Brushes.Black : (Brush)FindResource("Fg");
+                // по макету: включено — белая плитка и чёрный значок; выключено — тёмная плитка, серые значок и текст
+                ToastIconBox.Background = t.On.Value ? (Brush)FindResource("Fg") : new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x10));
+                ToastIcon.Foreground = t.On.Value ? Brushes.Black : grey;
+                if (!t.On.Value) { ToastTitle.Foreground = grey; ToastSpeed.Foreground = grey; }
             }
-            else if (badge)
-            {
-                ToastIconBox.Background = (Brush)FindResource("Fg");
-                ToastBadge.Foreground = Brushes.Black;
-            }
+            if (badge) ToastBadge.Foreground = (Brush)FindResource("Fg"); // раскладка: код «RU» белым на тёмной плитке
 
             bool error = t.Kind == ToastKind.Error || (t.Kind == ToastKind.Info && FailTitle.IsMatch(t.Title ?? ""));
             bool success = !error && t.Kind == ToastKind.Success;
+            // цвет — только у значка, не у фона (как в макете)
             if (!t.On.HasValue && !badge)
             {
                 if (error) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
                 else if (success && t.Icon != Icons.Pipette) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
-                ToastIconBox.Background = error ? new SolidColorBrush(Color.FromRgb(0x2A, 0x14, 0x16))
-                    : success && t.Swatch == null ? new SolidColorBrush(Color.FromRgb(0x12, 0x24, 0x18))
-                    : ToastIconBox.Background;
             }
             // переключатель «включился» — короткий «прыжок», чтобы смена была заметна
             if (t.On == true || badge) success = true;
@@ -1568,10 +1613,10 @@ namespace Isle
             var delay = TimeSpan.FromMilliseconds(110);
             if (error)
             {
-                var shake = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(480) };
-                double[] xs = { 0, -4, 4, -3, 3, -1.5, 0 };
+                var shake = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(300) };
+                double[] xs = { 0, -4, 4, -3, 2, 0 };
                 for (int i = 0; i < xs.Length; i++)
-                    shake.KeyFrames.Add(new EasingDoubleKeyFrame(xs[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 80)),
+                    shake.KeyFrames.Add(new EasingDoubleKeyFrame(xs[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 60)),
                         new SineEase { EasingMode = EasingMode.EaseInOut }));
                 tr.BeginAnimation(TranslateTransform.XProperty, shake);
             }
