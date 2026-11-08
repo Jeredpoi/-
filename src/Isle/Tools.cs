@@ -81,8 +81,8 @@ namespace Isle
             ClipboardService.SetText(text);
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = "Текст распознан · " + text.Length + " симв.",
-                Subtitle = text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Check, Accent = Green, Important = true,
+                Kind = ToastKind.Success, Title = "Текст распознан",
+                Subtitle = "Скопировано · " + text.Length + " симв. · " + text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Scan, Accent = Green, Important = true,
                 Duration = TimeSpan.FromSeconds(3.5)
             });
         }

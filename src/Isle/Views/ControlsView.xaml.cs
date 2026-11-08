@@ -144,12 +144,20 @@ namespace Isle.Views
                     IsChecked = n.ssid == current
                 };
                 var ssid = n.ssid;
+                int signal = n.signal;
                 item.Click += async (_, __) =>
                 {
                     NetStatus.Text = "Подключаюсь…";
                     bool ok = await SystemControls.ConnectWifiAsync(ssid);
                     if (!ok) SystemControls.OpenSettings("ms-settings:network-wifi"); // новая сеть с паролем — пароль вводится в Windows
                     await System.Threading.Tasks.Task.Delay(1500);
+                    if (ok && SystemControls.Network().up)
+                        ToastBus.Show(new Toast
+                        {
+                            Kind = ToastKind.Success, Title = ssid,
+                            Subtitle = "Подключено · " + (signal >= 70 ? "сильный сигнал" : signal >= 40 ? "средний сигнал" : "слабый сигнал"),
+                            Icon = Icons.Wifi, ReplaceKey = "wifi", Important = true, Duration = TimeSpan.FromSeconds(3)
+                        });
                     Refresh();
                 };
                 menu.Items.Add(item);

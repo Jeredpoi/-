@@ -41,7 +41,7 @@ namespace Isle.Helpers
 
         public static readonly DependencyProperty BodyProperty = DependencyProperty.Register(
             nameof(Body), typeof(Brush), typeof(Character),
-            new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x57)), FrameworkPropertyMetadataOptions.AffectsRender));
+            new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(0xE0, 0x7A, 0x5F)), FrameworkPropertyMetadataOptions.AffectsRender));
 
         public Mood Mood { get => (Mood)GetValue(MoodProperty); set => SetValue(MoodProperty, value); }
         public Brush Body { get => (Brush)GetValue(BodyProperty); set => SetValue(BodyProperty, value); }
@@ -98,6 +98,28 @@ namespace Isle.Helpers
         private Point _lastCursor;
         private DateTime _cursorMoved = DateTime.Now;
         private DateTime _nextWander;
+
+        /// <summary>Неподвижный Клоди (те же пиксели) — аватар у ответов в чате, без покадровой анимации.</summary>
+        public static ImageSource Avatar { get; } = BuildAvatar();
+
+        private static ImageSource BuildAvatar()
+        {
+            var body = new SolidColorBrush(Color.FromRgb(0xE0, 0x7A, 0x5F)); body.Freeze();
+            var group = new DrawingGroup();
+            using (var dc = group.Open())
+            {
+                dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, W, H));
+                for (int y = 0; y < H; y++)
+                    for (int x = 0; x < W; x++)
+                        if (Sprite[y][x] != '.') dc.DrawRectangle(body, null, new Rect(x, y, 1.02, 1.02));
+                dc.DrawRectangle(Brushes.Black, null, new Rect(EyeL.X, EyeL.Y, 1, 2));
+                dc.DrawRectangle(Brushes.Black, null, new Rect(EyeR.X, EyeR.Y, 1, 2));
+            }
+            group.Freeze();
+            var img = new DrawingImage(group);
+            img.Freeze();
+            return img;
+        }
 
         public Character()
         {
