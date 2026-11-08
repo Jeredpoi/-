@@ -28,11 +28,51 @@ namespace Isle.Services
             return false;
         }
 
-        /// <summary>Включает/выключает запись. Возвращает true, если запись теперь идёт.</summary>
-        public static async Task<bool> ToggleRecordAsync()
+        /// <summary>Включает/выключает запись. Возвращает, идёт ли запись теперь, и путь к сохранённому файлу (при остановке).</summary>
+        public static async Task<(bool on, string file)> ToggleRecordAsync()
         {
-            var d = await RequestAsync("ToggleRecord");
-            return d.TryGetProperty("outputActive", out var oa) && oa.GetBoolean();
+            var st = await RequestAsync("GetRecordStatus");
+            bool active = st.TryGetProperty("outputActive", out var oa) && oa.GetBoolean();
+            if (!active)
+            {
+                await RequestAsync("StartRecord");
+                return (true, null);
+            }
+            // StopRecord отдаёт путь к готовому файлу — по нему кнопка «папка» откроет Проводник с выделенным видео
+            var stop = await RequestAsync("StopRecord");
+            string file = stop.TryGetProperty("outputPath", out var op) ? op.GetString() : null;
+            return (false, file ?? await LastRecordingAsync());
+        }
+
+        /// <summary>Самый свежий файл в папке записей OBS.</summary>
+        public static async Task<string> LastRecordingAsync()
+        {
+            try
+            {
+                var d = await RequestAsync("GetRecordDirectory");
+                var dir = d.TryGetProperty("recordDirectory", out var rd) ? rd.GetString() : null;
+                if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
+                    return new System.IO.DirectoryInfo(dir).GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName;
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>Всплывашка «Запись сохранена» с кнопкой папки (Проводник откроется с выделенным файлом).</summary>
+        public static Toast SavedToast(string file) => new()
+        {
+            Kind = ToastKind.Success, Title = "Запись сохранена",
+            Subtitle = file != null ? System.IO.Path.GetFileName(file) : "В папке записей OBS",
+            FilePath = file, FolderPath = file != null ? System.IO.Path.GetDirectoryName(file) : null,
+            Icon = Icons.Record, ReplaceKey = "obs-saved", Important = true, Duration = TimeSpan.FromSeconds(7)
+        };
+
+        private static DateTime _savedShownAt;
+        public static void ShowSaved(string file)
+        {
+            if (DateTime.Now - _savedShownAt < TimeSpan.FromSeconds(10)) return; // кнопка и слежение за OBS не дублируют друг друга
+            _savedShownAt = DateTime.Now;
+            ToastBus.Show(SavedToast(file));
         }
 
         public static bool Recording { get; private set; }
@@ -72,24 +112,7 @@ namespace Isle.Services
             if (rec == Recording && live == Streaming) return;
             Recording = rec; Streaming = live;
             Changed?.Invoke();
-            if (stoppedRec)
-            {
-                string file = null;
-                try
-                {
-                    var d = await RequestAsync("GetRecordDirectory");
-                    var dir = d.TryGetProperty("recordDirectory", out var rd) ? rd.GetString() : null;
-                    if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
-                        file = new System.IO.DirectoryInfo(dir).GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName;
-                }
-                catch { }
-                ToastBus.Show(new Toast
-                {
-                    Kind = ToastKind.Success, Title = "Запись сохранена",
-                    Subtitle = file != null ? System.IO.Path.GetFileName(file) : "В папке записей OBS",
-                    Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(5)
-                });
-            }
+            if (stoppedRec) ShowSaved(await LastRecordingAsync());
         }
 
         /// <summary>Проверка подключения: возвращает версию OBS.</summary>
