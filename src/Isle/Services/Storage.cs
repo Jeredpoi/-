@@ -133,6 +133,8 @@ namespace Isle.Services
         public bool AutoUpdateCheck { get; set; } = true;
         public bool ScaleFixV2 { get; set; } = false;
         public bool ObsStatus { get; set; } = true;
+        /// <summary>Брать скорость, объём и остаток загрузки прямо из Steam (Isle сам включает это в Steam).</summary>
+        public bool SteamExactSpeed { get; set; } = true;
         public bool VoiceDefaultsV2 { get; set; } = false;
 
         // Музыка

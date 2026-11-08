@@ -269,6 +269,7 @@ namespace Isle
                 _weatherTimer.Start();
                 _steamTimer.Start();
                 _ = Task.Run(DownloadWatch.Start);
+                _ = Task.Run(() => SteamClientApi.Apply(AppSettings.Current.SteamExactSpeed)); // «точная скорость Steam» — тихо включает/выключает
                 RefreshSteamDownload();
                 await RefreshWeather();
                 ApplyOledMode();
@@ -1745,6 +1746,8 @@ namespace Isle
         {
             try
             {
+                // точные цифры из самого Steam (если включено и Steam отвечает) — иначе считаем сами, как раньше
+                var exact = await SteamClientApi.ReadAsync();
                 var result = await Task.Run(() =>
                 {
                     var steam = SteamDownloadService.ReadCurrent();
@@ -1839,7 +1842,8 @@ namespace Isle
                     });
 
                 // Идущая загрузка живёт в самой чёлке (как музыка или таймер), а не всплывашками каждые 2 секунды
-                var steam = result.steam;
+                var steam = Exact(result.steam, exact);
+                SteamClientApi.DownloadActive = steam != null;
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
                     SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
@@ -1856,6 +1860,27 @@ namespace Isle
             }
             catch (Exception ex) { App.Trace("ошибка отслеживания загрузок: " + ex.Message); }
             finally { _downloadPollInProgress = false; }
+        }
+
+        /// <summary>
+        /// Подставляет цифры самого Steam (скорость сети, скачано / всего, остаток) в найденную по логу загрузку.
+        /// Новая установка — «Загрузка данных», обновление установленной игры — установка файлов (как главный процент в Steam).
+        /// </summary>
+        private static SteamDownload Exact(SteamDownload steam, SteamClientApi.Overview o)
+        {
+            if (steam == null || steam.IsPaused || o == null || o.Paused || o.AppId != steam.AppId) return steam;
+            if (!string.Equals(o.State, "Updating", StringComparison.OrdinalIgnoreCase)) return steam;
+            bool downloading = o.ToDownload > 0 && o.Downloaded < o.ToDownload;
+            bool stage = !o.IsInstall ? o.ToStage > 0 : !downloading && o.ToStage > 0;
+            long got = stage ? o.Staged : o.Downloaded, total = stage ? o.ToStage : o.ToDownload;
+            if (total <= 0) return steam;
+            return new SteamDownload
+            {
+                AppId = steam.AppId, Name = steam.Name, Icon = steam.Icon, FolderPath = steam.FolderPath,
+                Progress = Math.Clamp((double)got / total, 0, 1), Got = got, Total = total,
+                BytesPerSecond = downloading ? o.NetworkBytesPerSecond : 0,
+                Remaining = o.SecondsRemaining > 0 ? TimeSpan.FromSeconds(o.SecondsRemaining) : (TimeSpan?)null
+            };
         }
 
         /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>

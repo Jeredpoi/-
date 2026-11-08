@@ -529,6 +529,14 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Статус VPN и страна"/><CheckBox x:Name="Vpn" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Точная скорость Steam"/>
+                                    <TextBlock Style="{StaticResource RowNote}" TextWrapping="Wrap" Text="Скорость, объём и время загрузки — прямо из Steam. Isle сам включит это в Steam и перезапустит его, когда ничего не качается и не запущена игра"/>
+                                </StackPanel>
+                                <CheckBox x:Name="SteamExact" HorizontalAlignment="Right" Click="OnSteamExact"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">

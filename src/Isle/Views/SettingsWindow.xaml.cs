@@ -209,6 +209,7 @@ namespace Isle.Views
             Notif.IsChecked = S.NotificationToasts;
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
             Vpn.IsChecked = S.VpnStatus;
+            SteamExact.IsChecked = S.SteamExactSpeed;
             ClipHist.IsChecked = S.ClipboardHistory;
             ClipImg.IsChecked = S.ClipboardImages;
             AutoUpdate.IsChecked = S.AutoUpdateCheck;
@@ -234,6 +235,15 @@ namespace Isle.Views
             S.AutoUpdateCheck = AutoUpdate.IsChecked == true;
             S.ObsStatus = ObsStatus.IsChecked == true;
             S.Save();
+        }
+
+        private void OnSteamExact(object s, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            S.SteamExactSpeed = SteamExact.IsChecked == true;
+            S.Save();
+            bool on = S.SteamExactSpeed;
+            System.Threading.Tasks.Task.Run(() => Services.SteamClientApi.Apply(on));
         }
 
         private void OnMusicToggle(object s, RoutedEventArgs e)

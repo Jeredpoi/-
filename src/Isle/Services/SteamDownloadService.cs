@@ -15,6 +15,7 @@ namespace Isle.Services
 {
     public sealed class SteamDownload
     {
+        public int AppId { get; init; }
         public string Name { get; init; }
         public double Progress { get; init; }
         public double BytesPerSecond { get; init; }
@@ -279,6 +280,7 @@ namespace Isle.Services
                     : (TimeSpan?)null;
                 return new SteamDownload
                 {
+                    AppId = current.Id,
                     Name = !string.IsNullOrWhiteSpace(manifest?.Name) ? manifest.Name : FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
                     Progress = progress,
                     Got = progressDone,
@@ -349,6 +351,9 @@ namespace Isle.Services
                 if (Directory.Exists(apps)) yield return (apps, "appmanifest_*.acf");
             }
         }
+
+        /// <summary>Папка Steam (null — Steam не найден).</summary>
+        public static string SteamRoot() => FindSteamRoot();
 
         private static string FindSteamRoot()
         {
