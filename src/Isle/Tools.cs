@@ -145,12 +145,14 @@ namespace Isle
             {
                 try
                 {
-                    bool on = await ObsService.ToggleRecordAsync();
-                    ToastBus.Show(new Toast
-                    {
-                        Title = on ? "OBS: запись идёт" : "OBS: запись сохранена", Subtitle = on ? "Нажми «Запись экрана» ещё раз, чтобы остановить" : "Файл в папке записей OBS",
-                        Icon = Icons.Record, Accent = on ? Color.FromRgb(0xF8, 0x71, 0x71) : Green, Important = true, Duration = TimeSpan.FromSeconds(3)
-                    });
+                    var (on, file) = await ObsService.ToggleRecordAsync();
+                    if (on)
+                        ToastBus.Show(new Toast
+                        {
+                            Title = "OBS: запись идёт", Subtitle = "Нажми «Запись экрана» ещё раз, чтобы остановить",
+                            Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(3)
+                        });
+                    else ObsService.ShowSaved(file); // с кнопкой «папка» — откроет Проводник с выделенным видео
                 }
                 catch (Exception ex)
                 {

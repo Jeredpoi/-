@@ -66,6 +66,7 @@ namespace Isle.Services
             public bool Finished;
             public bool Downloading;
             public bool Staging;
+            public bool Installed; // игра уже стоит — это обновление, а не новая установка
             public long Done, Total;
             public DateTime Updated;
             public DateTime StartedAt;
@@ -127,7 +128,7 @@ namespace Isle.Services
                         StartedAt = prior?.StartedAt ?? DateTime.MinValue,
                         Active = prior?.Active ?? false, Paused = prior?.Paused ?? false,
                         Cancelled = prior?.Cancelled ?? false, Finished = prior?.Finished ?? false,
-                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false
+                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false, Installed = prior?.Installed ?? false
                     };
                     var bytes = BytesLine.Match(detail);
                     if (bytes.Success && long.TryParse(bytes.Groups[1].Value.Replace(",", ""), out var done) && long.TryParse(bytes.Groups[2].Value.Replace(",", ""), out var total))
@@ -173,6 +174,7 @@ namespace Isle.Services
                     }
                     else if (kind == "state" && action == "changed")
                     {
+                        state.Installed = normalized.Contains("fully installed");
                         if (normalized.Contains("update paused") || normalized.Contains("suspended"))
                         { state.Active = false; state.Paused = true; }
                         else if (state.Cancelled)
@@ -230,7 +232,9 @@ namespace Isle.Services
                 // Главная скорость — входящий трафик сети: это ровно то, что Steam показывает как «Сеть».
                 // «Current download rate» в логе Steam пишет редко и усреднённо, поэтому он занижал скорость в 2–3 раза.
                 // Лог и appmanifest — запасные варианты, если трафик измерить не удалось.
-                double netRate = !current.Paused && !current.Staging ? SmoothNetRate(GetSystemReceiveRate(now)) : 0;
+                // Счётчики сетевой карты считают пакеты целиком, с заголовками IP/TCP (52 байта на 1500-байтный пакет ≈ 3,5 %),
+                // а Steam показывает только полезные данные — убираем заголовки, иначе скорость выходит выше, чем в Steam.
+                double netRate = !current.Paused ? SmoothNetRate(GetSystemReceiveRate(now)) * PayloadShare : 0;
                 double rateBytes = netRate;
                 bool estimatedSpeed = false;
                 var fresh = samples.Where(x => now - x.At < TimeSpan.FromSeconds(20)).TakeLast(3).ToList();
@@ -241,17 +245,33 @@ namespace Isle.Services
                     rateBytes = samples[^1].BytesPerSecond; // последняя известная скорость из лога — как оценка
                     estimatedSpeed = rateBytes > 0;
                 }
-                var useStage = current.Staging || (!current.Downloading && manifest?.Staged > 0);
-                long progressDone = useStage ? manifest?.Staged ?? 0 : manifest?.Downloaded ?? current.Done;
-                long progressTotal = useStage ? manifest?.StageTotal ?? 0 : manifest?.DownloadTotal ?? current.Total;
+                // Steam качает и распаковывает одновременно: «Загрузка данных 3,3 / 97,3 ГБ» и «Установка файлов 3%».
+                // Пока данные ещё качаются, показываем именно загрузку (как главная строка в Steam);
+                // установку (BytesStaged / BytesToStage) — только когда скачивать уже нечего.
+                long dlDone = manifest?.Downloaded ?? current.Done, dlTotal = manifest?.DownloadTotal ?? current.Total;
+                if (dlTotal <= 0 && current.Total > 0) { dlDone = current.Done; dlTotal = current.Total; }
+                bool downloadLeft = dlTotal > 0 && dlDone < dlTotal;
+                // Обновление установленной игры: почти всё берётся с диска, и главный процент в Steam — установка файлов.
+                // Новая установка: главное — «Загрузка данных», установка показывается, только когда скачивать уже нечего.
+                var useStage = current.Installed
+                    ? current.Staging || (!current.Downloading && manifest?.Staged > 0)
+                    : !downloadLeft && manifest?.StageTotal > 0 && manifest.Staged < manifest.StageTotal;
+                long progressDone = useStage ? manifest?.Staged ?? 0 : dlDone;
+                long progressTotal = useStage ? manifest?.StageTotal ?? 0 : dlTotal;
+                if (useStage && !downloadLeft) { rateBytes = 0; estimatedSpeed = false; } // данные скачаны, идёт только установка — сеть не при чём
                 // Steam пишет байты в appmanifest редко (раз в десятки секунд), поэтому проценты «прыгали».
-                // Между записями досчитываем по скорости, как это делает сам клиент Steam.
-                if (!useStage) progressDone = Smooth(current.Id, progressDone, progressTotal, rateBytes, now);
+                // Между записями досчитываем по реальной скорости записи данных (не по сети — та чуть выше из-за заголовков).
+                double fillRate = manifestRate > 0 ? manifestRate : rateBytes;
+                if (!useStage) progressDone = Smooth(current.Id, progressDone, progressTotal, fillRate, now);
                 var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
                 var remainingBytes = Math.Max(0, progressTotal - progressDone);
-                var downloadRemaining = Math.Max(0, (manifest?.DownloadTotal ?? current.Total) - (manifest?.Downloaded ?? current.Done));
-                var remaining = rateBytes > 0 && (!useStage || downloadRemaining > 0)
-                    ? TimeSpan.FromSeconds((useStage ? downloadRemaining : remainingBytes) / rateBytes)
+                // Остаток времени Steam считает по тому, как быстро реально растут скачанные данные
+                // (у него это ближе к «использованию диска», чем к скорости сети) — делаем так же.
+                double etaRate = manifestRate > 0 ? manifestRate : rateBytes;
+                // при обновлении время зависит от того, сколько ещё качать (установка с диска идёт параллельно)
+                long etaBytes = useStage ? (downloadLeft ? dlTotal - dlDone : 0) : remainingBytes;
+                var remaining = etaRate > 0 && etaBytes > 0
+                    ? TimeSpan.FromSeconds(etaBytes / etaRate)
                     : (TimeSpan?)null;
                 return new SteamDownload
                 {
@@ -423,6 +443,7 @@ namespace Isle.Services
 
         /// <summary>При отсутствии свежей Steam-выборки оценивает входящий трафик активного скачивания по сетевым счётчикам Windows.</summary>
         private static double _netEma;
+        private const double PayloadShare = 1448.0 / 1500.0;
 
         /// <summary>Сглаживание скорости сети (без скачков от секунды к секунде), как на графике Steam.</summary>
         private static double SmoothNetRate(double rate)
