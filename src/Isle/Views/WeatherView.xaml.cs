@@ -12,17 +12,22 @@ namespace Isle.Views
     public partial class WeatherView : UserControl, IIslandView
     {
         private readonly Random _weatherRandom = new();
+        // Пока панель раскрывается, размер меняется каждый кадр — раньше фон (облака, дождь) пересоздавался
+        // на каждом шаге, и анимации дёргались. Теперь перерисовываем, когда размер устоялся, и только если что-то изменилось.
+        private readonly System.Windows.Threading.DispatcherTimer _fxRedraw = new() { Interval = TimeSpan.FromMilliseconds(180) };
+        private string _fxKey;
 
         public WeatherView()
         {
             InitializeComponent();
+            _fxRedraw.Tick += (_, __) => { _fxRedraw.Stop(); if (IsVisible && AppHost.Weather is { } w) DrawWeatherBackdrop(w); };
             AppHost.WeatherChanged += Render;
             // бесконечные анимации снега/дождя крутятся, даже когда вкладка закрыта, и держат отрисовку окна —
             // убираем их, пока погоду не видно, и рисуем заново при показе
             IsVisibleChanged += (_, __) =>
             {
-                if (!IsVisible) WeatherFx.Children.Clear();
-                else if (AppHost.Weather is { } w) DrawWeatherBackdrop(w);
+                if (!IsVisible) { WeatherFx.Children.Clear(); _fxKey = null; _fxRedraw.Stop(); }
+                else { _fxRedraw.Stop(); _fxRedraw.Start(); }
             };
             Render();
         }
@@ -59,7 +64,7 @@ namespace Isle.Views
         private void OnWeatherFxSizeChanged(object sender, SizeChangedEventArgs e)
         {
             WeatherFx.Clip = new RectangleGeometry(new Rect(0, 0, WeatherFx.ActualWidth, WeatherFx.ActualHeight), 17, 17);
-            if (AppHost.Weather is { } weather) DrawWeatherBackdrop(weather);
+            _fxRedraw.Stop(); _fxRedraw.Start(); // дождёмся, пока размер устоится
         }
 
         private void DrawWeatherBackdrop(WeatherNow weather)
@@ -67,6 +72,10 @@ namespace Isle.Views
             double width = WeatherFx.ActualWidth;
             double height = WeatherFx.ActualHeight;
             if (width < 30 || height < 60) return;
+            // та же погода и почти тот же размер — анимации уже идут, не перезапускаем их (иначе рывок)
+            string key = weather.Code + "|" + weather.IsDay + "|" + (weather.Wind >= 8) + "|" + Math.Round(width / 12) + "|" + Math.Round(height / 12);
+            if (key == _fxKey && WeatherFx.Children.Count > 0) return;
+            _fxKey = key;
 
             WeatherFx.Children.Clear();
             var (top, bottom) = Palette(weather.Code, weather.IsDay);
@@ -120,6 +129,7 @@ namespace Isle.Views
             };
             // облака — только в правой части карточки, слева крупные белые градусы
             Canvas.SetLeft(cloud, Math.Max(WeatherFx.ActualWidth * 0.5, width - 142 * scale)); Canvas.SetTop(cloud, top);
+            cloud.CacheMode = new BitmapCache(); // облако рисуется один раз, дальше только сдвигается — плавно и без нагрузки
             WeatherFx.Children.Add(cloud);
             var drift = new DoubleAnimation(-14, 10, TimeSpan.FromSeconds(7 + _weatherRandom.NextDouble() * 4))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };

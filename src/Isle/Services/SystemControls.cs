@@ -76,6 +76,65 @@ namespace Isle.Services
             catch { return null; }
         }
 
+        private static string RunNetsh(string args, out int exitCode)
+        {
+            // netsh пишет в кодировке консоли (для русской Windows — 866)
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            var psi = new ProcessStartInfo("netsh", args)
+            {
+                CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true,
+                StandardOutputEncoding = System.Text.Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage)
+            };
+            using var p = Process.Start(psi);
+            var text = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(8000);
+            exitCode = p.HasExited ? p.ExitCode : -1;
+            return text;
+        }
+
+        /// <summary>Сети Wi-Fi рядом (имя, сила сигнала, есть ли пароль), сильные — первыми. error — понятная причина, если список не получить.</summary>
+        public static Task<(System.Collections.Generic.List<(string ssid, int signal, bool secured)> nets, string error)> WifiNetworksAsync() => Task.Run(() =>
+        {
+            var nets = new System.Collections.Generic.List<(string ssid, int signal, bool secured)>();
+            try
+            {
+                var text = RunNetsh("wlan show networks mode=bssid", out _);
+                if (text.IndexOf("location", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("расположен", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (nets, "Windows не даёт список сетей без доступа к расположению — включи его в Параметрах → Конфиденциальность");
+                string ssid = null; int signal = -1; bool secured = false;
+                void Flush() { if (!string.IsNullOrWhiteSpace(ssid) && !nets.Exists(n => n.ssid == ssid)) nets.Add((ssid, Math.Max(0, signal), secured)); }
+                foreach (var raw in text.Split('\n'))
+                {
+                    var line = raw.Trim();
+                    var colon = line.IndexOf(':');
+                    if (colon < 0) continue;
+                    var name = line.Substring(0, colon).Trim();
+                    var value = line.Substring(colon + 1).Trim();
+                    if (name.StartsWith("SSID", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase))
+                    { Flush(); ssid = value; signal = -1; secured = false; }
+                    else if (value.EndsWith("%") && signal < 0 && int.TryParse(value.TrimEnd('%').Trim(), out var sg)) signal = sg;
+                    else if (name.IndexOf("Authentication", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Проверка подлинности", StringComparison.OrdinalIgnoreCase) >= 0)
+                        secured = !value.StartsWith("Open", StringComparison.OrdinalIgnoreCase) && !value.StartsWith("Открыт", StringComparison.OrdinalIgnoreCase);
+                }
+                Flush();
+                nets.Sort((a, b) => b.signal.CompareTo(a.signal));
+                return (nets, null);
+            }
+            catch (Exception ex) { return (nets, "Не удалось получить список сетей: " + ex.Message); }
+        });
+
+        /// <summary>Подключиться к сети, которую Windows уже знает. false — нужен пароль/настройки.</summary>
+        public static Task<bool> ConnectWifiAsync(string ssid) => Task.Run(() =>
+        {
+            try
+            {
+                var safe = ssid.Replace("\"", "");
+                RunNetsh("wlan connect name=\"" + safe + "\" ssid=\"" + safe + "\"", out int code);
+                return code == 0;
+            }
+            catch { return false; }
+        });
+
         /// <summary>Подключённые сейчас Bluetooth-устройства (наушники, мышь…): имена.</summary>
         public static async Task<System.Collections.Generic.List<string>> ConnectedBluetoothAsync()
         {
