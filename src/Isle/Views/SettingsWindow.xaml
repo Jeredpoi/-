@@ -537,6 +537,11 @@
                                 </StackPanel>
                                 <CheckBox x:Name="SteamExact" HorizontalAlignment="Right" Click="OnSteamExact"/>
                             </Grid>
+                            <Grid Style="{StaticResource Row}">
+                                <TextBlock Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="0,0,170,0" TextWrapping="Wrap"
+                                           Text="Журнал загрузок Steam — всё, что Isle получил от Steam и показал"/>
+                                <Button Style="{StaticResource SFlat}" Content="Показать журнал" HorizontalAlignment="Right" Padding="12,6" Click="OnSteamLog"/>
+                            </Grid>
                             <!-- временная: видна, пока точная скорость ещё ни разу не заработала -->
                             <Grid x:Name="SteamActivateRow" Style="{StaticResource Row}" Visibility="Collapsed">
                                 <TextBlock x:Name="SteamExactStatus" Style="{StaticResource RowNote}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,230,0"

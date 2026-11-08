@@ -238,6 +238,17 @@ namespace Isle.Views
             S.Save();
         }
 
+        private void OnSteamLog(object s, RoutedEventArgs e)
+        {
+            var path = Services.Diag.PathToLog;
+            try
+            {
+                if (System.IO.File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                else System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Services.Storage.Dir) { UseShellExecute = true });
+            }
+            catch { }
+        }
+
         /// <summary>Кнопка видна, только пока точная скорость ни разу не заработала (и включена).</summary>
         private async void UpdateSteamActivate()
         {

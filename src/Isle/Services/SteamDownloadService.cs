@@ -50,8 +50,8 @@ namespace Isle.Services
         private static readonly Regex AppLine = new(@"AppID\s+(\d+)\s+(?:(?:App|Workshop)\s+)?(?<kind>update|state)\s+(?<action>started|changed|canceled|finished|paused)\s*:?\s*(?<detail>.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BytesLine = new(@"download\s+([\d,]+)\s*/\s*([\d,]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex RateLine = new(@"Current download rate:\s*([\d.,]+)\s*Mbps", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Dictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly Dictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<int, (long Bytes, DateTime At, double Rate)> DownloadSamples = new();
         private static readonly Dictionary<string, (long Bytes, DateTime At)> NetworkSamples = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<int> ObservedActive = new();
@@ -351,6 +351,21 @@ namespace Isle.Services
                 var apps = Path.Combine(lib, "steamapps");
                 if (Directory.Exists(apps)) yield return (apps, "appmanifest_*.acf");
             }
+        }
+
+        private static readonly ConcurrentDictionary<int, (string Name, ImageSource Icon, string Folder)> InfoCache = new();
+
+        /// <summary>Название, обложка и папка игры по её номеру в Steam (для живой сводки Steam).</summary>
+        public static (string Name, ImageSource Icon, string Folder) AppInfo(int appId)
+        {
+            if (InfoCache.TryGetValue(appId, out var cached)) return cached;
+            var root = FindSteamRoot();
+            if (root == null) return ("Steam · App " + appId, null, null);
+            var m = ReadManifestProgress(root, appId);
+            var info = (!string.IsNullOrWhiteSpace(m?.Name) ? m.Name : FindAppName(root, appId) ?? "Steam · App " + appId,
+                        FindAppIcon(root, appId), m == null ? null : GetInstallFolder(m));
+            if (m != null) InfoCache[appId] = info; // appmanifest ещё не создан — попробуем снова позже
+            return info;
         }
 
         /// <summary>Папка Steam (null — Steam не найден).</summary>
