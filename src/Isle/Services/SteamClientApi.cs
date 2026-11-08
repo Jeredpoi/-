@@ -77,7 +77,10 @@ namespace Isle.Services
             if (!_restartLoop) { _restartLoop = true; _ = Task.Run(() => RestartWhenSafeAsync(root)); }
         }
 
-        /// <summary>Steam запущен, но отладчик не отвечает — значит, он стартовал до появления файла. Перезапускаем, когда можно.</summary>
+        /// <summary>
+        /// Steam запущен, но отладчик не отвечает — значит, он стартовал до появления файла. Перезапускаем,
+        /// как только не идёт игра. Загрузку перезапуск не портит: Steam сам продолжает её после старта.
+        /// </summary>
         private static async Task RestartWhenSafeAsync(string root)
         {
             try
@@ -85,13 +88,15 @@ namespace Isle.Services
                 for (int i = 0; i < 720; i++) // до 6 часов, проверка раз в 30 с
                 {
                     if (!AppSettings.Current.SteamExactSpeed) return;
-                    if (!SteamRunning()) return;                 // Steam закрыт — при следующем запуске файл уже подействует
-                    if (await DebuggerUpAsync()) return;         // уже работает
-                    if (RunningAppId() == 0 && !DownloadActive)
+                    if (!SteamRunning()) { App.Trace("точная скорость Steam: Steam закрыт — заработает при следующем запуске"); return; }
+                    if (await DebuggerUpAsync()) { App.Trace("точная скорость Steam: уже работает"); return; }
+                    int game = RunningAppId();
+                    if (game == 0)
                     {
                         await RestartSteamAsync(root);
                         return;
                     }
+                    if (i == 0) App.Trace("точная скорость Steam: идёт игра " + game + " — перезапущу Steam после неё");
                     await Task.Delay(TimeSpan.FromSeconds(30));
                 }
             }
@@ -123,16 +128,59 @@ namespace Isle.Services
             var exe = Path.Combine(root, "steam.exe");
             if (!File.Exists(exe)) return;
             App.Trace("точная скорость Steam: перезапускаю Steam");
+            Notify(DownloadActive ? "Steam перезапустится на минуту — загрузка продолжится сама" : "Steam перезапустится на минуту, свёрнутым в трей");
             Process.Start(new ProcessStartInfo(exe, "-shutdown") { UseShellExecute = false })?.Dispose();
             for (int i = 0; i < 60 && SteamRunning(); i++) await Task.Delay(1000); // Steam закрывается до минуты
-            if (SteamRunning()) return; // не закрылся — не трогаем
+            if (SteamRunning()) { App.Trace("точная скорость Steam: Steam не закрылся за минуту — не трогаю"); return; }
             await Task.Delay(1500);
             Process.Start(new ProcessStartInfo(exe, "-silent") { UseShellExecute = false })?.Dispose(); // в трей, без окна
+            for (int i = 0; i < 90; i++) // ждём, пока Steam поднимется
+            {
+                await Task.Delay(2000);
+                if (await DebuggerUpAsync()) { App.Trace("точная скорость Steam: включена"); Notify("Точная скорость Steam включена"); return; }
+            }
+            App.Trace("точная скорость Steam: Steam запустился, но отладчик на 127.0.0.1:8080 не отвечает");
+        }
+
+        /// <summary>Перезапустить Steam сейчас (кнопка в Настройках) — если не идёт игра.</summary>
+        public static async Task<string> RestartNowAsync()
+        {
+            var root = SteamDownloadService.SteamRoot();
+            if (root == null) return "Steam не найден";
+            try { var flag = Path.Combine(root, FlagFile); if (!File.Exists(flag)) File.WriteAllText(flag, ""); }
+            catch (Exception ex) { return "Не удалось записать в папку Steam: " + ex.Message; }
+            if (_restartLoop) return "Перезапуск уже запланирован";
+            if (await DebuggerUpAsync()) return "Уже работает";
+            if (RunningAppId() != 0) return "Сначала закрой игру";
+            if (!SteamRunning())
+            {
+                var exe = Path.Combine(root, "steam.exe");
+                if (File.Exists(exe)) Process.Start(new ProcessStartInfo(exe, "-silent") { UseShellExecute = false })?.Dispose();
+                return "Запускаю Steam…";
+            }
+            _restartLoop = true;
+            _ = Task.Run(async () => { try { await RestartSteamAsync(root); } finally { _restartLoop = false; } });
+            return "Перезапускаю Steam…";
+        }
+
+        private static void Notify(string title)
+        {
+            try
+            {
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    ToastBus.Show(new Toast { Title = title, Subtitle = "Точная скорость загрузок", Icon = Icons.Download, ReplaceKey = "steam-exact", Duration = TimeSpan.FromSeconds(3) })));
+            }
+            catch { }
         }
 
         private static async Task<bool> DebuggerUpAsync()
         {
-            try { return (await Http.GetAsync(DebugHost + "/json/version")).IsSuccessStatusCode; }
+            // отвечает именно встроенный браузер Steam, а не что-то другое на порту 8080
+            try
+            {
+                var text = await Http.GetStringAsync(DebugHost + "/json/version");
+                return text.Contains("Steam", StringComparison.OrdinalIgnoreCase) || text.Contains("Valve", StringComparison.OrdinalIgnoreCase);
+            }
             catch { return false; }
         }
 

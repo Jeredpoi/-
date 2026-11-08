@@ -537,6 +537,10 @@
                                 </StackPanel>
                                 <CheckBox x:Name="SteamExact" HorizontalAlignment="Right" Click="OnSteamExact"/>
                             </Grid>
+                            <Grid Style="{StaticResource Row}">
+                                <TextBlock x:Name="SteamExactStatus" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="0,0,180,0"/>
+                                <Button Style="{StaticResource SFlat}" Content="Перезапустить Steam" HorizontalAlignment="Right" Padding="12,6" Click="OnSteamRestart"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">
