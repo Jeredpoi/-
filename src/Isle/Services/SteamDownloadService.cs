@@ -517,7 +517,7 @@ namespace Isle.Services
                     // миниатюра для кружка в чёлке: декодируем маленькой, чтобы не держать в памяти обложки 600×900
                     var image = new BitmapImage();
                     image.BeginInit(); image.UriSource = new Uri(path); image.CacheOption = BitmapCacheOption.OnLoad;
-                    image.DecodePixelHeight = 192; // запас под масштаб экрана 150–200 % image.EndInit(); image.Freeze();
+                    image.DecodePixelHeight = 192; image.EndInit(); image.Freeze(); // 192 — запас под масштаб экрана 150–200 %
                     return IconCache[cacheKey] = image;
                 }
                 catch { }
