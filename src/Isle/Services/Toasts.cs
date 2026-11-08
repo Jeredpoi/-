@@ -16,6 +16,13 @@ namespace Isle.Services
         public string Icon { get; set; } = Icons.Info;
         public Color Accent { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public ImageSource Image { get; set; }
+        /// <summary>
+        /// Переключатель (Caps Lock, микрофон, VPN…): true — значок белый на белом круге, false — тусклый и перечёркнут.
+        /// Сразу видно, включилось или выключилось, не читая текст.
+        /// </summary>
+        public bool? On { get; set; }
+        /// <summary>Короткая надпись вместо значка (раскладка: «RU», «EN»).</summary>
+        public string Badge { get; set; }
         /// <summary>Пипетка: слева квадратик с этим цветом в окантовке вместо иконки.</summary>
         public Color? Swatch { get; set; }
         public string FolderPath { get; set; }

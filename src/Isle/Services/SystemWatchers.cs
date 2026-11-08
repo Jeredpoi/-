@@ -98,7 +98,7 @@ namespace Isle.Services
                     if (!first && sameWindow && toasts)
                         ToastBus.Show(new Toast
                         {
-                            Kind = ToastKind.Layout, Title = LanguageCode + "  ·  " + LangName(langId), Icon = Icons.Keyboard,
+                            Kind = ToastKind.Layout, Title = LangName(langId), Badge = LanguageCode, Icon = Icons.Keyboard,
                             ReplaceKey = "layout", Duration = TimeSpan.FromSeconds(1.2)
                         });
                 }
@@ -119,7 +119,7 @@ namespace Isle.Services
                 ToastBus.Show(new Toast
                 {
                     Kind = ToastKind.Caps, Title = caps ? "Caps Lock включён" : "Caps Lock выключен",
-                    Icon = Icons.Caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4)
+                    Icon = Icons.Caps, On = caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4)
                 });
             _lastCaps = caps;
         }
@@ -130,7 +130,7 @@ namespace Isle.Services
             // Батарея
             if (GetSystemPowerStatus(out var ps))
             {
-                HasBattery = ps.BatteryFlag != 128 && ps.BatteryLifePercent != 255;
+                HasBattery = ps.BatteryFlag != 128 && ps.BatteryFlag != 255 && ps.BatteryLifePercent != 255; // 128 — батареи нет (обычный ПК), 255 — Windows не знает: тоже не показываем
                 Charging = ps.ACLineStatus == 1;
                 BatteryPercent = ps.BatteryLifePercent == 255 ? -1 : ps.BatteryLifePercent;
                 if (HasBattery && s.BatteryToasts)
@@ -141,7 +141,7 @@ namespace Isle.Services
                             Kind = ToastKind.Battery,
                             Title = Charging ? "Зарядка" : "От батареи",
                             Subtitle = BatteryPercent + "%",
-                            Icon = Charging ? Icons.Bolt : Icons.Battery,
+                            Icon = Charging ? Icons.Bolt : Icons.Battery, On = Charging,
                             Accent = System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80),
                             Progress = BatteryPercent / 100.0
                         });
@@ -150,7 +150,7 @@ namespace Isle.Services
                         _warnedLow = true;
                         ToastBus.Show(new Toast
                         {
-                            Kind = ToastKind.Battery, Title = "Низкий заряд", Subtitle = BatteryPercent + "%",
+                            Kind = ToastKind.Error, Title = "Низкий заряд", Subtitle = BatteryPercent + "% · подключи зарядку",
                             Icon = Icons.Battery, Accent = System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71),
                             Important = true, Duration = TimeSpan.FromSeconds(4)
                         });

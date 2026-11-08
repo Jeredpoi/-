@@ -35,7 +35,9 @@ namespace Isle.Views
             if (w == null)
             {
                 City.Text = AppSettings.Current.City;
-                Desc.Text = "Загружаю погоду…";
+                Desc.Text = AppHost.Window?.WeatherError is { } err
+                    ? "Не удалось загрузить погоду — нажми ↻ обновить (" + (err.Length > 60 ? err.Substring(0, 60) + "…" : err) + ")"
+                    : "Загружаю погоду…";
                 return;
             }
             City.Text = w.City;

@@ -28,7 +28,7 @@ namespace Isle.Services
         public double Precip { get; set; }
         public string MinText => Math.Round(Min) + "°";
         public string MaxText => Math.Round(Max) + "°";
-        public string PrecipText => Precip >= 0.1 ? Precip.ToString("0.#", CultureInfo.InvariantCulture) + " мм" : "";
+        public string PrecipText => Precip >= 0.1 ? Precip.ToString("0.#", CultureInfo.CurrentCulture) + " мм" : "";
         // для полоски диапазона
         public double BarLeft { get; set; }
         public double BarWidth { get; set; }
@@ -82,7 +82,23 @@ namespace Isle.Services
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
         private static readonly SemaphoreSlim ForecastLock = new(1, 1);
         private static readonly Dictionary<string, ForecastCache> Forecasts = new(StringComparer.Ordinal);
-        private sealed record ForecastCache(WeatherNow Weather, DateTimeOffset RefreshAfter, DateTimeOffset? LastModified);
+        /// <summary>Сырой прогноз храним целиком: «сейчас», почасовой и предупреждения пересчитываются от текущего времени при каждом обращении.</summary>
+        private sealed record ForecastCache(WeatherNow Weather, DateTimeOffset RefreshAfter, DateTimeOffset? LastModified, string Json);
+
+        /// <summary>Прогноз из кэша, но «сейчас» — настоящее (а не время скачивания: оно бывает 3 часа назад).</summary>
+        private static WeatherNow Fresh(ForecastCache cached, string city)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(cached.Json)) { cached.Weather.City = city; return cached.Weather; }
+                using var doc = JsonDocument.Parse(cached.Json);
+                var w = ParseLocationForecast(doc.RootElement, city);
+                w.Sunrise = cached.Weather.Sunrise;
+                w.Sunset = cached.Weather.Sunset;
+                return w;
+            }
+            catch { cached.Weather.City = city; return cached.Weather; }
+        }
 
         static WeatherService()
         {
@@ -109,11 +125,7 @@ namespace Isle.Services
             {
                 var now = DateTimeOffset.UtcNow;
                 Forecasts.TryGetValue(key, out var cached);
-                if (cached != null && now < cached.RefreshAfter)
-                {
-                    cached.Weather.City = city;
-                    return cached.Weather;
-                }
+                if (cached != null && now < cached.RefreshAfter) return Fresh(cached, city);
 
                 var url = "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" + lat.ToString("0.####", inv) + "&lon=" + lon.ToString("0.####", inv);
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -124,11 +136,11 @@ namespace Isle.Services
                     var renewed = response.Content.Headers.Expires ?? now + MinimumRefreshInterval(lat, lon);
                     cached = cached with { RefreshAfter = Max(renewed, now + MinimumRefreshInterval(lat, lon)) };
                     Forecasts[key] = cached;
-                    cached.Weather.City = city;
-                    return cached.Weather;
+                    return Fresh(cached, city);
                 }
                 response.EnsureSuccessStatusCode();
-                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
                 var weather = ParseLocationForecast(doc.RootElement, city);
                 await LoadSunAsync(lat, lon, weather);
 
@@ -136,7 +148,7 @@ namespace Isle.Services
                 var expires = response.Content.Headers.Expires ?? now;
                 var refreshAfter = Max(expires, now + minInterval);
                 var modified = response.Content.Headers.LastModified;
-                Forecasts[key] = new ForecastCache(weather, refreshAfter, modified);
+                Forecasts[key] = new ForecastCache(weather, refreshAfter, modified, json);
                 return weather;
             }
             finally { ForecastLock.Release(); }

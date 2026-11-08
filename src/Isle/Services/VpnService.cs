@@ -131,7 +131,7 @@ namespace Isle.Services
 
         private async Task Check()
         {
-            if (!AppSettings.Current.VpnStatus) { if (Active) { Active = false; Changed?.Invoke(); } return; }
+            if (!AppSettings.Current.VpnStatus) { _last = null; if (Active) { Active = false; Changed?.Invoke(); } return; } // включат снова — проверим заново
             // Список сетевых адаптеров Windows отдаёт медленно (до десятков мс) — не в потоке интерфейса, иначе раз в 10 с подлагивает анимация
             var nic = await Task.Run(Find);
             bool active = nic != null;
@@ -151,7 +151,7 @@ namespace Isle.Services
                     Kind = ToastKind.Info,
                     Title = active ? "VPN подключён" + (Country.Length > 0 ? " · " + Country : "") : "VPN отключён",
                     Subtitle = active ? (CountryName.Length > 0 ? CountryName + " · " : "") + Name : (CountryName.Length > 0 ? "Сейчас вы: " + CountryName : ""),
-                    Icon = Icons.Shield,
+                    Icon = Icons.Shield, On = active,
                     Accent = active ? System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80) : System.Windows.Media.Color.FromRgb(0xA1, 0xA1, 0xAB)
                 });
         }

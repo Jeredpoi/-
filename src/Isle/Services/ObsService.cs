@@ -16,8 +16,17 @@ namespace Isle.Services
     /// </summary>
     public static class ObsService
     {
-        public static bool IsObsRunning() =>
-            Process.GetProcessesByName("obs64").Any() || Process.GetProcessesByName("obs32").Any() || Process.GetProcessesByName("obs").Any();
+        public static bool IsObsRunning()
+        {
+            foreach (var name in new[] { "obs64", "obs32", "obs" })
+            {
+                var found = Process.GetProcessesByName(name);
+                bool any = found.Length > 0;
+                foreach (var p in found) p.Dispose(); // процессы — системные ресурсы, не оставляем их висеть
+                if (any) return true;
+            }
+            return false;
+        }
 
         /// <summary>Включает/выключает запись. Возвращает true, если запись теперь идёт.</summary>
         public static async Task<bool> ToggleRecordAsync()
@@ -47,7 +56,8 @@ namespace Isle.Services
         private static async Task PollOnce()
         {
             bool rec = false, live = false;
-            if (AppSettings.Current.ObsStatus && IsObsRunning())
+            // список процессов — не в потоке интерфейса (раз в 3 с он подтормаживал анимацию)
+            if (AppSettings.Current.ObsStatus && await Task.Run(IsObsRunning))
             {
                 try
                 {

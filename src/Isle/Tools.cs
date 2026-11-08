@@ -73,7 +73,7 @@ namespace Isle
             {
                 ToastBus.Show(new Toast
                 {
-                    Title = "Текст не найден", Subtitle = "Проверь, что в Windows установлен язык с распознаванием текста",
+                    Kind = ToastKind.Error, Title = "Текст не найден", Subtitle = "Проверь, что в Windows установлен язык с распознаванием текста",
                     Icon = Icons.Scan, Important = true, Duration = TimeSpan.FromSeconds(4)
                 });
                 return;
@@ -93,7 +93,7 @@ namespace Isle
             var text = ScreenTools.ReadQr(bmp);
             if (string.IsNullOrEmpty(text))
             {
-                ToastBus.Show(new Toast { Title = "QR-код не найден", Subtitle = "Выдели код целиком, с небольшим полем", Icon = Icons.Qr, Important = true, Duration = TimeSpan.FromSeconds(3) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "QR-код не найден", Subtitle = "Выдели код целиком, с небольшим полем", Icon = Icons.Qr, Important = true, Duration = TimeSpan.FromSeconds(3) });
                 return;
             }
             ClipboardService.SetText(text);
@@ -127,7 +127,7 @@ namespace Isle
             {
                 ToastBus.Show(new Toast
                 {
-                    Title = image ? "В буфере картинка" : "В буфере нет текста",
+                    Kind = ToastKind.Error, Title = image ? "В буфере картинка" : "В буфере нет текста",
                     Subtitle = "«Чистый текст» убирает шрифты и цвета у скопированного текста — скопируй текст и нажми снова",
                     Icon = Icons.Eraser, Important = true, Duration = TimeSpan.FromSeconds(4)
                 });
@@ -156,7 +156,7 @@ namespace Isle
                 {
                     ToastBus.Show(new Toast
                     {
-                        Title = "OBS не отвечает", Subtitle = "Включи в OBS: Инструменты → Настройки сервера WebSocket. " + ex.Message,
+                        Kind = ToastKind.Error, Title = "OBS не отвечает", Subtitle = "Включи в OBS: Инструменты → Настройки сервера WebSocket. " + ex.Message,
                         Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(6)
                     });
                 }

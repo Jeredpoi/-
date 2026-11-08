@@ -151,6 +151,7 @@ namespace Isle.Views
 
         public void OnShown()
         {
+            SyncAppVolume();
             ApplyPlayerStyle();
             Refresh();
             SyncVolume();
@@ -391,6 +392,7 @@ namespace Isle.Views
         /// </summary>
         private void SyncAppVolume()
         {
+            if (!IsVisible) return; // вкладка скрыта — не опрашиваем звуковые сессии зря (обновится при показе)
             var m = AppHost.Media.Current;
             if (!m.HasSession || string.IsNullOrEmpty(m.SourceAppId)) { AppVol.Visibility = Visibility.Collapsed; return; }
             if (AppVol.IsMouseCaptured || DateTime.Now - _appVolSetAt < TimeSpan.FromSeconds(1)) return; // крутят сейчас — не перебиваем

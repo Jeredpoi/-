@@ -64,9 +64,12 @@ namespace Isle.Services
         {
             var now = DateTime.Now;
             bool changed = false;
-            foreach (var r in Items.Where(x => x.When <= now).ToList())
+            var due = Items.Where(x => x.When <= now).ToList();
+            // несколько напоминаний сразу (например, пока компьютер был выключен) — одной всплывашкой, а не затирая друг друга
+            if (due.Count == 1) AlarmService.Ring("Напоминание", due[0].Text);
+            else if (due.Count > 1) AlarmService.Ring("Напоминания · " + due.Count, string.Join(" · ", due.Select(x => x.Text)));
+            foreach (var r in due)
             {
-                AlarmService.Ring("Напоминание", r.Text);
                 if (r.Daily) { while (r.When <= now) r.When = r.When.AddDays(1); }
                 else Items.Remove(r);
                 changed = true;

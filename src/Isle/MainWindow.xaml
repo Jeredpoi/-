@@ -79,11 +79,11 @@
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <!-- кнопки мини-плеера -->
                             <StackPanel x:Name="MiniButtons" Orientation="Horizontal" Margin="0,0,10,0" Visibility="Collapsed">
-                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
-                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay">
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev" ToolTip="Предыдущий"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay" ToolTip="Пауза / играть">
                                     <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Fg}"><h:Icon x:Name="MiniPlayIcon" Kind="Pause" Width="12" Height="12" StrokeWidth="2.4" Foreground="Black"/></Border>
                                 </Button>
-                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext" ToolTip="Следующий"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
                             </StackPanel>
                             <TextBlock x:Name="MediaTimer" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <TextBlock x:Name="MediaDownload" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Идёт загрузка"/>
@@ -151,6 +151,10 @@
                                         <Border CornerRadius="6" BorderBrush="#40000000" BorderThickness="1"/>
                                     </Border>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
+                                    <!-- «выключено»: косая черта поверх значка -->
+                                    <Line x:Name="ToastOffSlash" X1="9" Y1="9" X2="25" Y2="25" Stroke="#F87171" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
+                                    <TextBlock x:Name="ToastBadge" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     <h:WeatherGlyph x:Name="ToastWeather" Margin="2" Visibility="Collapsed"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>

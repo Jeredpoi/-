@@ -46,7 +46,7 @@ namespace Isle.Services
                 }
                 if (best.HasValue) result = Parse(best.Value.GetProperty("syncedLyrics").GetString());
             }
-            catch { }
+            catch { return null; } // сеть или сервис упали — не запоминаем «нет текста», попробуем в следующий раз
             Cache[key] = result;
             return result;
         }
