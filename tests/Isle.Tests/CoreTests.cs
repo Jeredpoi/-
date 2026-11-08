@@ -595,3 +595,47 @@ namespace Isle.Tests
                 new DateTime(2026, 11, 6, 12, 0, 0)));
     }
 }
+
+namespace Isle.Tests
+{
+    /// <summary>Разбор живой сводки Steam — на настоящей сводке из журнала пользователя (загрузка «112 Operator»).</summary>
+    public class SteamOverviewTests
+    {
+        private const string Real = @"{""remote_client_id"":""0"",""update_appid"":793460,""update_is_upload"":false,""update_network_bytes_per_second"":13705941,""update_peak_network_bytes_per_second"":21849331,""update_disc_bytes_per_second"":13218838,""update_state"":""Downloading"",""update_state_flags"":97,""progress"":[{""bytes_in_progress"":0,""bytes_total"":0,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":3747178867,""bytes_total"":3747178867,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":1032054096,""bytes_total"":1502001728,""estimated_time_remaining_sec"":37},{""bytes_in_progress"":1619544710,""bytes_total"":3747178867,""estimated_time_remaining_sec"":169},{""bytes_in_progress"":0,""bytes_total"":0,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":0,""bytes_total"":0,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":0,""bytes_total"":3747178867,""estimated_time_remaining_sec"":0}],""overall_percent_complete"":43,""overall_estimated_time_remaining_sec"":169,""update_start_time"":1794151722,""update_is_install"":true,""update_is_workshop"":false,""update_is_shader"":false,""update_is_prefetch_estimate"":false,""paused"":false,""throttling_suspended"":false,""lan_peer_hostname"":"""",""download_throttle_rate"":0,""restrict_auto_updates"":false,""restrict_auto_updates_start"":0,""restrict_auto_updates_end"":0}";
+
+        [Fact]
+        public void ParsesRealSteamOverview()
+        {
+            var o = SteamClientApi.Parse(Real);
+            Assert.NotNull(o);
+            Assert.Equal(793460, o.AppId);
+            Assert.Equal("Downloading", o.State);
+            Assert.False(o.Paused);
+            Assert.True(o.IsInstall);
+            Assert.Equal(1032054096, o.Downloaded);   // progress[2] — загрузка данных
+            Assert.Equal(1502001728, o.ToDownload);
+            Assert.Equal(1619544710, o.Written);      // progress[3] — запись на диск
+            Assert.Equal(3747178867, o.ToWrite);
+            Assert.Equal(43, o.OverallPercent);       // общий процент Steam
+            Assert.Equal(169, o.SecondsRemaining);    // общий остаток Steam
+            Assert.Equal(13705941, o.NetworkBytesPerSecond);
+        }
+
+        [Fact]
+        public void SkipsDownloadsOfAnotherComputer()
+        {
+            var remote = Real.Replace("\"remote_client_id\":\"0\"", "\"remote_client_id\":\"76561198000000001\"");
+            Assert.NotEqual(Real, remote);
+            Assert.Null(SteamClientApi.Parse(remote));
+        }
+
+        [Fact]
+        public void IdleOverviewHasNoApp()
+        {
+            var o = SteamClientApi.Parse("{\"remote_client_id\":\"0\",\"update_state\":\"None\",\"update_appid\":0,\"paused\":true,\"overall_percent_complete\":0,\"overall_estimated_time_remaining_sec\":-1}");
+            Assert.NotNull(o);
+            Assert.Equal(0, o.AppId);
+            Assert.True(o.Paused);
+        }
+    }
+}

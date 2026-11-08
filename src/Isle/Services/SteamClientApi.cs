@@ -23,10 +23,19 @@ namespace Isle.Services
     /// </summary>
     public static class SteamClientApi
     {
+        /// <summary>
+        /// Сводка загрузки Steam — поля как их на самом деле присылает Steam (проверено по журналу):
+        /// progress[2] — загрузка данных (сжатые, «X из Y» в Steam), progress[3] — запись на диск,
+        /// progress[6] — установка; overall_percent_complete и overall_estimated_time_remaining_sec — общий
+        /// процент и остаток, которые Steam показывает у себя.
+        /// </summary>
         public sealed record Overview(
             int AppId, string State, bool Paused, bool IsInstall,
-            long Downloaded, long ToDownload, long Staged, long ToStage,
-            double NetworkBytesPerSecond, double DiskBytesPerSecond, double SecondsRemaining);
+            long Downloaded, long ToDownload,        // загрузка данных
+            long Written, long ToWrite,              // запись на диск
+            long Installed, long ToInstall,          // установка
+            double NetworkBytesPerSecond, double DiskBytesPerSecond,
+            double OverallPercent, double SecondsRemaining);
 
         private const string FlagFile = ".cef-enable-remote-debugging";
         private const string DebugHost = "http://127.0.0.1:8080";
@@ -459,18 +468,18 @@ namespace Isle.Services
             var p = root.GetProperty("params");
             if (p.GetProperty("name").GetString() != "isleDl") return;
             var json = p.GetProperty("payload").GetString();
-            using var doc = JsonDocument.Parse(json);
-            var o = doc.RootElement;
-            Last = new Overview(
-                Int(o, "update_appid"), Str(o, "update_state"), Bool(o, "paused"), Bool(o, "update_is_install"),
-                Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"),
-                Long(o, "update_bytes_staged"), Long(o, "update_bytes_to_stage"),
-                Num(o, "update_network_bytes_per_second"), Num(o, "update_disc_bytes_per_second"), Num(o, "update_seconds_remaining"));
+            var parsed = Parse(json);
+            if (parsed == null) return; // загрузка на другом компьютере
+            Last = parsed;
             LastAt = DateTime.Now;
-            // сырая сводка Steam в журнал: каждое изменение, но не чаще раза в секунду
+            // в журнал: короткая выжимка + сырая сводка без «history» (история скорости — 18 КБ каждый раз)
             if (json != _lastRaw && DateTime.Now - _lastRawLog >= TimeSpan.FromSeconds(1))
             {
-                Diag.Write("Steam: " + json);
+                var l = Last;
+                Diag.Write($"Steam: app {l.AppId} «{l.State}» paused={l.Paused} install={l.IsInstall} {l.OverallPercent}% осталось {l.SecondsRemaining} с | " +
+                           $"сеть {l.NetworkBytesPerSecond / 1048576:0.0} МБ/с, диск {l.DiskBytesPerSecond / 1048576:0.0} МБ/с | " +
+                           $"загрузка {l.Downloaded / 1048576} / {l.ToDownload / 1048576} МБ, запись {l.Written / 1048576} / {l.ToWrite / 1048576} МБ, установка {l.Installed / 1048576} / {l.ToInstall / 1048576} МБ");
+                Diag.Write("Steam (сырая): " + WithoutHistory(json));
                 _lastRaw = json;
                 _lastRawLog = DateTime.Now;
             }
@@ -529,6 +538,47 @@ namespace Isle.Services
         {
             try { _ws?.Abort(); _ws?.Dispose(); } catch { }
             _ws = null;
+        }
+
+        /// <summary>Разбор сводки Steam (null — сводка о загрузке на другом компьютере).</summary>
+        internal static Overview Parse(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var o = doc.RootElement;
+            // сводка о загрузке на ДРУГОМ компьютере (удалённое управление загрузками Steam) — не наша
+            if (o.TryGetProperty("remote_client_id", out var rc) && rc.ToString() != "0" && rc.ToString() != "") return null;
+            var dl = Prog(o, 2); var wr = Prog(o, 3); var inst = Prog(o, 6);
+            // старые версии Steam присылали отдельные поля update_bytes_* — берём их, если массива progress нет
+            if (dl.total == 0 && Long(o, "update_bytes_to_download") > 0) dl = (Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"), 0);
+            if (wr.total == 0 && Long(o, "update_bytes_to_stage") > 0) wr = (Long(o, "update_bytes_staged"), Long(o, "update_bytes_to_stage"), 0);
+            double eta = o.TryGetProperty("overall_estimated_time_remaining_sec", out _) ? Num(o, "overall_estimated_time_remaining_sec") : Num(o, "update_seconds_remaining");
+            return new Overview(
+                Int(o, "update_appid"), Str(o, "update_state"), Bool(o, "paused"), Bool(o, "update_is_install"),
+                dl.got, dl.total, wr.got, wr.total, inst.got, inst.total,
+                Num(o, "update_network_bytes_per_second"), Num(o, "update_disc_bytes_per_second"),
+                Num(o, "overall_percent_complete"), eta);
+        }
+
+        /// <summary>Этап из массива progress: сколько сделано, сколько всего, сколько секунд осталось.</summary>
+        private static (long got, long total, double eta) Prog(JsonElement o, int index)
+        {
+            if (!o.TryGetProperty("progress", out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() <= index) return (0, 0, 0);
+            var e = arr[index];
+            return (Long(e, "bytes_in_progress"), Long(e, "bytes_total"), Num(e, "estimated_time_remaining_sec"));
+        }
+
+        private static string WithoutHistory(string json)
+        {
+            try
+            {
+                if (System.Text.Json.Nodes.JsonNode.Parse(json) is System.Text.Json.Nodes.JsonObject obj)
+                {
+                    obj.Remove("history");
+                    return obj.ToJsonString();
+                }
+            }
+            catch { }
+            return json;
         }
 
         private static long Long(JsonElement o, string name) => o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? (long)v.GetDouble() : 0;

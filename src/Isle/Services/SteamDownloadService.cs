@@ -16,6 +16,8 @@ namespace Isle.Services
     public sealed class SteamDownload
     {
         public int AppId { get; init; }
+        /// <summary>Этап по сводке Steam («Загрузка», «Установка»…), null — неизвестно.</summary>
+        public string Phase { get; init; }
         public string Name { get; init; }
         public double Progress { get; init; }
         public double BytesPerSecond { get; init; }
