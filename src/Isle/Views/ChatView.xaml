@@ -32,7 +32,7 @@
         <Grid>
             <StackPanel x:Name="Welcome" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <!-- Клоди встречает в чате: следит за курсором, думает вместе с ИИ, радуется ответу -->
-                <h:Character x:Name="ChatBuddy" Width="64" Height="48" HorizontalAlignment="Center"/>
+                <h:Character x:Name="ChatBuddy" Width="78" Height="54" HorizontalAlignment="Center"/>
                 <TextBlock Text="Спроси что угодно" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,4"/>
                 <TextBlock x:Name="ModelLine" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="RecentTitle" Text="НЕДАВНИЕ РАЗГОВОРЫ" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,16,0,6"/>
@@ -43,7 +43,11 @@
                 <ItemsControl x:Name="Messages">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border x:Name="bubble" CornerRadius="14" Padding="12,9" Margin="0,0,0,8" MaxWidth="680"
+                            <DockPanel x:Name="row" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <!-- у ответа ИИ — маленький Клоди -->
+                            <Image x:Name="avatar" DockPanel.Dock="Left" Source="{x:Static h:Character.Avatar}" Width="26" Height="24" Stretch="Uniform"
+                                   VerticalAlignment="Top" Margin="0,6,8,0" RenderOptions.EdgeMode="Aliased"/>
+                            <Border x:Name="bubble" CornerRadius="14" Padding="12,9" MaxWidth="680"
                                     HorizontalAlignment="Left" Background="{StaticResource Card}">
                                 <StackPanel>
                                 <TextBox x:Name="msgText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Background="Transparent"
@@ -63,6 +67,7 @@
                                 </StackPanel>
                                 </StackPanel>
                             </Border>
+                            </DockPanel>
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding HasPending}" Value="True">
                                     <Setter TargetName="actionRow" Property="Visibility" Value="Visible"/>
@@ -70,7 +75,8 @@
                                     <Setter TargetName="bubble" Property="BorderThickness" Value="1"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                    <Setter TargetName="bubble" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="row" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="avatar" Property="Visibility" Value="Collapsed"/>
                                     <Setter TargetName="bubble" Property="Background" Value="#1F1F24"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>

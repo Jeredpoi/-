@@ -229,28 +229,28 @@
                             </Border>
                             <StackPanel x:Name="TabBar" Orientation="Horizontal">
                                 <RadioButton Style="{StaticResource Tab}" Content="Главная" x:Name="TabHome" IsChecked="True" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Home" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Home" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Буфер" x:Name="TabClip" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Clipboard" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Clipboard" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Полка" x:Name="TabShelf" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Tray" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Tray" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Текст" x:Name="TabText" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Text" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Text" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Чат" x:Name="TabChat" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Chat" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Chat" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Заметка" x:Name="TabNotes" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Note" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Note" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Погода" x:Name="TabWeather" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Sun" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Sun" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Управление" x:Name="TabControls" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Sliders" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Sliders" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                             </StackPanel>
 
