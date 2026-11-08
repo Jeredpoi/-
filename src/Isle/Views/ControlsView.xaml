@@ -23,7 +23,8 @@
         </Grid.RowDefinitions>
 
         <UniformGrid Columns="4">
-            <Button Style="{StaticResource Tile}" Margin="0,0,5,0" Click="OnNetwork" ToolTip="Параметры сети">
+            <Grid Margin="0,0,5,0">
+            <Button Style="{StaticResource Tile}" Click="OnNetwork" ToolTip="Параметры сети">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" x:Name="NetDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
                         <h:Icon Kind="Wifi" Width="16" Height="16"/>
@@ -34,6 +35,14 @@
                     </StackPanel>
                 </DockPanel>
             </Button>
+            <!-- список доступных сетей Wi-Fi -->
+            <Button x:Name="WifiListBtn" Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Margin="0,8,8,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Click="OnWifiList" ToolTip="Сети Wi-Fi рядом">
+                <h:Icon Kind="Next" Width="12" Height="12" RenderTransformOrigin="0.5,0.5">
+                    <h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform>
+                </h:Icon>
+            </Button>
+            </Grid>
             <Button Style="{StaticResource Tile}" Margin="5,0" Click="OnBluetooth" ToolTip="Включить / выключить Bluetooth">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" x:Name="BtDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">

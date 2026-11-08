@@ -87,6 +87,41 @@ namespace Isle.Views
 
         private void OnNetwork(object s, RoutedEventArgs e) => SystemControls.OpenSettings("ms-settings:network");
 
+        /// <summary>Сети Wi-Fi рядом: текущая отмечена, клик — подключиться (к знакомой сети) или открыть настройки Wi-Fi.</summary>
+        private async void OnWifiList(object s, RoutedEventArgs e)
+        {
+            var menu = new ContextMenu { PlacementTarget = WifiListBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, MaxHeight = 360 };
+            menu.Items.Add(new MenuItem { Header = "Ищу сети…", IsEnabled = false });
+            menu.IsOpen = true;
+            var (nets, error) = await SystemControls.WifiNetworksAsync();
+            menu.Items.Clear();
+            if (error != null) menu.Items.Add(new MenuItem { Header = error, IsEnabled = false });
+            else if (nets.Count == 0) menu.Items.Add(new MenuItem { Header = "Сетей рядом не видно", IsEnabled = false });
+            var current = SystemControls.Network().status;
+            foreach (var n in nets)
+            {
+                var item = new MenuItem
+                {
+                    Header = n.ssid + "   ·   " + n.signal + "%" + (n.secured ? "  🔒" : ""),
+                    IsChecked = n.ssid == current
+                };
+                var ssid = n.ssid;
+                item.Click += async (_, __) =>
+                {
+                    NetStatus.Text = "Подключаюсь…";
+                    bool ok = await SystemControls.ConnectWifiAsync(ssid);
+                    if (!ok) SystemControls.OpenSettings("ms-settings:network-wifi"); // новая сеть с паролем — пароль вводится в Windows
+                    await System.Threading.Tasks.Task.Delay(1500);
+                    OnShown();
+                };
+                menu.Items.Add(item);
+            }
+            menu.Items.Add(new Separator());
+            var settings = new MenuItem { Header = "Параметры Wi-Fi…" };
+            settings.Click += (_, __) => SystemControls.OpenSettings("ms-settings:network-wifi");
+            menu.Items.Add(settings);
+        }
+
         private async void OnBluetooth(object s, RoutedEventArgs e)
         {
             BtStatus.Text = "…";

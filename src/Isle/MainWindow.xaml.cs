@@ -137,7 +137,12 @@ namespace Isle
                     Progress = muted ? 0 : v, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(1.3)
                 });
             };
-            AppHost.Watchers.LanguageChanged += () => LangChip.Text = AppHost.Watchers.LanguageCode;
+            AppHost.Watchers.LanguageChanged += () =>
+            {
+                if (LangChip.Text == AppHost.Watchers.LanguageCode) return;
+                LangChip.Text = AppHost.Watchers.LanguageCode;
+                AnimateLangChip();
+            };
             AppHost.Watchers.FullscreenChanged += fs => { _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen; ApplyVisibility(); };
             AppHost.WeatherChanged += UpdateWeatherMini;
 
@@ -1029,36 +1034,65 @@ namespace Isle
 
         private async void OnLangClick(object sender, RoutedEventArgs e)
         {
-            // Клик по острову не забирает фокус у твоего окна, поэтому переключаем раскладку именно там.
-            // Win+Пробел больше не жмём: он открывает системную плашку языка, и из-за неё мигали живые обои.
-            var target = Win32.GetForegroundWindow();
-            if (target == _hwnd && PreviousForeground != IntPtr.Zero && !IsDesktopWindow(PreviousForeground))
+            // Куда переключаем: окно, где ты печатаешь. Если сейчас активен остров, рабочий стол или обои —
+            // берём последнее обычное окно (раньше раскладка менялась у самой чёлки или рабочего стола — и «ничего не происходило»).
+            var fg = Win32.GetForegroundWindow();
+            bool fgReal = fg != IntPtr.Zero && fg != _hwnd && !IsDesktopWindow(fg);
+            var target = fgReal ? fg : AppHost.Watchers.LastRealWindow;
+            if (target == IntPtr.Zero || !Win32.IsWindow(target)) target = fgReal ? fg : PreviousForeground;
+            if (target == IntPtr.Zero || !Win32.IsWindow(target)) target = fg;
+
+            var before = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
+            // 1) просим окно включить следующую раскладку (так делают переключатели вроде Punto)
+            var next = (int)((long)Win32.RequestNextLayout(target) & 0xFFFF);
+            for (int i = 0; i < 10 && (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) == before; i++) await Task.Delay(50);
+            bool changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
+            // 2) окно проигнорировало просьбу (консоли, некоторые игры) — жмём сочетание пользователя, но только если
+            //    это окно и правда активно: сочетание приходит в активное окно
+            if (!changed && fgReal && target == fg)
             {
-                Win32.ForceForeground(PreviousForeground); // печатали в острове — вернуть фокус в обычное окно
-                await Task.Delay(90);
-                target = PreviousForeground;
-            }
-            var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
-            // 1) вежливо просим окно включить следующую раскладку (так делают переключатели вроде Punto)
-            Win32.RequestNextLayout(target);
-            // ждём до 0,5 с: окно меняет раскладку не мгновенно. Раньше через 150 мс считали, что не вышло,
-            // и жали ещё и сочетание — раскладка переключалась дважды и возвращалась обратно
-            for (int i = 0; i < 10 && Win32.LayoutOf(Win32.FocusWindowOf(target)) == before; i++) await Task.Delay(50);
-            // 2) окно проигнорировало просьбу (бывает у консолей и некоторых игр) — жмём сочетание пользователя
-            if (Win32.LayoutOf(Win32.FocusWindowOf(target)) == before)
-            {
-                await WaitModifiersUp(); // клавиши, зажатые пользователем, смешались бы с нашим сочетанием
-                if (!Win32.PressLayoutHotkey())
-                    ToastBus.Show(new Toast
-                    {
-                        Kind = ToastKind.Error, Title = "Окно не дало сменить раскладку", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
-                        Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
-                    });
-                await Task.Delay(200);
+                await WaitModifiersUp();
+                if (Win32.PressLayoutHotkey())
+                {
+                    await Task.Delay(200);
+                    changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
+                }
                 Win32.ReleaseModifiers(); // страховка от «залипших» Alt/Shift/Win
             }
-            AppHost.Watchers.RefreshLanguage();
-            LangChip.Text = AppHost.Watchers.LanguageCode;
+            int now = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
+            int shown = changed ? now : next;
+            if (shown != 0 && shown != before)
+            {
+                AppHost.Watchers.ForceLanguage(shown);
+                // своя всплывашка: в раскрытой панели обычные не показываются, а тут ты сам нажал — нужна отдача
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Layout, Title = Services.SystemWatchers.LangName(shown), Badge = AppHost.Watchers.LanguageCode,
+                    Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(1.2)
+                });
+            }
+            else
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Error, Title = "Раскладка не переключилась", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
+                    Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
+                });
+        }
+
+        /// <summary>Значок раскладки в панели: короткий «переворот», чтобы смена была заметна.</summary>
+        private void AnimateLangChip()
+        {
+            if (LangChip.RenderTransform is not ScaleTransform sc)
+            {
+                sc = new ScaleTransform(1, 1);
+                LangChip.RenderTransform = sc;
+                LangChip.RenderTransformOrigin = new Point(0.5, 0.5);
+            }
+            var flip = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(320) };
+            flip.KeyFrames.Add(new EasingDoubleKeyFrame(0.2, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            flip.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320)), new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut }));
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, flip);
+            LangChip.BeginAnimation(OpacityProperty, new DoubleAnimation(0.3, 1, TimeSpan.FromMilliseconds(260)));
         }
 
         private static async Task WaitModifiersUp()
@@ -1529,20 +1563,24 @@ namespace Isle
             var tr = (TranslateTransform)tg.Children[1];
             sc.BeginAnimation(ScaleTransform.ScaleXProperty, null); sc.BeginAnimation(ScaleTransform.ScaleYProperty, null);
             tr.BeginAnimation(TranslateTransform.XProperty, null);
+            // Анимации стартуют чуть позже, чем чёлка начинает расти (иначе две анимации в первый кадр — рывок),
+            // и движутся мягко: без резких скачков масштаба, тряска затухает.
+            var delay = TimeSpan.FromMilliseconds(110);
             if (error)
             {
-                var shake = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520) };
-                double[] xs = { 0, -6, 6, -5, 5, -3, 3, 0 };
+                var shake = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(480) };
+                double[] xs = { 0, -4, 4, -3, 3, -1.5, 0 };
                 for (int i = 0; i < xs.Length; i++)
-                    shake.KeyFrames.Add(new EasingDoubleKeyFrame(xs[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 65))));
+                    shake.KeyFrames.Add(new EasingDoubleKeyFrame(xs[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 80)),
+                        new SineEase { EasingMode = EasingMode.EaseInOut }));
                 tr.BeginAnimation(TranslateTransform.XProperty, shake);
             }
             else if (success)
             {
-                var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(460) };
-                pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.6, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.18, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(220)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(460)), new ElasticEase { Oscillations = 1, Springiness = 4, EasingMode = EasingMode.EaseOut }));
+                var pop = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(420) };
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(190)), new SineEase { EasingMode = EasingMode.EaseOut }));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), new SineEase { EasingMode = EasingMode.EaseInOut }));
                 sc.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
                 sc.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
             }

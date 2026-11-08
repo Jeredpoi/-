@@ -54,6 +54,18 @@ namespace Isle.Services
         private bool _lastFullscreen;
 
         // до первого «настоящего» окна берём раскладку ввода по умолчанию, а не всегда «EN»
+        /// <summary>Последнее «настоящее» окно (не рабочий стол, не обои, не сам остров) — туда переключаем раскладку с кнопки.</summary>
+        public IntPtr LastRealWindow => _lastFg;
+
+        /// <summary>Раскладку переключил сам Isle — сразу показываем новую, не дожидаясь, пока окно её применит.</summary>
+        public void ForceLanguage(int langId)
+        {
+            if (langId == 0 || langId == _lastLang) return;
+            _lastLang = langId;
+            LanguageCode = LangCode(langId);
+            LanguageChanged?.Invoke();
+        }
+
         public string LanguageCode { get; private set; } = LangCode((int)((long)Win32.GetKeyboardLayout(0) & 0xFFFF));
         public int BatteryPercent { get; private set; } = -1;
         public bool Charging { get; private set; }
@@ -223,7 +235,7 @@ namespace Isle.Services
             catch { return ""; }
         }
 
-        private static string LangName(int langId)
+        public static string LangName(int langId)
         {
             try
             {
