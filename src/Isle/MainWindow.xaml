@@ -113,27 +113,53 @@
                         </Grid>
 
                         <!-- загрузка (Steam / браузер): обложка в кольце прогресса, название, скорость, проценты -->
-                        <Grid x:Name="DownloadRow" Visibility="Collapsed" VerticalAlignment="Center" Background="Transparent">
+                        <Grid x:Name="DownloadRow" Visibility="Collapsed" VerticalAlignment="Center" Background="Transparent" Margin="-4,0,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <!-- миниатюра игры в кружке, вокруг — кольцо прогресса скачивания -->
-                            <Grid Width="34" Height="34" VerticalAlignment="Center">
-                                <Ellipse Stroke="#2A2A32" StrokeThickness="2.5"/>
-                                <Path x:Name="DlRing" Stroke="{DynamicResource Accent}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                <Ellipse Width="26" Height="26" Fill="#16161A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image x:Name="DlArt" Width="26" Height="26" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image.Clip><EllipseGeometry Center="13,13" RadiusX="13" RadiusY="13"/></Image.Clip>
+                            <!-- обложка игры в кружке, вокруг — кольцо прогресса (52 px, старт сверху по часовой) -->
+                            <Grid Width="52" Height="52" VerticalAlignment="Center">
+                                <Ellipse Stroke="#1C1C20" StrokeThickness="3"/>
+                                <Path x:Name="DlRing" Stroke="#ECECF1" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Ellipse Width="40" Height="40" Fill="#0E0E10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image x:Name="DlArt" Width="40" Height="40" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
                                 </Image>
-                                <h:Icon x:Name="DlIcon" Kind="Download" Width="13" Height="13" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <h:Icon x:Name="DlIcon" Kind="Download" Width="18" Height="18" Foreground="#ECECF1" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Grid>
-                            <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
-                                <TextBlock x:Name="DlName" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="DlSub" FontSize="10.5" Foreground="#9A9AA4" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                            <StackPanel Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="DlName" FontSize="16" FontWeight="SemiBold" Foreground="#ECECF1" TextTrimming="CharacterEllipsis"/>
+                                <!-- главная строка — скорость; дальше серым «5,1 из 12,4 ГБ · осталось 25 с» -->
+                                <DockPanel Margin="0,3,0,0" LastChildFill="True">
+                                    <h:Icon x:Name="DlArrow" DockPanel.Dock="Left" Kind="Download" Width="13" Height="13" StrokeWidth="2" Foreground="#ECECF1" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="DlSpeed" DockPanel.Dock="Left" FontSize="13" FontWeight="SemiBold" Foreground="#ECECF1" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                                    <TextBlock x:Name="DlSub" FontSize="13" Foreground="#8B8B95" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                                </DockPanel>
                             </StackPanel>
-                            <TextBlock x:Name="DlPercent" Grid.Column="2" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                            <Grid Grid.Column="2" VerticalAlignment="Center">
+                                <TextBlock x:Name="DlPercent" Width="64" TextAlignment="Right" FontSize="24" FontWeight="Light" Foreground="#ECECF1" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                                <!-- загрузка завершена: зелёная галочка + белая кнопка папки -->
+                                <StackPanel x:Name="DlDonePanel" Orientation="Horizontal" Visibility="Collapsed" VerticalAlignment="Center">
+                                    <Path x:Name="DlCheck" Data="M3 12.5l6 6L21 6.5" Stroke="#4ADE80" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          Width="24" Height="24" Stretch="None" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                    <Button x:Name="DlFolderButton" Width="44" Height="44" Padding="0" Click="OnDownloadFolder" ToolTip="Открыть папку" Cursor="Hand">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="Bg" Background="#ECECF1" CornerRadius="22">
+                                                    <h:Icon Kind="Folder" Width="20" Height="20" Foreground="#0B0B0D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#FFFFFF"/></Trigger>
+                                                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bg" Property="Background" Value="#C9C9D1"/></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                        <Button.RenderTransform><TranslateTransform x:Name="DlFolderShift"/></Button.RenderTransform>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
                         </Grid>
 
                         <!-- всплывашка -->
