@@ -1848,7 +1848,7 @@ namespace Isle
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
                     SetDownload(AppSettings.Current.SteamExactSpeed
-                        ? new DownloadState(steam.Name, steam.Phase ?? "Steam", steam.Progress, steam.BytesPerSecond > 0 ? steam.SpeedText.TrimStart('~') : "", SteamEta(steam.Remaining), steam.Icon, steam.Got, steam.Total)
+                        ? new DownloadState(steam.Name, steam.Phase ?? "Steam", steam.Progress, SteamSpeed(steam.BytesPerSecond), SteamEta(steam.Remaining), steam.Icon, steam.Got, steam.Total)
                         : new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
                 else if (download != null)
                 {
@@ -1900,6 +1900,11 @@ namespace Isle
             _ => "Steam"
         };
 
+        /// <summary>Скорость как в Steam: мегабайт = 1 000 000 байт, один знак после запятой («8,3 МБ/с»).</summary>
+        private static string SteamSpeed(double bytesPerSecond) => bytesPerSecond <= 0 ? ""
+            : bytesPerSecond >= 1_000_000 ? (bytesPerSecond / 1_000_000).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " МБ/с"
+            : Math.Max(1, bytesPerSecond / 1000).ToString("0", System.Globalization.CultureInfo.CurrentCulture) + " КБ/с";
+
         /// <summary>Остаток как в Steam: 1:16 или 1:02:03.</summary>
         private static string SteamEta(TimeSpan? t) => t is not TimeSpan v ? null
             : v.TotalHours >= 1 ? ((int)v.TotalHours) + ":" + v.Minutes.ToString("00") + ":" + v.Seconds.ToString("00")
@@ -1920,7 +1925,7 @@ namespace Isle
                 return;
             }
             _steamLiveShown = true;
-            var state = new DownloadState(s.Name, s.Phase ?? "Steam", s.Progress, s.BytesPerSecond > 0 ? s.SpeedText.TrimStart('~') : "", SteamEta(s.Remaining), s.Icon, s.Got, s.Total);
+            var state = new DownloadState(s.Name, s.Phase ?? "Steam", s.Progress, SteamSpeed(s.BytesPerSecond), SteamEta(s.Remaining), s.Icon, s.Got, s.Total);
             SetDownload(state);
             if (DateTime.Now - _lastShownLog >= TimeSpan.FromSeconds(1))
             {
