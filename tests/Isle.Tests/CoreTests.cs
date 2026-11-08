@@ -307,6 +307,23 @@ namespace Isle.Tests
         }
 
         [Fact]
+        public void FreshInstallShowsDownloadedDataNotInstalledFiles()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                // новая установка: в логе нет «Fully Installed» — главное «Загрузка данных» (220 из 1000), а не установка (160)
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), ActiveLog(appId).Replace("Update Required,Fully Installed,", "Update Required,"));
+                var download = SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 36, DateTimeKind.Local));
+                Assert.NotNull(download);
+                Assert.Equal("22%", download.ProgressText);
+                Assert.Equal(1000, download.Total);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
         public void LongRunningActiveDownloadDoesNotExpireAfterTenMinutes()
         {
             var appId = 900000 + Random.Shared.Next(1, 99999);
