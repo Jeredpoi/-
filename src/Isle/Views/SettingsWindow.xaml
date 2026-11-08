@@ -537,9 +537,11 @@
                                 </StackPanel>
                                 <CheckBox x:Name="SteamExact" HorizontalAlignment="Right" Click="OnSteamExact"/>
                             </Grid>
-                            <Grid Style="{StaticResource Row}">
-                                <TextBlock x:Name="SteamExactStatus" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="0,0,180,0"/>
-                                <Button Style="{StaticResource SFlat}" Content="Перезапустить Steam" HorizontalAlignment="Right" Padding="12,6" Click="OnSteamRestart"/>
+                            <!-- временная: видна, пока точная скорость ещё ни разу не заработала -->
+                            <Grid x:Name="SteamActivateRow" Style="{StaticResource Row}" Visibility="Collapsed">
+                                <TextBlock x:Name="SteamExactStatus" Style="{StaticResource RowNote}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,230,0"
+                                           Text="Steam закроется полностью и откроется снова — уже с точной скоростью"/>
+                                <Button x:Name="SteamActivateBtn" Style="{StaticResource SFlat}" Content="Включить точную скорость" HorizontalAlignment="Right" Padding="12,6" Click="OnSteamActivate"/>
                             </Grid>
                         </StackPanel>
                     </Border>

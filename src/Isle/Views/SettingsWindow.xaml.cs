@@ -210,6 +210,7 @@ namespace Isle.Views
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
             Vpn.IsChecked = S.VpnStatus;
             SteamExact.IsChecked = S.SteamExactSpeed;
+            UpdateSteamActivate();
             ClipHist.IsChecked = S.ClipboardHistory;
             ClipImg.IsChecked = S.ClipboardImages;
             AutoUpdate.IsChecked = S.AutoUpdateCheck;
@@ -237,12 +238,34 @@ namespace Isle.Views
             S.Save();
         }
 
-        private async void OnSteamRestart(object s, RoutedEventArgs e)
+        /// <summary>Кнопка видна, только пока точная скорость ни разу не заработала (и включена).</summary>
+        private async void UpdateSteamActivate()
         {
-            SteamExact.IsChecked = true;
-            S.SteamExactSpeed = true;
-            S.Save();
-            SteamExactStatus.Text = await Services.SteamClientApi.RestartNowAsync();
+            SteamActivateRow.Visibility = Visibility.Collapsed;
+            if (!S.SteamExactSpeed || S.SteamExactActivated) return;
+            if (Services.SteamDownloadService.SteamRoot() == null) return; // Steam не установлен
+            if (await Services.SteamClientApi.IsWorkingAsync())
+            {
+                S.SteamExactActivated = true;
+                S.Save();
+                return;
+            }
+            SteamActivateRow.Visibility = Visibility.Visible;
+        }
+
+        private async void OnSteamActivate(object s, RoutedEventArgs e)
+        {
+            SteamActivateBtn.IsEnabled = false;
+            var progress = new Progress<string>(t => SteamExactStatus.Text = t);
+            bool ok = await Services.SteamClientApi.ActivateAsync(progress);
+            if (ok)
+            {
+                S.SteamExactActivated = true;
+                S.Save();
+                await System.Threading.Tasks.Task.Delay(2500); // дать прочитать «Готово»
+                SteamActivateRow.Visibility = Visibility.Collapsed;
+            }
+            else SteamActivateBtn.IsEnabled = true;
         }
 
         private void OnSteamExact(object s, RoutedEventArgs e)
@@ -252,6 +275,7 @@ namespace Isle.Views
             S.Save();
             bool on = S.SteamExactSpeed;
             System.Threading.Tasks.Task.Run(() => Services.SteamClientApi.Apply(on));
+            UpdateSteamActivate();
         }
 
         private void OnMusicToggle(object s, RoutedEventArgs e)

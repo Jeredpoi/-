@@ -243,6 +243,71 @@ namespace Isle.Services
             App.Trace("точная скорость Steam: Steam запустился, но отладчик на 127.0.0.1:8080 не отвечает");
         }
 
+        /// <summary>Отвечает ли встроенный браузер Steam (точная скорость работает).</summary>
+        public static Task<bool> IsWorkingAsync() => DebuggerUpAsync();
+
+        /// <summary>
+        /// Кнопка «Включить точную скорость»: ключ в ярлыки и автозапуск, Steam закрывается полностью
+        /// (вместе с играми и программами из Steam; не закрылся за 20 с — процессы завершаются),
+        /// запускается с ключом, и Isle ждёт, пока данные пойдут.
+        /// </summary>
+        public static async Task<bool> ActivateAsync(IProgress<string> report)
+        {
+            var root = SteamDownloadService.SteamRoot();
+            var exe = root == null ? null : Path.Combine(root, "steam.exe");
+            if (exe == null || !File.Exists(exe)) { report.Report("Steam не найден"); return false; }
+            AppSettings.Current.SteamExactSpeed = true;
+            await Task.Run(() => Apply(true));
+            if (await DebuggerUpAsync()) { report.Report("Готово — точная скорость уже работает"); return true; }
+
+            if (!await RestartGate.WaitAsync(0)) { report.Report("Steam уже перезапускается — подожди минуту"); return false; }
+            try
+            {
+                if (SteamRunning())
+                {
+                    report.Report("Закрываю Steam…");
+                    Process.Start(new ProcessStartInfo(exe, "-shutdown") { UseShellExecute = false })?.Dispose();
+                    for (int i = 0; i < 20 && SteamRunning(); i++) await Task.Delay(1000);
+                    if (SteamRunning())
+                    {
+                        report.Report("Steam не закрылся сам — завершаю его процессы…");
+                        await Task.Run(KillSteam);
+                        for (int i = 0; i < 10 && SteamRunning(); i++) await Task.Delay(1000);
+                    }
+                    if (SteamRunning()) { report.Report("Не получилось закрыть Steam — закрой его вручную (трей → «Выход») и нажми ещё раз"); return false; }
+                    await Task.Delay(1500);
+                }
+                report.Report("Запускаю Steam с точной скоростью…");
+                Process.Start(new ProcessStartInfo(exe, "-silent " + DebugArg) { UseShellExecute = false })?.Dispose();
+                for (int i = 0; i < 60; i++)
+                {
+                    await Task.Delay(2000);
+                    if (await DebuggerUpAsync())
+                    {
+                        App.Trace("точная скорость Steam: включена кнопкой");
+                        report.Report("Готово — скорость, объём и время теперь берутся прямо из Steam");
+                        return true;
+                    }
+                }
+                report.Report("Steam запустился, но данные не отвечают. Пришли файл isle-trace.log");
+                App.Trace("точная скорость Steam: после запуска с ключом отладчик на 127.0.0.1:8080 не отвечает");
+                return false;
+            }
+            catch (Exception ex) { report.Report("Ошибка: " + ex.Message); return false; }
+            finally { RestartGate.Release(); }
+        }
+
+        /// <summary>Завершить все процессы Steam (если сам не закрылся).</summary>
+        private static void KillSteam()
+        {
+            foreach (var name in new[] { "steam", "steamwebhelper", "steamservice", "gameoverlayui" })
+                foreach (var p in Process.GetProcessesByName(name))
+                {
+                    try { p.Kill(true); } catch { }
+                    finally { p.Dispose(); }
+                }
+        }
+
         /// <summary>Перезапустить Steam сейчас (кнопка в Настройках) — если не идёт игра.</summary>
         public static async Task<string> RestartNowAsync()
         {
