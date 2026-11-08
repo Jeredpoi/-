@@ -1873,12 +1873,8 @@ namespace Isle
         {
             if (o == null || o.AppId == 0 || o.Paused) return null;
             if (string.Equals(o.State, "None", StringComparison.OrdinalIgnoreCase) || string.Equals(o.State, "Stopping", StringComparison.OrdinalIgnoreCase)) return null;
-            // «X из Y»: пока качаются данные — загрузка (как «Загружено» в Steam), потом — установка, иначе запись на диск
-            bool downloading = o.ToDownload > 0 && o.Downloaded < o.ToDownload;
-            long got, total;
-            if (downloading || (o.ToInstall == 0 && o.ToWrite == 0)) { got = o.Downloaded; total = o.ToDownload; }
-            else if (o.ToInstall > 0 && o.Installed > 0) { got = o.Installed; total = o.ToInstall; }
-            else { got = o.Written; total = o.ToWrite; }
+            // «X из Y» — как на странице загрузок Steam: всегда этап загрузки данных (progress[2])
+            long got = o.Downloaded, total = o.ToDownload;
             // процент — общий процент самого Steam
             double progress = o.OverallPercent > 0 ? Math.Clamp(o.OverallPercent / 100.0, 0, 1)
                 : total > 0 ? Math.Clamp((double)got / total, 0, 1) : 0;

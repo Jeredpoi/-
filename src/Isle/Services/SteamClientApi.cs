@@ -470,6 +470,8 @@ namespace Isle.Services
             var json = p.GetProperty("payload").GetString();
             using var doc = JsonDocument.Parse(json);
             var o = doc.RootElement;
+            // сводка о загрузке на ДРУГОМ компьютере (удалённое управление загрузками Steam) — не наша
+            if (o.TryGetProperty("remote_client_id", out var rc) && rc.ToString() != "0" && rc.ToString() != "") return;
             var dl = Prog(o, 2); var wr = Prog(o, 3); var inst = Prog(o, 6);
             // старые версии Steam присылали отдельные поля update_bytes_* — берём их, если массива progress нет
             if (dl.total == 0 && Long(o, "update_bytes_to_download") > 0) dl = (Long(o, "update_bytes_downloaded"), Long(o, "update_bytes_to_download"), 0);
