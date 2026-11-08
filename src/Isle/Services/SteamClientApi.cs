@@ -118,7 +118,10 @@ namespace Isle.Services
             try
             {
                 using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
-                return key?.GetValue("RunningAppID") is int id ? id : 0;
+                if (key?.GetValue("RunningAppID") is not int id || id == 0) return 0;
+                // RunningAppID Steam иногда не стирает после выхода из игры — проверяем флаг Running у самой игры
+                using var app = key.OpenSubKey(@"Apps\" + id);
+                return app?.GetValue("Running") is int running && running != 0 ? id : 0;
             }
             catch { return 0; }
         }

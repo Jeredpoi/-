@@ -301,6 +301,7 @@ namespace Isle.Tests
                 Assert.NotEmpty(download.SpeedText);
                 Assert.NotNull(download.Remaining);
                 Assert.NotNull(download.Icon);
+                Assert.True(download.Icon.IsFrozen); // иначе показ обложки в окне падает с «другим потоком»
                 Assert.Equal(installFolder, download.FolderPath);
             }
             finally { Directory.Delete(root, true); }
