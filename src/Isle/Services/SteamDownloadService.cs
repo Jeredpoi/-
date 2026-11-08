@@ -241,10 +241,7 @@ namespace Isle.Services
                 var fresh = samples.Where(x => now - x.At < TimeSpan.FromSeconds(20)).TakeLast(3).ToList();
                 if (rateBytes <= 0 && current.Downloading && fresh.Count > 0) rateBytes = fresh.Average(x => x.BytesPerSecond);
                 if (rateBytes <= 0) rateBytes = manifestRate;
-                // Сеть Windows видит весь трафик компьютера (браузер, Discord…), поэтому одна она завышала скорость.
-                // Steam сам считает скачанные байты (appmanifest) — держим показанную скорость рядом с ними,
-                // а сеть даёт только быстрые изменения между редкими записями Steam.
-                else if (manifestRate > 0) rateBytes = Math.Clamp(rateBytes, manifestRate * 0.85, manifestRate * 1.15);
+
                 if (rateBytes <= 0 && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90))
                 {
                     rateBytes = samples[^1].BytesPerSecond; // последняя известная скорость из лога — как оценка
@@ -269,6 +266,10 @@ namespace Isle.Services
                 double fillRate = manifestRate > 0 ? manifestRate : rateBytes;
                 if (!useStage) progressDone = Smooth(current.Id, progressDone, progressTotal, fillRate, now);
                 var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
+                // Новая установка: Steam пишет скачанные байты в appmanifest редко, а «Установка файлов» растёт заметно —
+                // процент берём больший из двух (сжатые данные скачиваются раньше, чем распаковываются)
+                if (!useStage && !current.Installed && manifest?.StageTotal > 0)
+                    progress = Math.Max(progress, Math.Clamp((double)manifest.Staged / manifest.StageTotal, 0, 1));
                 var remainingBytes = Math.Max(0, progressTotal - progressDone);
                 // Остаток времени Steam считает по тому, как быстро реально растут скачанные данные
                 // (у него это ближе к «использованию диска», чем к скорости сети) — делаем так же.
@@ -480,7 +481,7 @@ namespace Isle.Services
         private static double SmoothNetRate(double rate)
         {
             if (rate <= 0) return _netEma *= 0.6; // пауза в трафике — плавно вниз, а не сразу в ноль
-            _netEma = _netEma <= 0 ? rate : _netEma * 0.75 + rate * 0.25; // опрос раз в 0,5 с — сглаживаем сильнее
+            _netEma = _netEma <= 0 ? rate : _netEma * 0.85 + rate * 0.15; // опрос раз в 0,5 с — сглаживаем сильнее
             return _netEma;
         }
 
