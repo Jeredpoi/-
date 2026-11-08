@@ -23,6 +23,9 @@ namespace Isle.Services
         public string FolderPath { get; init; }
         public bool IsPaused { get; init; }
         public bool IsEstimatedSpeed { get; init; }
+        /// <summary>Скачано / всего байт (0 — неизвестно).</summary>
+        public long Got { get; init; }
+        public long Total { get; init; }
         // Steam presents completed percent as an integer floor, so don't round 10.6% up to 11%.
         public string ProgressText => (int)Math.Floor(Math.Clamp(Progress, 0, 1) * 100) + "%";
         public string SpeedText => BytesPerSecond > 0 ? (IsEstimatedSpeed ? "~" : "") + FormatBytes(BytesPerSecond) + "/с" : "";
@@ -210,6 +213,7 @@ namespace Isle.Services
                             Name = !string.IsNullOrWhiteSpace(finished?.Name) ? finished.Name : FindAppName(root, state.Id) ?? "Steam · App " + state.Id,
                             Icon = FindAppIcon(root, state.Id),
                             FolderPath = finished == null ? null : GetInstallFolder(finished),
+                            Total = finished?.DownloadTotal ?? 0,
                             Progress = 1
                         });
                     }
@@ -253,6 +257,8 @@ namespace Isle.Services
                 {
                     Name = !string.IsNullOrWhiteSpace(manifest?.Name) ? manifest.Name : FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
                     Progress = progress,
+                    Got = progressDone,
+                    Total = progressTotal,
                     BytesPerSecond = rateBytes,
                     IsEstimatedSpeed = estimatedSpeed,
                     Remaining = remaining,

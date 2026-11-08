@@ -169,6 +169,7 @@ namespace Isle
             // Загрузки по событиям: Steam/браузер записал файл — проверяем через 0,3 с (несколько записей подряд склеиваются).
             // Таймер остаётся подстраховкой: раз в секунду, пока что-то качается (скорость, остаток), и раз в 8 с в простое.
             _downloadKick.Tick += (_, __) => { _downloadKick.Stop(); RefreshSteamDownload(); };
+            _dlDoneTimer.Tick += (_, __) => ClearDownloadDone();
             // не перезапускаем таймер на каждое событие: браузер пишет файл непрерывно, и проверка иначе откладывалась бы бесконечно
             DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { if (!_downloadKick.IsEnabled) _downloadKick.Start(); });
 
@@ -740,11 +741,12 @@ namespace Isle
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
-            if (dl) { w = 330; h = 46; }
+            if (dl) { w = 580; h = 76; }
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
             // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
+            SetIslandRadius(dl ? 32 : 18); // у пилюли загрузки углы крупнее
             if (onlyIfChanged && Math.Abs(_sizeTarget.Width - w) < 1 && Math.Abs(_sizeTarget.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
@@ -816,6 +818,15 @@ namespace Isle
                 : new Helpers.Spring { Damping = 9, Frequency = 9 };
             Island.BeginAnimation(WidthProperty, new DoubleAnimation(w, TimeSpan.FromMilliseconds(spring ? ms : Math.Max(ms, 460))) { EasingFunction = ease });
             Island.BeginAnimation(HeightProperty, new DoubleAnimation(h, TimeSpan.FromMilliseconds(spring ? ms : Math.Max(ms, 460))) { EasingFunction = ease });
+        }
+
+        private void SetIslandRadius(double r)
+        {
+            if (Math.Abs(Island.CornerRadius.BottomLeft - r) < 0.5) return;
+            Island.CornerRadius = new CornerRadius(0, 0, r, r);
+            DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius;
+            Edge.CornerRadius = r;
+            UpdateClip();
         }
 
         /// <summary>Новое состояние свёрнутой чёлки проявляется и чуть съезжает на место.</summary>
@@ -1425,6 +1436,7 @@ namespace Isle
         private void RenderToast(Toast t)
         {
             _currentToast = t;
+            SetIslandRadius(18);
             if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
             if (t.Kind == ToastKind.Alarm) StartAlarmPulse(); else StopAlarmPulse();
             ToastTitle.Text = t.Title;
@@ -1677,6 +1689,13 @@ namespace Isle
                 });
 
                 foreach (var completed in result.steamCompleted)
+                {
+                    // свёрнутая чёлка показывает «Установлена» прямо в пилюле загрузки (кольцо зеленеет, кнопка папки)
+                    if (CanShowDownloadPill())
+                    {
+                        ShowDownloadDone(new DownloadState(completed.Name, "Steam", 1, null, null, completed.Icon, 0, completed.Total, true, completed.FolderPath));
+                        continue;
+                    }
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Success,
@@ -1688,6 +1707,7 @@ namespace Isle
                         Important = true,
                         Duration = TimeSpan.FromSeconds(8) // чтобы успеть заметить и нажать «папку»
                     });
+                }
 
                 // завершённые по файлам — если история браузера уже не сообщила о том же файле
                 foreach (var done in result.partialDone)
@@ -1707,6 +1727,12 @@ namespace Isle
                     bool shown = _recentDone.TryGetValue(completed.FileName ?? "", out var shownAt) && DateTime.Now - shownAt < TimeSpan.FromMinutes(1);
                     _recentDone[completed.FileName ?? ""] = DateTime.Now;
                     if (shown) continue;
+                    if (CanShowDownloadPill())
+                    {
+                        ShowDownloadDone(new DownloadState(completed.FileName, completed.Browser, 1, null, null, null, 0, completed.TotalBytes, true,
+                            Services.PartialDownloadService.Folders().FirstOrDefault()));
+                        continue;
+                    }
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Success,
@@ -1736,16 +1762,16 @@ namespace Isle
                 var steam = result.steam;
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
-                    SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon));
+                    SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
                 else if (download != null)
                 {
                     // скорость из истории браузера рваная — если есть недокачанный файл, берём его скорость (по росту файла)
                     var firstPartial = result.partials.FirstOrDefault();
                     var speed = firstPartial != null && firstPartial.BytesPerSecond > 0 ? firstPartial.SpeedText : download.SpeedText;
-                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, speed, download.EtaText, null));
+                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, speed, download.EtaText, null, download.ReceivedBytes, download.TotalBytes));
                 }
                 else if (result.partials.FirstOrDefault() is { } part)
-                    SetDownload(new DownloadState(part.Name, part.Browser, null, part.SpeedText, part.SizeText, null)); // размер неизвестен — «крутилка» и сколько скачано
+                    SetDownload(new DownloadState(part.Name, part.Browser, null, part.SpeedText, null, null, part.Bytes)); // размер неизвестен — «крутилка» и сколько скачано
                 else SetDownload(null);
             }
             catch (Exception ex) { App.Trace("ошибка отслеживания загрузок: " + ex.Message); }
@@ -1755,37 +1781,154 @@ namespace Isle
         /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>
         private readonly Dictionary<string, DateTime> _recentDone = new(StringComparer.OrdinalIgnoreCase);
 
-        private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art);
+        private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art,
+            long Got = 0, long Total = 0, bool Done = false, string Folder = null);
         private DownloadState _download;
         private double _dlShown;      // плавно догоняет настоящий прогресс
         private double _dlSpin;       // вращение «неизвестного» прогресса
+        private DownloadState _dlDone; // «Установлена» держится в пилюле 8 с
+        private readonly DispatcherTimer _dlDoneTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+        private bool _dlArrowPulse;
+        private static readonly Color DlWhite = Color.FromRgb(0xEC, 0xEC, 0xF1), DlGreen = Color.FromRgb(0x4A, 0xDE, 0x80);
+
+        /// <summary>Пилюля загрузки видна, только когда чёлка свёрнута и не занята музыкой или таймером.</summary>
+        private bool CanShowDownloadPill()
+        {
+            if (State != IslandState.Collapsed) return false;
+            var m = AppHost.Media?.Current;
+            bool media = AppSettings.Current.MediaEnabled && m != null && m.HasSession && m.IsPlaying && !string.IsNullOrEmpty(m.Title);
+            bool timer = AppHost.Timer != null && (AppHost.Timer.Running || AppHost.Timer.Paused);
+            return !media && !timer;
+        }
+
+        private void ShowDownloadDone(DownloadState d)
+        {
+            _dlDone = d;
+            _dlDoneTimer.Stop();
+            _dlDoneTimer.Start();
+            SetDownload(d);
+        }
+
+        private void ClearDownloadDone()
+        {
+            _dlDoneTimer.Stop();
+            if (_dlDone == null) return;
+            _dlDone = null;
+            SetDownload(null);
+            RefreshSteamDownload(); // если качается что-то ещё — вернётся на следующем опросе
+        }
+
+        private void OnDownloadFolder(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            var folder = _download?.Folder;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true });
+            }
+            catch (Exception ex) { App.Trace("не удалось открыть папку: " + ex.Message); }
+            ClearDownloadDone(); // клик — открыть папку и свернуть пилюлю
+        }
+
+        private static (double div, string unit) SizeUnit(double v) =>
+            v >= 1073741824 ? (1073741824d, "ГБ") : v >= 1048576 ? (1048576d, "МБ") : (1024d, "КБ");
+
+        private static string SizeText(double v)
+        {
+            var (div, unit) = SizeUnit(v);
+            return (v / div).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + " " + unit;
+        }
+
+        /// <summary>«5,1 из 12,4 ГБ» — обе цифры в единицах полного размера.</summary>
+        private static string SizePair(long got, long total)
+        {
+            var (div, unit) = SizeUnit(total);
+            var c = System.Globalization.CultureInfo.CurrentCulture;
+            return (got / div).ToString("0.#", c) + " из " + (total / div).ToString("0.#", c) + " " + unit;
+        }
 
         private void SetDownload(DownloadState d)
         {
+            // пока висит «Установлена» — новые опросы её не перебивают
+            if (_dlDone != null && !ReferenceEquals(d, _dlDone)) d = _dlDone;
             bool had = _download != null;
+            bool wasDone = _download?.Done == true;
             _download = d;
             // пока идёт загрузка — частые обновления (скорость, остаток); в простое — редкие, новости придут по событиям
-            var interval = TimeSpan.FromSeconds(d != null ? 1 : 8);
+            var interval = TimeSpan.FromSeconds(d != null && !d.Done ? 1 : 8);
             if (_steamTimer.Interval != interval) _steamTimer.Interval = interval;
             if (d == null)
             {
                 MediaDownload.Visibility = Visibility.Collapsed;
+                PulseDownloadArrow(false);
                 if (had && State == IslandState.Collapsed) ShowCollapsedContent(false);
                 return;
             }
-            if (!had) _dlShown = 0;
+            if (!had || wasDone) _dlShown = 0;
             DlName.Text = d.Name;
-            var parts = new List<string> { d.Source };
-            if (!string.IsNullOrEmpty(d.Speed)) parts.Add(d.Speed);
-            if (!string.IsNullOrEmpty(d.Eta)) parts.Add(d.Eta);
-            DlSub.Text = string.Join(" · ", parts);
             DlArt.Source = d.Art;
             DlIcon.Visibility = d.Art == null ? Visibility.Visible : Visibility.Collapsed;
-            string pct = d.Progress.HasValue ? (int)Math.Floor(Math.Clamp(d.Progress.Value, 0, 1) * 100) + "%" : "";
-            DlPercent.Text = pct;
-            DlPercent.Visibility = pct.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            MediaDownload.Text = "↓ " + (pct.Length > 0 ? pct : "…");
+
+            if (d.Done)
+            {
+                DlSpeed.Text = "";
+                DlArrow.Visibility = Visibility.Collapsed;
+                PulseDownloadArrow(false);
+                DlSub.Text = (d.Source == "Steam" ? "Установлена" : "Загружено") + (d.Total > 0 ? " · " + SizeText(d.Total) : "");
+                DlPercent.Visibility = Visibility.Collapsed;
+                DlDonePanel.Visibility = Visibility.Visible;
+                DlFolderButton.Visibility = !string.IsNullOrWhiteSpace(d.Folder) ? Visibility.Visible : Visibility.Collapsed;
+                MediaDownload.Text = "✓";
+                if (!wasDone) PlayDownloadDone();
+            }
+            else
+            {
+                if (wasDone) DlRing.Stroke = new SolidColorBrush(DlWhite);
+                DlDonePanel.Visibility = Visibility.Collapsed;
+                string speed = d.Speed ?? "";
+                DlSpeed.Text = speed;
+                DlArrow.Visibility = speed.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                PulseDownloadArrow(speed.Length > 0);
+                var rest = new List<string>();
+                if (speed.Length == 0) rest.Add(d.Source);
+                if (d.Total > 0) rest.Add(SizePair(Math.Min(d.Got, d.Total), d.Total));
+                else if (d.Got > 0) rest.Add(SizeText(d.Got));
+                if (!string.IsNullOrEmpty(d.Eta)) rest.Add("осталось " + d.Eta.TrimStart('~'));
+                DlSub.Text = rest.Count == 0 ? "" : (speed.Length > 0 ? " · " : "") + string.Join(" · ", rest);
+                string pct = d.Progress.HasValue ? (int)Math.Floor(Math.Clamp(d.Progress.Value, 0, 1) * 100) + "%" : "";
+                DlPercent.Text = pct;
+                DlPercent.Visibility = pct.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                MediaDownload.Text = "↓ " + (pct.Length > 0 ? pct : "…");
+            }
             if (State == IslandState.Collapsed) ShowCollapsedContent(had);
+        }
+
+        /// <summary>Стрелка у скорости «дышит», пока идёт загрузка.</summary>
+        private void PulseDownloadArrow(bool on)
+        {
+            if (on == _dlArrowPulse) return;
+            _dlArrowPulse = on;
+            DlArrow.BeginAnimation(OpacityProperty, on
+                ? new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(800)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } }
+                : null);
+        }
+
+        /// <summary>Загрузка завершена: кольцо зеленеет, рисуется галочка, справа выезжает кнопка папки.</summary>
+        private void PlayDownloadDone()
+        {
+            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
+            var ring = new SolidColorBrush(DlWhite);
+            DlRing.Stroke = ring;
+            ring.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(DlGreen, TimeSpan.FromMilliseconds(300)));
+
+            const double checkLen = 11; // длина галочки в толщинах штриха (≈ 27 px / 2,5)
+            DlCheck.StrokeDashArray = new DoubleCollection { checkLen, checkLen };
+            DlCheck.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty,
+                new DoubleAnimation(checkLen, 0, TimeSpan.FromMilliseconds(500)) { BeginTime = TimeSpan.FromMilliseconds(150), EasingFunction = ease });
+
+            DlFolderShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(24, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            DlFolderButton.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)));
         }
 
         /// <summary>Кольцо прогресса загрузки: плавно догоняет реальное значение; без размера — крутится.</summary>
@@ -1799,15 +1942,15 @@ namespace Isle
                 if (Math.Abs(_dlShown - before) > 0.0005 || DlRing.Data == null)
                 {
                     DlRing.RenderTransform = null;
-                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 17, 17, 15.75);
+                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 26, 26, 24.5);
                 }
             }
             else
             {
                 _dlSpin = (_dlSpin + dt * 300) % 360;
-                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 17, 17);
+                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 26, 26);
                 rt.Angle = _dlSpin;
-                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 17, 17, 15.75); DlRing.Tag = "spin"; }
+                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 26, 26, 24.5); DlRing.Tag = "spin"; }
                 return;
             }
             DlRing.Tag = null;
