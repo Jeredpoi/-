@@ -175,9 +175,15 @@
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
                                 </Grid>
                             </Grid>
-                            <Button x:Name="ToastFolderButton" Grid.Column="2" Width="30" Height="30" Margin="8,0,0,0" Padding="0" Style="{StaticResource Ghost}" Click="OnToastFolder" ToolTip="Открыть папку игры" Visibility="Collapsed">
-                                <h:Icon Kind="Folder" Width="15" Height="15"/>
-                            </Button>
+                            <!-- справа: карандаш (пометки на снимке) над папкой -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <Button x:Name="ToastEditButton" Width="28" Height="28" Margin="0,0,0,2" Padding="0" Style="{StaticResource Ghost}" Click="OnToastEdit" ToolTip="Пометки: замазать текст, рамка, стрелка" Visibility="Collapsed">
+                                    <h:Icon Kind="Note" Width="14" Height="14"/>
+                                </Button>
+                                <Button x:Name="ToastFolderButton" Width="28" Height="28" Padding="0" Style="{StaticResource Ghost}" Click="OnToastFolder" ToolTip="Открыть папку" Visibility="Collapsed">
+                                    <h:Icon Kind="Folder" Width="14" Height="14"/>
+                                </Button>
+                            </StackPanel>
                         </Grid>
                     </Grid>
 

@@ -3,7 +3,7 @@ using System.Windows.Media;
 
 namespace Isle.Services
 {
-    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Download, Timer, Reminder, Success, Alarm }
+    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Download, Timer, Reminder, Success, Alarm, Error }
 
     public class Toast
     {
@@ -19,6 +19,10 @@ namespace Isle.Services
         /// <summary>Пипетка: слева квадратик с этим цветом в окантовке вместо иконки.</summary>
         public Color? Swatch { get; set; }
         public string FolderPath { get; set; }
+        /// <summary>Файл (снимок): кнопка папки откроет Проводник с выделенным файлом.</summary>
+        public string FilePath { get; set; }
+        /// <summary>Снимок, который можно разметить: справа появляется карандаш — открывает редактор пометок.</summary>
+        public System.Windows.Media.Imaging.BitmapSource EditImage { get; set; }
         /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
         public bool RoundImage { get; set; }
         /// <summary>Уведомление другого приложения: его AppUserModelId — по клику открываем это приложение.</summary>

@@ -1004,7 +1004,7 @@ namespace Isle
             if (sub.Length > 160) sub = sub.Substring(0, 160) + "…";
             ToastBus.Show(new Toast
             {
-                Kind = failed ? ToastKind.Info : ToastKind.Success,
+                Kind = failed ? ToastKind.Error : ToastKind.Success,
                 Title = reports.Count > 0 && clean.Length > 0 && clean.Length <= 80 ? clean : "«" + text + "»",
                 Subtitle = sub, Icon = failed ? Icons.Info : Icons.Check, ReplaceKey = "voice", Important = true,
                 Duration = TimeSpan.FromSeconds(Math.Clamp(2 + sub.Length / 25.0, 3, 9))
@@ -1411,14 +1411,19 @@ namespace Isle
             ToastIconBox.Width = ToastIconBox.Height = compact ? 26 : 36;
             ToastIconBox.CornerRadius = new CornerRadius(swatch ? 8 : compact ? 13 : 18);
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
-            ToastFolderButton.Tag = t.FolderPath;
-            ToastFolderButton.Visibility = !string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath) ? Visibility.Visible : Visibility.Collapsed;
+            ToastFolderButton.Tag = t;
+            bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
+            ToastFolderButton.Visibility = hasFolder ? Visibility.Visible : Visibility.Collapsed;
+            ToastEditButton.Tag = t;
+            ToastEditButton.Visibility = t.EditImage != null ? Visibility.Visible : Visibility.Collapsed;
+            PlayToastStatus(t);
 
             double textLen = Math.Max(t.Title.Length, (t.Subtitle ?? "").Length);
             double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
             if (t.Progress.HasValue) w = Math.Max(w, 280);
-            if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
+            if (ToastFolderButton.Visibility == Visibility.Visible || ToastEditButton.Visibility == Visibility.Visible) w += 38;
             double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
+            if (ToastFolderButton.Visibility == Visibility.Visible && ToastEditButton.Visibility == Visibility.Visible) h = Math.Max(h, 70);
             // запись голоса — вместо полоски волна, как в ChatGPT
             bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
             if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
@@ -1440,12 +1445,72 @@ namespace Isle
 
         private void OnToastFolder(object sender, RoutedEventArgs e)
         {
-            if (ToastFolderButton.Tag is string folder && Directory.Exists(folder))
-            {
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true }); }
-                catch (Exception ex) { App.Trace("не удалось открыть папку игры: " + ex.Message); }
-            }
             e.Handled = true;
+            if (ToastFolderButton.Tag is not Toast t) return;
+            try
+            {
+                // снимок — открыть Проводник с выделенным файлом; игра — её папку
+                if (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath))
+                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + t.FilePath + "\"");
+                else if (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(t.FolderPath) { UseShellExecute = true });
+            }
+            catch (Exception ex) { App.Trace("не удалось открыть папку: " + ex.Message); }
+        }
+
+        private void OnToastEdit(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if (ToastEditButton.Tag is not Toast t || t.EditImage == null) return;
+            try { new Overlays.ImageEditor(t.EditImage, t.FilePath).Show(); }
+            catch (Exception ex) { App.Log("editor: " + ex); }
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex FailTitle =
+            new(@"^(Не |Ошибка|Тишина|Слишком коротко|Нет |✗|Лимит ИИ закончился)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Итог действия видно сразу: получилось — значок зелёный и «подпрыгивает»,
+        /// не вышло — красный и качается из стороны в сторону (как «нет» головой).
+        /// </summary>
+        private void PlayToastStatus(Toast t)
+        {
+            bool error = t.Kind == ToastKind.Error || (t.Kind == ToastKind.Info && FailTitle.IsMatch(t.Title ?? ""));
+            bool success = !error && t.Kind == ToastKind.Success;
+            if (error) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
+            else if (success && t.Icon != Icons.Pipette) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+            ToastIconBox.Background = error ? new SolidColorBrush(Color.FromRgb(0x2A, 0x14, 0x16))
+                : success && t.Swatch == null ? new SolidColorBrush(Color.FromRgb(0x12, 0x24, 0x18))
+                : ToastIconBox.Background;
+            if (ToastIconBox.RenderTransform is not TransformGroup tg)
+            {
+                tg = new TransformGroup();
+                tg.Children.Add(new ScaleTransform(1, 1));
+                tg.Children.Add(new TranslateTransform());
+                ToastIconBox.RenderTransform = tg;
+                ToastIconBox.RenderTransformOrigin = new Point(0.5, 0.5);
+            }
+            var sc = (ScaleTransform)tg.Children[0];
+            var tr = (TranslateTransform)tg.Children[1];
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, null); sc.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            tr.BeginAnimation(TranslateTransform.XProperty, null);
+            if (error)
+            {
+                var shake = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520) };
+                double[] xs = { 0, -6, 6, -5, 5, -3, 3, 0 };
+                for (int i = 0; i < xs.Length; i++)
+                    shake.KeyFrames.Add(new EasingDoubleKeyFrame(xs[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 65))));
+                tr.BeginAnimation(TranslateTransform.XProperty, shake);
+            }
+            else if (success)
+            {
+                var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(460) };
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.6, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.18, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(220)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(460)), new ElasticEase { Oscillations = 1, Springiness = 4, EasingMode = EasingMode.EaseOut }));
+                sc.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                sc.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
         }
 
         private static Geometry ProgressArc(double progress, double cx, double cy, double radius)
