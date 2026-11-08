@@ -656,7 +656,7 @@ namespace Isle
             State = IslandState.Expanded;
             CollapsedView.Visibility = Visibility.Collapsed;
             ExpandedView.Visibility = Visibility.Visible;
-            Island.CornerRadius = new CornerRadius(0, 0, 30, 30);
+            Island.CornerRadius = new CornerRadius(0, 0, 40, 40); // раскрытая панель — нижние углы 40
             DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
             _collapseVersion++;
             MoveTabIndicator(TabButton(_currentTab), false);
@@ -1356,6 +1356,12 @@ namespace Isle
         {
             AppSettings.Current.DoNotDisturb = DndChip.IsChecked == true;
             AppSettings.Current.Save();
+            bool on = AppSettings.Current.DoNotDisturb;
+            ToastBus.Show(new Toast
+            {
+                Title = on ? "Не беспокоить" : "Уведомления включены", Subtitle = on ? "Уведомления приложений не покажутся" : "Снова показываю уведомления",
+                Icon = Icons.Moon, On = on, ReplaceKey = "dnd", Important = true, Duration = TimeSpan.FromSeconds(2.5)
+            });
         }
 
         // ===================== Всплывашки =====================
@@ -1525,6 +1531,7 @@ namespace Isle
                 ToastRow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
                 shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(360)) { EasingFunction = ease });
             }
+            AnimateToastGlyph(t, same);
             // пипетка: зелёная «змейка» прорисовывается по краю плитки и замыкается (~1,1 с)
             ToastSnake.Visibility = t.Swatch.HasValue ? Visibility.Visible : Visibility.Collapsed;
             if (t.Swatch.HasValue)
@@ -1545,6 +1552,71 @@ namespace Isle
                 pop.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
                 pop.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
             }
+        }
+
+        /// <summary>
+        /// «Живые» значки: будильник — красный колокольчик раскачивается ±22°, «Не беспокоить» — луна покачивается,
+        /// низкий заряд — значок пульсирует, Wi-Fi подключён и текст распознан — значок «выпрыгивает».
+        /// </summary>
+        private void AnimateToastGlyph(Toast t, bool same)
+        {
+            var scale = ToastIconScale();
+            var rot = (RotateTransform)((TransformGroup)ToastIcon.RenderTransform).Children[1];
+            rot.BeginAnimation(RotateTransform.AngleProperty, null);
+            ToastIcon.RenderTransformOrigin = new Point(0.5, 0.5);
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            if (same) return;
+
+            if (t.Kind == ToastKind.Alarm && t.Icon == Icons.Bell)
+            {
+                ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71)); // таймер и будильник — красные
+                Swing(22, 450, RepeatBehavior.Forever, new Point(0.5, 0.15));
+            }
+            else if (t.Icon == Icons.Moon)
+                Swing(10, 1200, new RepeatBehavior(2), new Point(0.5, 0.5));
+            else if (t.Kind == ToastKind.Error && t.Icon == Icons.Battery)
+            {
+                var pulse = new DoubleAnimation(1, 0.82, TimeSpan.FromMilliseconds(500)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
+            }
+            else if (t.Kind == ToastKind.Success && (t.Icon == Icons.Wifi || t.Icon == Icons.Scan || t.Icon == Icons.Bluetooth))
+            {
+                var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520), BeginTime = TimeSpan.FromMilliseconds(120) };
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.5, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+        }
+
+        /// <summary>Поворот и масштаб значка всплывашки (одна группа трансформаций, чтобы анимации не мешали друг другу).</summary>
+        private ScaleTransform ToastIconScale()
+        {
+            if (ToastIcon.RenderTransform is TransformGroup g && g.Children.Count == 2 && g.Children[0] is ScaleTransform existing) return existing;
+            var sc = new ScaleTransform(1, 1);
+            var group = new TransformGroup();
+            group.Children.Add(sc);
+            group.Children.Add(new RotateTransform(0));
+            ToastIcon.RenderTransform = group;
+            ToastIcon.RenderTransformOrigin = new Point(0.5, 0.5);
+            return sc;
+        }
+
+        private void Swing(double degrees, int periodMs, RepeatBehavior repeat, Point origin)
+        {
+            ToastIconScale();
+            var rot = (RotateTransform)((TransformGroup)ToastIcon.RenderTransform).Children[1];
+            ToastIcon.RenderTransformOrigin = origin;
+            var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(periodMs), RepeatBehavior = repeat };
+            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(degrees, KeyTime.FromPercent(0.25), ease));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(-degrees, KeyTime.FromPercent(0.75), ease));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1), ease));
+            rot.BeginAnimation(RotateTransform.AngleProperty, a);
         }
 
         private void OnToastFolder(object sender, RoutedEventArgs e)
