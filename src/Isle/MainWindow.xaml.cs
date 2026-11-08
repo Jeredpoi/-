@@ -1877,7 +1877,9 @@ namespace Isle
             return new SteamDownload
             {
                 AppId = steam.AppId, Name = steam.Name, Icon = steam.Icon, FolderPath = steam.FolderPath,
-                Progress = Math.Clamp((double)got / total, 0, 1), Got = got, Total = total,
+                // новая игра: процент — больший из «загрузки данных» и «установки файлов», как растёт в Steam
+                Progress = Math.Max(Math.Clamp((double)got / total, 0, 1), o.IsInstall && o.ToStage > 0 ? Math.Clamp((double)o.Staged / o.ToStage, 0, 1) : 0),
+                Got = got, Total = total,
                 BytesPerSecond = downloading ? o.NetworkBytesPerSecond : 0,
                 Remaining = o.SecondsRemaining > 0 ? TimeSpan.FromSeconds(o.SecondsRemaining) : (TimeSpan?)null
             };
