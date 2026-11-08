@@ -240,6 +240,10 @@ namespace Isle.Services
                 var fresh = samples.Where(x => now - x.At < TimeSpan.FromSeconds(20)).TakeLast(3).ToList();
                 if (rateBytes <= 0 && current.Downloading && fresh.Count > 0) rateBytes = fresh.Average(x => x.BytesPerSecond);
                 if (rateBytes <= 0) rateBytes = manifestRate;
+                // Сеть Windows видит весь трафик компьютера (браузер, Discord…), поэтому одна она завышала скорость.
+                // Steam сам считает скачанные байты (appmanifest) — держим показанную скорость рядом с ними,
+                // а сеть даёт только быстрые изменения между редкими записями Steam.
+                else if (manifestRate > 0) rateBytes = Math.Clamp(rateBytes, manifestRate * 0.85, manifestRate * 1.15);
                 if (rateBytes <= 0 && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90))
                 {
                     rateBytes = samples[^1].BytesPerSecond; // последняя известная скорость из лога — как оценка
@@ -271,7 +275,7 @@ namespace Isle.Services
                 // при обновлении время зависит от того, сколько ещё качать (установка с диска идёт параллельно)
                 long etaBytes = useStage ? (downloadLeft ? dlTotal - dlDone : 0) : remainingBytes;
                 var remaining = etaRate > 0 && etaBytes > 0
-                    ? TimeSpan.FromSeconds(etaBytes / etaRate)
+                    ? TimeSpan.FromSeconds(SmoothEta(current.Id, etaBytes / etaRate, now))
                     : (TimeSpan?)null;
                 return new SteamDownload
                 {
@@ -291,6 +295,28 @@ namespace Isle.Services
         }
 
         private static readonly Dictionary<int, (long Real, double Est, DateTime At)> Estimates = new();
+        private static readonly Dictionary<int, (double Sec, DateTime At)> Etas = new();
+
+        /// <summary>
+        /// Остаток времени без рывков: между опросами он просто тикает вниз, а к новой оценке
+        /// подтягивается понемногу (раньше прыгал на минуты при каждой записи Steam).
+        /// </summary>
+        internal static double SmoothEta(int appId, double target, DateTime now)
+        {
+            if (Etas.TryGetValue(appId, out var e))
+            {
+                double dt = (now - e.At).TotalSeconds;
+                if (dt >= 0 && dt < 15)
+                {
+                    double ticked = Math.Max(0, e.Sec - dt);
+                    double sec = ticked + (target - ticked) * Math.Min(1, 0.08 * Math.Max(dt, 0.25) / 0.5);
+                    Etas[appId] = (sec, now);
+                    return sec;
+                }
+            }
+            Etas[appId] = (target, now);
+            return target;
+        }
 
         /// <summary>
         /// Плавный прогресс между редкими записями Steam: растёт со скоростью загрузки, никогда не идёт назад,
@@ -449,7 +475,7 @@ namespace Isle.Services
         private static double SmoothNetRate(double rate)
         {
             if (rate <= 0) return _netEma *= 0.6; // пауза в трафике — плавно вниз, а не сразу в ноль
-            _netEma = _netEma <= 0 ? rate : _netEma * 0.55 + rate * 0.45;
+            _netEma = _netEma <= 0 ? rate : _netEma * 0.75 + rate * 0.25; // опрос раз в 0,5 с — сглаживаем сильнее
             return _netEma;
         }
 
@@ -486,7 +512,7 @@ namespace Isle.Services
                     // миниатюра для кружка в чёлке: декодируем маленькой, чтобы не держать в памяти обложки 600×900
                     var image = new BitmapImage();
                     image.BeginInit(); image.UriSource = new Uri(path); image.CacheOption = BitmapCacheOption.OnLoad;
-                    image.DecodePixelHeight = 96; image.EndInit(); image.Freeze();
+                    image.DecodePixelHeight = 192; // запас под масштаб экрана 150–200 % image.EndInit(); image.Freeze();
                     return IconCache[cacheKey] = image;
                 }
                 catch { }
@@ -513,13 +539,13 @@ namespace Isle.Services
                     List<string> files;
                     try { files = Directory.EnumerateFiles(appDir, "*.*", SearchOption.AllDirectories).ToList(); }
                     catch { files = new List<string>(); }
-                    // квадратная иконка игры: файл с именем-хэшем (40 шестнадцатеричных символов) прямо в папке игры
-                    foreach (var f in files.Where(f => Path.GetDirectoryName(f) == appDir
-                                 && Regex.IsMatch(Path.GetFileNameWithoutExtension(f), "^[0-9a-f]{40}$") && f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
-                        yield return f;
+                    // сначала большие обложки — квадратная иконка игры всего 32×32 и в кружке выходила размытой
                     foreach (var name in names)
                         foreach (var f in files.Where(f => Path.GetFileName(f).Equals(name, StringComparison.OrdinalIgnoreCase)))
                             yield return f;
+                    foreach (var f in files.Where(f => Path.GetDirectoryName(f) == appDir
+                                 && Regex.IsMatch(Path.GetFileNameWithoutExtension(f), "^[0-9a-f]{40}$") && f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+                        yield return f;
                 }
                 foreach (var name in new[] { id + "_icon.jpg", id + "_library_600x900.jpg", id + "_header.jpg", id + "_logo.png" })
                 {

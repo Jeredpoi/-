@@ -741,12 +741,12 @@ namespace Isle
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
-            if (dl) { w = 580; h = 76; }
+            if (dl) { w = 380; h = 54; } // компактно, как остальные состояния чёлки
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
             // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
-            SetIslandRadius(dl ? 32 : 18); // у пилюли загрузки углы крупнее
+            SetIslandRadius(dl ? 24 : 18); // у пилюли загрузки углы чуть крупнее
             if (onlyIfChanged && Math.Abs(_sizeTarget.Width - w) < 1 && Math.Abs(_sizeTarget.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
@@ -1752,7 +1752,15 @@ namespace Isle
                     while (SteamDownloadService.TakeCompleted() is { } completed) steamCompleted.Add(completed);
                     var steamPaused = new List<SteamDownload>();
                     while (SteamDownloadService.TakePaused() is { } paused) steamPaused.Add(paused);
-                    var browser = BrowserDownloadService.ReadSnapshot();
+                    // история браузеров (SQLite) тяжелее — читаем её не чаще раза в 2 с, Steam — каждые 0,5 с
+                    BrowserDownloadSnapshot browser;
+                    if (DateTime.Now - _browserReadAt >= TimeSpan.FromSeconds(2) || _browserLast == null)
+                    {
+                        browser = BrowserDownloadService.ReadSnapshot();
+                        _browserLast = browser;
+                        _browserReadAt = DateTime.Now;
+                    }
+                    else browser = new BrowserDownloadSnapshot { Active = _browserLast.Active }; // завершённые уже показаны
                     // загрузки браузера по недокачанным файлам в папке «Загрузки» — работают, даже если историю браузера прочитать не вышло
                     var partials = PartialDownloadService.Scan();
                     var partialDone = new List<FinishedDownload>();
@@ -1852,6 +1860,8 @@ namespace Isle
 
         /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>
         private readonly Dictionary<string, DateTime> _recentDone = new(StringComparer.OrdinalIgnoreCase);
+        private BrowserDownloadSnapshot _browserLast;
+        private DateTime _browserReadAt = DateTime.MinValue;
 
         private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art,
             long Got = 0, long Total = 0, bool Done = false, string Folder = null);
@@ -1928,7 +1938,7 @@ namespace Isle
             bool wasDone = _download?.Done == true;
             _download = d;
             // пока идёт загрузка — частые обновления (скорость, остаток); в простое — редкие, новости придут по событиям
-            var interval = TimeSpan.FromSeconds(d != null && !d.Done ? 1 : 8);
+            var interval = d != null && !d.Done ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(8); // скорость и остаток — дважды в секунду
             if (_steamTimer.Interval != interval) _steamTimer.Interval = interval;
             if (d == null)
             {
@@ -1999,7 +2009,7 @@ namespace Isle
             DlCheck.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty,
                 new DoubleAnimation(checkLen, 0, TimeSpan.FromMilliseconds(500)) { BeginTime = TimeSpan.FromMilliseconds(150), EasingFunction = ease });
 
-            DlFolderShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(24, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            DlFolderShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
             DlFolderButton.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)));
         }
 
@@ -2014,15 +2024,15 @@ namespace Isle
                 if (Math.Abs(_dlShown - before) > 0.0005 || DlRing.Data == null)
                 {
                     DlRing.RenderTransform = null;
-                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 26, 26, 24.5);
+                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 19, 19, 17.75);
                 }
             }
             else
             {
                 _dlSpin = (_dlSpin + dt * 300) % 360;
-                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 26, 26);
+                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 19, 19);
                 rt.Angle = _dlSpin;
-                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 26, 26, 24.5); DlRing.Tag = "spin"; }
+                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 19, 19, 17.75); DlRing.Tag = "spin"; }
                 return;
             }
             DlRing.Tag = null;
