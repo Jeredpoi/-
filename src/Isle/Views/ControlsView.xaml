@@ -3,13 +3,72 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:h="clr-namespace:Isle.Helpers">
     <UserControl.Resources>
-        <Style x:Key="Tile" TargetType="Button" BasedOn="{StaticResource Flat}">
-            <Setter Property="Padding" Value="14,12"/>
+        <!-- плитка: карточка #0E0E10, радиус 18, поля 18; у включённой — светлая обводка -->
+        <Style x:Key="Tile" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Fg}"/>
+            <Setter Property="Background" Value="{StaticResource Card}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform x:Name="sc" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource CardHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="sc" Storyboard.TargetProperty="ScaleX" To="0.96" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="sc" Storyboard.TargetProperty="ScaleY" To="0.96" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="sc" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.25">
+                                                <DoubleAnimation.EasingFunction><QuinticEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="sc" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.25">
+                                                <DoubleAnimation.EasingFunction><QuinticEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- бейдж-пилюля справа сверху: «Вкл», «Выкл», «Нет сети», «Задачи» -->
+        <Style x:Key="Badge" TargetType="Border">
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="CornerRadius" Value="11"/>
+            <Setter Property="BorderBrush" Value="#1C1C20"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style x:Key="Power" TargetType="Button" BasedOn="{StaticResource Flat}">
             <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         </Style>
     </UserControl.Resources>
@@ -17,69 +76,89 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="60"/>
             <RowDefinition Height="10"/>
-            <RowDefinition Height="64"/>
+            <RowDefinition Height="56"/>
         </Grid.RowDefinitions>
 
         <UniformGrid Columns="4">
-            <Grid Margin="0,0,5,0">
-            <Button Style="{StaticResource Tile}" Click="OnNetwork" ToolTip="Параметры сети">
+            <Grid x:Name="WifiTile" Margin="0,0,5,0">
+                <Button x:Name="NetBtn" Style="{StaticResource Tile}" Margin="0" Click="OnNetwork" ToolTip="Параметры сети">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="NetDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
-                        <h:Icon Kind="Wifi" Width="16" Height="16"/>
-                    </Border>
+                    <Grid DockPanel.Dock="Top">
+                        <Border x:Name="NetDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                            <h:Icon Kind="Wifi" Width="22" Height="22"/>
+                        </Border>
+                        <Border x:Name="NetBadge" Style="{StaticResource Badge}" Margin="0,0,30,0">
+                            <TextBlock x:Name="NetBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
                     <StackPanel VerticalAlignment="Bottom">
-                        <TextBlock x:Name="NetName" Text="Сеть" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="NetStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="NetName" Text="Сеть" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="NetStatus" Text="—" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
-            <!-- список доступных сетей Wi-Fi -->
-            <Button x:Name="WifiListBtn" Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Margin="0,8,8,0"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Click="OnWifiList" ToolTip="Сети Wi-Fi рядом">
-                <h:Icon Kind="Next" Width="12" Height="12" RenderTransformOrigin="0.5,0.5">
-                    <h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform>
-                </h:Icon>
-            </Button>
+                <!-- список доступных сетей Wi-Fi -->
+                <Button x:Name="WifiListBtn" Style="{StaticResource Ghost}" Width="28" Height="28" Padding="0" Margin="0,28,14,0"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Click="OnWifiList" ToolTip="Сети Wi-Fi рядом">
+                    <h:Icon Kind="Next" Width="12" Height="12" RenderTransformOrigin="0.5,0.5">
+                        <h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform>
+                    </h:Icon>
+                </Button>
             </Grid>
-            <Button Style="{StaticResource Tile}" Margin="5,0" Click="OnBluetooth" ToolTip="Включить / выключить Bluetooth">
+            <Button x:Name="BtTile" Style="{StaticResource Tile}" Margin="5,0" Click="OnBluetooth" ToolTip="Включить / выключить Bluetooth">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="BtDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
-                        <h:Icon x:Name="BtIcon" Kind="Bluetooth" Width="16" Height="16"/>
-                    </Border>
+                    <Grid DockPanel.Dock="Top">
+                        <Border x:Name="BtDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                            <h:Icon x:Name="BtIcon" Kind="Bluetooth" Width="22" Height="22"/>
+                        </Border>
+                        <Border x:Name="BtBadge" Style="{StaticResource Badge}" Margin="0">
+                            <TextBlock x:Name="BtBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
                     <StackPanel VerticalAlignment="Bottom">
-                        <TextBlock Text="Bluetooth" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="BtStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="Bluetooth" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="BtStatus" Text="—" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
-            <Button Style="{StaticResource Tile}" Margin="5,0" Click="OnTheme" ToolTip="Тёмная / светлая тема Windows">
+            <Button x:Name="ThemeTile" Style="{StaticResource Tile}" Margin="5,0" Click="OnTheme" ToolTip="Тёмная / светлая тема Windows">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" x:Name="ThemeDot" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
-                        <h:Icon x:Name="ThemeIcon" Kind="Contrast" Width="16" Height="16"/>
-                    </Border>
+                    <Grid DockPanel.Dock="Top">
+                        <Border x:Name="ThemeDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                            <h:Icon x:Name="ThemeIcon" Kind="Contrast" Width="22" Height="22"/>
+                        </Border>
+                        <Border x:Name="ThemeBadge" Style="{StaticResource Badge}" Margin="0">
+                            <TextBlock x:Name="ThemeBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
                     <StackPanel VerticalAlignment="Bottom">
-                        <TextBlock Text="Тёмная тема" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="ThemeStatus" Text="—" Style="{StaticResource MutedText}" FontSize="11"/>
+                        <TextBlock Text="Тёмная тема" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="ThemeStatus" Text="—" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
-            <Button Style="{StaticResource Tile}" Margin="5,0,0,0" Click="OnTaskMgr" ToolTip="Диспетчер задач">
+            <Button x:Name="TaskTile" Style="{StaticResource Tile}" Margin="5,0,0,0" Click="OnTaskMgr" ToolTip="Диспетчер задач">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" Width="36" Height="36" CornerRadius="18" Background="#1C1C20" HorizontalAlignment="Left">
-                        <h:Icon Kind="Wave" Width="16" Height="16"/>
-                    </Border>
+                    <Grid DockPanel.Dock="Top">
+                        <Border x:Name="TaskDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                            <h:Icon Kind="Wave" Width="22" Height="22"/>
+                        </Border>
+                        <Border x:Name="TaskBadge" Style="{StaticResource Badge}" Margin="0">
+                            <TextBlock x:Name="TaskBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
                     <StackPanel VerticalAlignment="Bottom">
-                        <TextBlock Text="Диспетчер" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="LoadText" Text="задач" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="Диспетчер" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="LoadText" Text="задач" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
         </UniformGrid>
 
         <!-- Звук прямо в острове -->
-        <Border Grid.Row="2" Style="{StaticResource CardBox}" Padding="12,8">
+        <Border x:Name="VolumeCard" Grid.Row="2" Style="{StaticResource CardBox}" CornerRadius="18" Padding="12,0,11,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -89,27 +168,27 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Button Style="{StaticResource Ghost}" Click="OnMute" ToolTip="Выключить / включить звук">
-                    <h:Icon x:Name="VolIcon" Kind="Volume" Width="16" Height="16"/>
+                    <h:Icon x:Name="VolIcon" Kind="Volume" Width="18" Height="18"/>
                 </Button>
                 <Slider x:Name="Volume" Grid.Column="1" Minimum="0" Maximum="100" Margin="8,0" VerticalAlignment="Center" ValueChanged="OnVolume"/>
-                <TextBlock x:Name="VolText" Grid.Column="2" Text="0" Width="26" FontSize="12" Foreground="#B9B9C3" VerticalAlignment="Center" TextAlignment="Right"/>
-                <ComboBox x:Name="Devices" Grid.Column="3" Width="220" Margin="10,0,0,0" SelectionChanged="OnDevice" DropDownOpened="OnDevicesOpen" DropDownClosed="OnDevicesClosed"/>
-                <ToggleButton x:Name="MicBtn" Grid.Column="4" Style="{StaticResource Chip}" Margin="8,0,0,0" Height="34" Click="OnMic" ToolTip="Микрофон: выключить / включить">
+                <TextBlock x:Name="VolText" Grid.Column="2" Text="0" Width="30" FontSize="14" FontWeight="SemiBold" Foreground="#ECECF1" VerticalAlignment="Center" TextAlignment="Right" Typography.NumeralAlignment="Tabular"/>
+                <ComboBox x:Name="Devices" Grid.Column="3" Width="240" Height="38" Margin="12,0,0,0" VerticalAlignment="Center" SelectionChanged="OnDevice" DropDownOpened="OnDevicesOpen" DropDownClosed="OnDevicesClosed"/>
+                <ToggleButton x:Name="MicBtn" Grid.Column="4" Style="{StaticResource Chip}" Margin="8,0,0,0" Width="38" Height="38" Padding="0" VerticalAlignment="Center" Click="OnMic" ToolTip="Микрофон: выключить / включить">
                     <h:Icon Kind="Mic" Width="14" Height="14"/>
                 </ToggleButton>
             </Grid>
         </Border>
 
         <!-- Питание: первое нажатие краснеет и запускает полоску, второе — выполняет -->
-        <UniformGrid Grid.Row="4" Columns="4">
+        <UniformGrid x:Name="PowerRow" Grid.Row="4" Columns="4">
             <Button x:Name="LockBtn" Style="{StaticResource Power}" Margin="0,0,5,0" Click="OnPower" Tag="lock">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <h:Icon Kind="Lock" Width="16" Height="16" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="LockText" Text="Блокировка" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Lock" Width="17" Height="17" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LockText" Text="Блокировка" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="LockBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="LockBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="14,0,14,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
@@ -117,11 +196,11 @@
             <Button x:Name="SleepBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="sleep">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <h:Icon Kind="Moon" Width="16" Height="16" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="SleepText" Text="Сон" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Moon" Width="17" Height="17" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="SleepText" Text="Сон" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="SleepBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="SleepBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="14,0,14,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
@@ -129,11 +208,11 @@
             <Button x:Name="RestartBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="restart">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <h:Icon Kind="Restart" Width="16" Height="16" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="RestartText" Text="Перезагрузка" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Restart" Width="17" Height="17" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="RestartText" Text="Перезагрузка" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="RestartBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="RestartBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="14,0,14,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
@@ -141,11 +220,11 @@
             <Button x:Name="ShutdownBtn" Style="{StaticResource Power}" Margin="5,0,0,0" Click="OnPower" Tag="shutdown">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <h:Icon Kind="Power" Width="16" Height="16" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="ShutdownText" Text="Выключение" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <h:Icon Kind="Power" Width="17" Height="17" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="ShutdownText" Text="Выключение" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="ShutdownBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="10,0,10,7" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
+                    <Border x:Name="ShutdownBar" Grid.Row="1" Height="3" VerticalAlignment="Center" Margin="14,0,14,6" CornerRadius="1.5" Background="#F87171" RenderTransformOrigin="0,0.5" Visibility="Hidden">
                         <Border.RenderTransform><ScaleTransform ScaleX="1"/></Border.RenderTransform>
                     </Border>
                 </Grid>
