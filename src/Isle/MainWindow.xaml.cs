@@ -1848,7 +1848,7 @@ namespace Isle
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
                     SetDownload(AppSettings.Current.SteamExactSpeed
-                        ? new DownloadState(steam.Name, "Steam", steam.Progress, steam.BytesPerSecond > 0 ? steam.SpeedText.TrimStart('~') : "", SteamEta(steam.Remaining), steam.Icon, steam.Got, steam.Total)
+                        ? new DownloadState(steam.Name, steam.Phase ?? "Steam", steam.Progress, steam.BytesPerSecond > 0 ? steam.SpeedText.TrimStart('~') : "", SteamEta(steam.Remaining), steam.Icon, steam.Got, steam.Total)
                         : new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
                 else if (download != null)
                 {
@@ -1873,21 +1873,36 @@ namespace Isle
         {
             if (o == null || o.AppId == 0 || o.Paused) return null;
             if (string.Equals(o.State, "None", StringComparison.OrdinalIgnoreCase) || string.Equals(o.State, "Stopping", StringComparison.OrdinalIgnoreCase)) return null;
+            // «X из Y»: пока качаются данные — загрузка (как «Загружено» в Steam), потом — установка, иначе запись на диск
             bool downloading = o.ToDownload > 0 && o.Downloaded < o.ToDownload;
-            bool stage = !downloading && o.ToStage > 0;
-            long got = stage ? o.Staged : o.Downloaded, total = stage ? o.ToStage : o.ToDownload;
-            double progress = total > 0 ? Math.Clamp((double)got / total, 0, 1) : 0;
-            // новая игра: Steam параллельно распаковывает — процент больший из загрузки и установки
-            if (o.IsInstall && o.ToStage > 0) progress = Math.Max(progress, Math.Clamp((double)o.Staged / o.ToStage, 0, 1));
+            long got, total;
+            if (downloading || (o.ToInstall == 0 && o.ToWrite == 0)) { got = o.Downloaded; total = o.ToDownload; }
+            else if (o.ToInstall > 0 && o.Installed > 0) { got = o.Installed; total = o.ToInstall; }
+            else { got = o.Written; total = o.ToWrite; }
+            // процент — общий процент самого Steam
+            double progress = o.OverallPercent > 0 ? Math.Clamp(o.OverallPercent / 100.0, 0, 1)
+                : total > 0 ? Math.Clamp((double)got / total, 0, 1) : 0;
             var info = SteamDownloadService.AppInfo(o.AppId);
             return new SteamDownload
             {
                 AppId = o.AppId, Name = info.Name, Icon = info.Icon, FolderPath = info.Folder,
                 Progress = progress, Got = got, Total = total,
-                BytesPerSecond = downloading ? o.NetworkBytesPerSecond : 0,
-                Remaining = o.SecondsRemaining > 0 ? TimeSpan.FromSeconds(o.SecondsRemaining) : (TimeSpan?)null
+                BytesPerSecond = o.NetworkBytesPerSecond > 0 ? o.NetworkBytesPerSecond : 0,
+                Remaining = o.SecondsRemaining > 0 ? TimeSpan.FromSeconds(o.SecondsRemaining) : (TimeSpan?)null,
+                Phase = SteamPhase(o.State)
             };
         }
+
+        /// <summary>Этап загрузки по-русски, как в Steam.</summary>
+        private static string SteamPhase(string state) => (state ?? "").ToLowerInvariant() switch
+        {
+            var x when x.Contains("download") => "Загрузка",
+            var x when x.Contains("install") || x.Contains("commit") => "Установка",
+            var x when x.Contains("verif") || x.Contains("valid") => "Проверка файлов",
+            var x when x.Contains("stag") => "Распаковка",
+            var x when x.Contains("start") || x.Contains("prealloc") || x.Contains("reconfig") => "Подготовка",
+            _ => "Steam"
+        };
 
         /// <summary>Остаток как в Steam: 1:16 или 1:02:03.</summary>
         private static string SteamEta(TimeSpan? t) => t is not TimeSpan v ? null
@@ -1909,7 +1924,7 @@ namespace Isle
                 return;
             }
             _steamLiveShown = true;
-            var state = new DownloadState(s.Name, "Steam", s.Progress, s.BytesPerSecond > 0 ? s.SpeedText.TrimStart('~') : "", SteamEta(s.Remaining), s.Icon, s.Got, s.Total);
+            var state = new DownloadState(s.Name, s.Phase ?? "Steam", s.Progress, s.BytesPerSecond > 0 ? s.SpeedText.TrimStart('~') : "", SteamEta(s.Remaining), s.Icon, s.Got, s.Total);
             SetDownload(state);
             if (DateTime.Now - _lastShownLog >= TimeSpan.FromSeconds(1))
             {
