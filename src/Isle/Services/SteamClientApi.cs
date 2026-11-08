@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -68,12 +69,14 @@ namespace Isle.Services
                 {
                     if (File.Exists(flag)) File.Delete(flag);
                     PatchAutostart(false);
+                    PatchShortcuts(false);
                     CloseSocket();
                     Last = null;
                     return;
                 }
                 if (!File.Exists(flag)) File.WriteAllText(flag, ""); // Linux/Steam Deck; на Windows нужен ключ запуска (ниже)
                 PatchAutostart(true);
+                PatchShortcuts(true); // ярлыки Steam (рабочий стол, «Пуск», панель задач) — тоже с ключом
             }
             catch (Exception ex) { App.Trace("точная скорость Steam: не удалось записать файл: " + ex.Message); return; }
             if (!_restartLoop) { _restartLoop = true; _ = Task.Run(() => RestartWhenSafeAsync(root)); }
@@ -124,6 +127,57 @@ namespace Isle.Services
         }
 
         private const string DebugArg = "-cef-enable-debugging";
+
+        /// <summary>
+        /// Ярлыки Steam на рабочем столе, в меню «Пуск» и на панели задач: дописываем ключ в «Объект» ярлыка,
+        /// чтобы Steam, запущенный как обычно, сразу отдавал данные загрузок и перезапускать его не приходилось.
+        /// Общие ярлыки (для всех пользователей) без прав администратора не изменить — их просто пропускаем.
+        /// </summary>
+        private static void PatchShortcuts(bool add)
+        {
+            var app = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dirs = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+                Path.Combine(app, @"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"),
+                Path.Combine(app, @"Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"),
+            };
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null) return;
+            dynamic shell = null;
+            try
+            {
+                shell = Activator.CreateInstance(shellType);
+                foreach (var dir in dirs)
+                {
+                    if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+                    IEnumerable<string> links;
+                    try { links = Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories).ToList(); }
+                    catch { continue; }
+                    foreach (var link in links)
+                    {
+                        try
+                        {
+                            dynamic sc = shell.CreateShortcut(link);
+                            string target = sc.TargetPath ?? "";
+                            if (!Path.GetFileName(target).Equals("steam.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                            string args = sc.Arguments ?? "";
+                            bool has = args.Contains(DebugArg, StringComparison.OrdinalIgnoreCase);
+                            if (add == has) continue;
+                            sc.Arguments = add ? (args + " " + DebugArg).Trim() : args.Replace(DebugArg, "").Trim();
+                            sc.Save();
+                            App.Trace("точная скорость Steam: ярлык " + (add ? "дополнен" : "возвращён") + ": " + link);
+                        }
+                        catch { } // общий ярлык без прав администратора — пропускаем
+                    }
+                }
+            }
+            catch (Exception ex) { App.Trace("точная скорость Steam: ярлыки: " + ex.Message); }
+            finally { if (shell != null) try { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell); } catch { } }
+        }
 
         /// <summary>Автозапуск Steam вместе с Windows — с ключом, чтобы данные загрузок были доступны сразу.</summary>
         private static void PatchAutostart(bool add)
