@@ -38,7 +38,14 @@ namespace Isle.Services
             double OverallPercent, double SecondsRemaining);
 
         private const string FlagFile = ".cef-enable-remote-debugging";
-        private const string DebugHost = "http://127.0.0.1:8080";
+        /// <summary>
+        /// Свой порт отладчика, чтобы не мешать программам на 8080. Ключ -devtools-port у Steam не документирован:
+        /// если Steam его не понимает, он открывает отладчик на 8080 — Isle проверяет оба порта и берёт тот, где отвечает Steam.
+        /// </summary>
+        private const int OwnPort = 47852;
+        private static readonly int[] Ports = { OwnPort, 8080 };
+        private static string _host = "http://127.0.0.1:" + OwnPort;
+        private static string DebugHost => _host;
 
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(1.5) };
         private static ClientWebSocket _ws;
@@ -132,6 +139,16 @@ namespace Isle.Services
         }
 
         private const string DebugArg = "-cef-enable-debugging";
+        private static readonly string LaunchArgs = DebugArg + " -devtools-port " + OwnPort;
+        private static readonly System.Text.RegularExpressions.Regex OurArgs =
+            new(@"\s*-cef-enable-debugging|\s*-devtools-port\s+\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        /// <summary>Аргументы ярлыка/автозапуска: наши ключи убираются и (если add) добавляются заново — без дублей и старых портов.</summary>
+        private static string WithOurArgs(string args, bool add)
+        {
+            var clean = OurArgs.Replace(args ?? "", "").Trim();
+            return add ? (clean + " " + LaunchArgs).Trim() : clean;
+        }
 
         /// <summary>
         /// Ярлыки Steam на рабочем столе, в меню «Пуск» и на панели задач: дописываем ключ в «Объект» ярлыка,
@@ -170,9 +187,9 @@ namespace Isle.Services
                             string target = sc.TargetPath ?? "";
                             if (!Path.GetFileName(target).Equals("steam.exe", StringComparison.OrdinalIgnoreCase)) continue;
                             string args = sc.Arguments ?? "";
-                            bool has = args.Contains(DebugArg, StringComparison.OrdinalIgnoreCase);
-                            if (add == has) continue;
-                            sc.Arguments = add ? (args + " " + DebugArg).Trim() : args.Replace(DebugArg, "").Trim();
+                            string updated = WithOurArgs(args, add);
+                            if (updated == args.Trim()) continue;
+                            sc.Arguments = updated;
                             sc.Save();
                             Log("точная скорость Steam: ярлык " + (add ? "дополнен" : "возвращён") + ": " + link);
                         }
@@ -191,9 +208,8 @@ namespace Isle.Services
             {
                 using var run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
                 if (run?.GetValue("Steam") is not string cmd || cmd.Length == 0) return;
-                bool has = cmd.Contains(DebugArg, StringComparison.OrdinalIgnoreCase);
-                if (add && !has) run.SetValue("Steam", cmd.TrimEnd() + " " + DebugArg);
-                else if (!add && has) run.SetValue("Steam", cmd.Replace(" " + DebugArg, "").Replace(DebugArg, "").TrimEnd());
+                string updated = WithOurArgs(cmd, add);
+                if (updated != cmd.Trim()) run.SetValue("Steam", updated);
             }
             catch (Exception ex) { Log("точная скорость Steam: автозапуск: " + ex.Message); }
         }
@@ -239,11 +255,11 @@ namespace Isle.Services
             for (int i = 0; i < 60 && SteamRunning(); i++) await Task.Delay(1000); // Steam закрывается до минуты
             if (SteamRunning()) { Log("точная скорость Steam: Steam не закрылся за минуту — не трогаю"); return; }
             await Task.Delay(1500);
-            Process.Start(new ProcessStartInfo(exe, "-silent " + DebugArg) { UseShellExecute = false })?.Dispose(); // в трей, без окна
+            Process.Start(new ProcessStartInfo(exe, "-silent " + LaunchArgs) { UseShellExecute = false })?.Dispose(); // в трей, без окна
             for (int i = 0; i < 90; i++) // ждём, пока Steam поднимется
             {
                 await Task.Delay(2000);
-                if (await DebuggerUpAsync()) { Log("точная скорость Steam: включена"); Notify("Точная скорость Steam включена"); return; }
+                if (await DebuggerUpAsync()) { Log("точная скорость Steam: включена (" + DebugHost + ")"); return; }
             }
             Log("точная скорость Steam: Steam запустился, но отладчик на 127.0.0.1:8080 не отвечает");
         }
@@ -283,7 +299,7 @@ namespace Isle.Services
                     await Task.Delay(1500);
                 }
                 report.Report("Запускаю Steam с точной скоростью…");
-                Process.Start(new ProcessStartInfo(exe, "-silent " + DebugArg) { UseShellExecute = false })?.Dispose();
+                Process.Start(new ProcessStartInfo(exe, "-silent " + LaunchArgs) { UseShellExecute = false })?.Dispose();
                 for (int i = 0; i < 60; i++)
                 {
                     await Task.Delay(2000);
@@ -325,7 +341,7 @@ namespace Isle.Services
             if (!SteamRunning())
             {
                 var exe = Path.Combine(root, "steam.exe");
-                if (File.Exists(exe)) Process.Start(new ProcessStartInfo(exe, "-silent " + DebugArg) { UseShellExecute = false })?.Dispose();
+                if (File.Exists(exe)) Process.Start(new ProcessStartInfo(exe, "-silent " + LaunchArgs) { UseShellExecute = false })?.Dispose();
                 return "Запускаю Steam…";
             }
             _ = Task.Run(() => RestartSteamAsync(root));
@@ -344,13 +360,22 @@ namespace Isle.Services
 
         private static async Task<bool> DebuggerUpAsync()
         {
-            // отвечает именно встроенный браузер Steam, а не что-то другое на порту 8080
-            try
+            // свой порт или 8080 — где отвечает именно встроенный браузер Steam, а не другая программа
+            foreach (var port in Ports)
             {
-                var text = await Http.GetStringAsync(DebugHost + "/json/version");
-                return text.Contains("Steam", StringComparison.OrdinalIgnoreCase) || text.Contains("Valve", StringComparison.OrdinalIgnoreCase);
+                try
+                {
+                    var host = "http://127.0.0.1:" + port;
+                    var text = await Http.GetStringAsync(host + "/json/version");
+                    if (text.Contains("Steam", StringComparison.OrdinalIgnoreCase) || text.Contains("Valve", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _host = host;
+                        return true;
+                    }
+                }
+                catch { }
             }
-            catch { return false; }
+            return false;
         }
 
         // ===================== живая сводка =====================
@@ -400,10 +425,9 @@ namespace Isle.Services
         private static async Task<string> ConnectAndListenAsync(CancellationToken token)
         {
             // 1) отвечает ли встроенный браузер Steam
-            string version;
-            try { version = await Http.GetStringAsync(DebugHost + "/json/version", token); }
-            catch (Exception ex) { return "нет ответа от " + DebugHost + " (" + ex.Message + ") — Steam закрыт или запущен без ключа " + DebugArg; }
-            Diag.Write("отладчик Steam отвечает: " + OneLine(version, 300));
+            if (!await DebuggerUpAsync()) return "Steam не отвечает ни на порту " + OwnPort + ", ни на 8080 — Steam закрыт или запущен без ключа " + DebugArg;
+            string version = await Http.GetStringAsync(DebugHost + "/json/version", token);
+            Diag.Write("отладчик Steam отвечает на " + DebugHost + ": " + OneLine(version, 300));
 
             // 2) список страниц
             string listText = await Http.GetStringAsync(DebugHost + "/json", token);
@@ -442,7 +466,6 @@ namespace Isle.Services
                     await CallAsync("Runtime.addBinding", new { name = "isleDl" }, token);
                     var sub = await CallAsync("Runtime.evaluate", new { expression = SubscribeJs, returnByValue = true }, token);
                     Diag.Write("подписка на сводку загрузки: " + OneLine(sub.ToString(), 300));
-                    Notify("Точная скорость Steam подключена");
 
                     // 5) слушаем
                     while (!token.IsCancellationRequested)
