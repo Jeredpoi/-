@@ -52,12 +52,75 @@ namespace Isle.Services
                                 !n.Description.ToLowerInvariant().Contains("hyper-v"))
                     .ToList();
                 var wifi = nics.FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211);
-                if (wifi != null) return ("Wi-Fi", "Подключено", true);
+                if (wifi != null) return ("Wi-Fi", WifiName() ?? "Подключено", true);
                 var eth = nics.FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Ethernet);
                 if (eth != null) return ("Ethernet", "Подключено", true);
                 return ("Сеть", "Нет подключения", false);
             }
             catch { return ("Сеть", "—", false); }
+        }
+
+        /// <summary>Имя сети, к которой подключён компьютер (для Wi-Fi — её SSID).</summary>
+        private static string WifiName()
+        {
+            try
+            {
+                var p = Windows.Networking.Connectivity.NetworkInformation.GetInternetConnectionProfile();
+                if (p?.IsWlanConnectionProfile == true)
+                {
+                    var ssid = p.WlanConnectionProfileDetails?.GetConnectedSsid();
+                    if (!string.IsNullOrWhiteSpace(ssid)) return ssid;
+                }
+                return string.IsNullOrWhiteSpace(p?.ProfileName) ? null : p.ProfileName;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Подключённые сейчас Bluetooth-устройства (наушники, мышь…): имена.</summary>
+        public static async Task<System.Collections.Generic.List<string>> ConnectedBluetoothAsync()
+        {
+            var names = new System.Collections.Generic.List<string>();
+            try
+            {
+                foreach (var selector in new[]
+                {
+                    Windows.Devices.Bluetooth.BluetoothDevice.GetDeviceSelectorFromConnectionStatus(Windows.Devices.Bluetooth.BluetoothConnectionStatus.Connected),
+                    Windows.Devices.Bluetooth.BluetoothLEDevice.GetDeviceSelectorFromConnectionStatus(Windows.Devices.Bluetooth.BluetoothConnectionStatus.Connected)
+                })
+                {
+                    foreach (var d in await Windows.Devices.Enumeration.DeviceInformation.FindAllAsync(selector))
+                        if (!string.IsNullOrWhiteSpace(d.Name) && !names.Contains(d.Name)) names.Add(d.Name);
+                }
+            }
+            catch { }
+            return names;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct MEMORYSTATUSEX { public uint dwLength, dwMemoryLoad; public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual; }
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
+
+        private static long _lastIdle, _lastTotal;
+
+        /// <summary>Загрузка процессора (с прошлого вызова) и занятая память, в процентах.</summary>
+        public static (int cpu, int ram) Load()
+        {
+            int cpu = 0, ram = 0;
+            try
+            {
+                if (GetSystemTimes(out long idle, out long kernel, out long user))
+                {
+                    long total = kernel + user; // время ядра уже включает простой
+                    long dTotal = total - _lastTotal, dIdle = idle - _lastIdle;
+                    if (_lastTotal != 0 && dTotal > 0) cpu = (int)Math.Round(Math.Clamp(100.0 * (dTotal - dIdle) / dTotal, 0, 100));
+                    _lastTotal = total; _lastIdle = idle;
+                }
+                var m = new MEMORYSTATUSEX { dwLength = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MEMORYSTATUSEX>() };
+                if (GlobalMemoryStatusEx(ref m)) ram = (int)m.dwMemoryLoad;
+            }
+            catch { }
+            return (cpu, ram);
         }
 
         public static async Task<bool?> GetRadio(Radios.RadioKind kind)
