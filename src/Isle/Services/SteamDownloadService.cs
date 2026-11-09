@@ -361,14 +361,20 @@ namespace Isle.Services
         public static (string Name, ImageSource Icon, string Folder) AppInfo(int appId)
         {
             if (InfoCache.TryGetValue(appId, out var cached)) return cached;
+            // неполные сведения (игра только начала ставиться: нет appmanifest или обложки) держим 5 с и пробуем снова —
+            // иначе файлы Steam перечитывались бы на каждую сводку, то есть каждую секунду
+            if (InfoPending.TryGetValue(appId, out var pending) && DateTime.Now - pending.At < TimeSpan.FromSeconds(5)) return pending.Info;
             var root = FindSteamRoot();
             if (root == null) return ("Steam · App " + appId, null, null);
             var m = ReadManifestProgress(root, appId);
             var info = (!string.IsNullOrWhiteSpace(m?.Name) ? m.Name : FindAppName(root, appId) ?? "Steam · App " + appId,
                         FindAppIcon(root, appId), m == null ? null : GetInstallFolder(m));
-            if (m != null) InfoCache[appId] = info; // appmanifest ещё не создан — попробуем снова позже
+            if (m != null && info.Item2 != null) { InfoCache[appId] = info; InfoPending.TryRemove(appId, out _); }
+            else InfoPending[appId] = (info, DateTime.Now);
             return info;
         }
+
+        private static readonly ConcurrentDictionary<int, ((string Name, ImageSource Icon, string Folder) Info, DateTime At)> InfoPending = new();
 
         /// <summary>Папка Steam (null — Steam не найден).</summary>
         public static string SteamRoot() => FindSteamRoot();

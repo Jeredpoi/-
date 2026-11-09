@@ -261,7 +261,7 @@ namespace Isle.Services
                 await Task.Delay(2000);
                 if (await DebuggerUpAsync()) { Log("точная скорость Steam: включена (" + DebugHost + ")"); return; }
             }
-            Log("точная скорость Steam: Steam запустился, но отладчик на 127.0.0.1:8080 не отвечает");
+            Log("точная скорость Steam: Steam запустился, но не отвечает ни на порту " + OwnPort + ", ни на 8080");
         }
 
         /// <summary>Отвечает ли встроенный браузер Steam (точная скорость работает).</summary>
@@ -310,8 +310,8 @@ namespace Isle.Services
                         return true;
                     }
                 }
-                report.Report("Steam запустился, но данные не отвечают. Пришли файл isle-trace.log");
-                Log("точная скорость Steam: после запуска с ключом отладчик на 127.0.0.1:8080 не отвечает");
+                report.Report("Steam запустился, но данные не отвечают. Нажми «Показать журнал» и пришли файл steam-download.log");
+                Log("точная скорость Steam: после запуска с ключом Steam не отвечает ни на порту " + OwnPort + ", ни на 8080");
                 return false;
             }
             catch (Exception ex) { report.Report("Ошибка: " + ex.Message); return false; }
@@ -390,7 +390,8 @@ namespace Isle.Services
 
         public static void StartLive()
         {
-            if (_live != null && !_live.IsCompleted) return;
+            // уже слушаем (и не остановлены) — второй раз не запускаем; остановленный цикл доработает сам, а мы стартуем новый
+            if (_live != null && !_live.IsCompleted && _liveCts != null && !_liveCts.IsCancellationRequested) return;
             _liveCts = new CancellationTokenSource();
             var token = _liveCts.Token;
             _live = Task.Run(() => LiveLoopAsync(token));
@@ -467,13 +468,19 @@ namespace Isle.Services
                     var sub = await CallAsync("Runtime.evaluate", new { expression = SubscribeJs, returnByValue = true }, token);
                     Diag.Write("подписка на сводку загрузки: " + OneLine(sub.ToString(), 300));
 
-                    // 5) слушаем
-                    while (!token.IsCancellationRequested)
+                    // 5) слушаем; тишина 30 минут или обрыв — просто переподключаемся
+                    try
                     {
-                        using var msg = await ReceiveAsync(token, TimeSpan.FromMinutes(30));
-                        HandleEvent(msg.RootElement);
+                        while (!token.IsCancellationRequested)
+                        {
+                            using var msg = await ReceiveAsync(token, TimeSpan.FromMinutes(30));
+                            HandleEvent(msg.RootElement);
+                        }
+                        return "остановлено";
                     }
-                    return "остановлено";
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { return "остановлено"; }
+                    catch (OperationCanceledException) { return "Steam долго молчал — переподключаюсь"; }
+                    catch (Exception ex) { return "связь со Steam оборвалась (" + ex.Message + ") — переподключаюсь"; }
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { return "остановлено"; }
                 catch (Exception ex) { Diag.Write("страница «" + page.title + "»: ошибка " + ex.GetType().Name + ": " + ex.Message); }

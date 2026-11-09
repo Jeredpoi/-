@@ -1562,13 +1562,13 @@ namespace Isle
         /// </summary>
         private void AnimateToastGlyph(Toast t, bool same)
         {
+            if (same) return; // та же всплывашка обновилась (будильник, громкость) — анимацию значка не сбрасываем
             var scale = ToastIconScale();
             var rot = (RotateTransform)((TransformGroup)ToastIcon.RenderTransform).Children[1];
             rot.BeginAnimation(RotateTransform.AngleProperty, null);
             ToastIcon.RenderTransformOrigin = new Point(0.5, 0.5);
             scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
             scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-            if (same) return;
 
             if (t.Kind == ToastKind.Alarm && t.Icon == Icons.Bell)
             {
@@ -1844,7 +1844,8 @@ namespace Isle
                 // «Точная скорость Steam»: загрузку Steam показываем ТОЛЬКО по сводке самого Steam (живая подписка),
                 // свой подсчёт по логу не используется. Лог Steam нужен лишь для «Загружено» и «Приостановлено».
                 var steam = AppSettings.Current.SteamExactSpeed ? FromOverview(SteamClientApi.Last) : result.steam;
-                SteamClientApi.DownloadActive = steam != null;
+                // для решения «перезапустить Steam с ключом» загрузку видим и по логу Steam: без ключа сводки ещё нет
+                SteamClientApi.DownloadActive = steam != null || result.steam is { IsPaused: false };
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
                     SetDownload(AppSettings.Current.SteamExactSpeed
@@ -1918,7 +1919,6 @@ namespace Isle
         {
             if (!AppSettings.Current.SteamExactSpeed || _dlDone != null) return;
             var s = FromOverview(o);
-            SteamClientApi.DownloadActive = s != null;
             if (s == null)
             {
                 if (_steamLiveShown) { _steamLiveShown = false; RefreshSteamDownload(); } // загрузка Steam закончилась — пусть решит общий опрос
