@@ -22,15 +22,27 @@ namespace Isle
             _capturing = true;
             try
             {
-                AppHost.Window.Collapse();
-                AppHost.Window.Visibility = Visibility.Hidden;
-                // Если остров и так скрыт от захвата экрана (настройка по умолчанию), ждать не нужно — снимок мгновенный.
-                // Иначе даём чёлке исчезнуть с экрана, чтобы не попала на снимок.
-                if (AppSettings.Current.ShowInCaptures) await Task.Delay(150); else await Task.Yield();
+                await HideIslandAsync();
                 try { return await CaptureOverlay.Run(mode); }
                 finally { AppHost.Window.Visibility = Visibility.Visible; }
             }
             finally { _capturing = false; }
+        }
+
+        /// <summary>
+        /// Убрать чёлку с экрана перед снимком. Раскрытая панель (кнопки «Текст», «QR» на Главной) успевала попасть
+        /// в «замороженный» снимок под выделением и закрывала то, что под ней, — поэтому ждём, пока Windows
+        /// действительно перерисует экран без неё (DwmFlush — до конца кадра).
+        /// </summary>
+        private static async Task HideIslandAsync()
+        {
+            var w = AppHost.Window;
+            bool wasOpen = w.State != IslandState.Collapsed;
+            w.Collapse();
+            w.Visibility = Visibility.Hidden;
+            await w.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            if (wasOpen || AppSettings.Current.ShowInCaptures) await Task.Delay(200);
+            try { Win32.DwmFlush(); Win32.DwmFlush(); } catch { }
         }
 
         public static async Task RegionShot()
@@ -40,9 +52,7 @@ namespace Isle
 
         public static async Task FullShot()
         {
-            AppHost.Window.Collapse();
-            AppHost.Window.Visibility = Visibility.Hidden;
-            await Task.Delay(220);
+            await HideIslandAsync();
             BitmapSource bmp;
             try { bmp = ScreenTools.CaptureAll(); }
             finally { AppHost.Window.Visibility = Visibility.Visible; }
