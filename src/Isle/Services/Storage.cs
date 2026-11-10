@@ -127,6 +127,8 @@ namespace Isle.Services
         /// <summary>Частота анимаций, кадров/с: 30, 60, 120 или 0 — как у монитора.</summary>
         public int MaxFps { get; set; } = 60;
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
+        /// <summary>Одежда Клоди: auto — по погоде, иначе имя наряда (Cowboy, Crown, Wizard, Pirate, Chef, Frost, Autumn, Storm, Heat, Winter, Sunny, Summer, None).</summary>
+        public string BuddyOutfit { get; set; } = "auto";
         public bool FirstRunDone { get; set; } = false;
         /// <summary>Подсказка из трея «Isle запущен» уже показывалась.</summary>
         public bool TrayHintShown { get; set; } = false;

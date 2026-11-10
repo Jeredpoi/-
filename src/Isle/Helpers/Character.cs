@@ -10,7 +10,14 @@ namespace Isle.Helpers
     public enum Mood { Idle, Music, Thinking, Done, Attention, Sleep, Working, Drowsy }
 
     /// <summary>Одежда по погоде: шапка и шарф в холод, очки и зонтик от солнца в жару, зонт в дождь.</summary>
-    public enum Outfit { None, Winter, Summer, Rain, Sunny }
+    public enum Outfit
+    {
+        None, Winter, Summer, Rain, Sunny,
+        // по погоде: осень (берет и шарф), гроза (дождевик), мороз (ушанка), жара (панама)
+        Autumn, Storm, Frost, Heat,
+        // на выбор в Настройках
+        Cowboy, Crown, Wizard, Pirate, Chef
+    }
 
     /// <summary>
     /// Клоди — пиксельный оранжевый дружок в духе маскота Claude Code. Живёт в чёлке.
@@ -74,7 +81,8 @@ namespace Isle.Helpers
 
         // занятия в покое
         private const int Stand = 0, Sit = 1, Look = 2, Wave = 3, Hop = 4, Walk = 5, Stretch = 6, Ball = 7, Book = 8, Coffee = 9, Wink = 10,
-            Phone = 11, Game = 12, Snack = 13, Guitar = 14, Bubbles = 15, Skate = 16, Paint = 17;
+            Phone = 11, Game = 12, Snack = 13, Guitar = 14, Bubbles = 15, Skate = 16, Paint = 17,
+            Juggle = 18, YoYo = 19, Plane = 20;
 
         private void StartActivity(int a, double seconds)
         {
@@ -153,8 +161,9 @@ namespace Isle.Helpers
         public double Energy { get; set; }
         private DateTime _nextDance = DateTime.Now.AddSeconds(6); // первым всегда классический танец
         private double _danceStart;
-        public const int DanceCount = 9;
-        private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка", "брейк-данс" };
+        public const int DanceCount = 13;
+        private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка", "брейк-данс",
+            "волна", "хлопки", "твист", "флосс" };
 
         /// <summary>
         /// Брейк-данс, цикл ~6 с: падает на спину → крутится на спине, болтая ножками → вскакивает в «фриз» с руками вверх.
@@ -190,11 +199,11 @@ namespace Isle.Helpers
         public static int PickDance(double bpm, double energy, int current, Random rnd)
         {
             int[] pool;
-            if (bpm <= 0) pool = new[] { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-            else if (bpm < 95) pool = new[] { 1, 1, 7, 7, 5, 0, 6 };
-            else if (bpm < 122) pool = new[] { 0, 0, 6, 6, 3, 3, 1, 5, 7 };
-            else if (bpm < 150 && energy < 0.55) pool = new[] { 0, 0, 2, 2, 6, 3, 4, 8 };
-            else pool = new[] { 4, 4, 2, 2, 8, 8, 0 };
+            if (bpm <= 0) pool = new[] { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+            else if (bpm < 95) pool = new[] { 1, 1, 7, 7, 5, 0, 6, 9, 9 };
+            else if (bpm < 122) pool = new[] { 0, 0, 6, 6, 3, 3, 1, 5, 7, 9, 10, 12 };
+            else if (bpm < 150 && energy < 0.55) pool = new[] { 0, 0, 2, 2, 6, 3, 4, 8, 10, 11, 11, 12, 12 };
+            else pool = new[] { 4, 4, 2, 2, 8, 8, 0, 11, 11, 10 };
             int d = current;
             for (int i = 0; i < 8 && d == current; i++) d = pool[rnd.Next(pool.Length)];
             return d;
@@ -219,9 +228,16 @@ namespace Isle.Helpers
                     if (ph >= 0.15) return Math.Sin(_dtime * 16 + side) > 0 ? -1 : 0.5;                 // на спине — машет ручками
                     return -1;                                                                           // падает — руки в стороны
                 }
+                case 9:  { double wv = Math.Sin(_dtime * 5 + (left ? 0 : 1.6)); return wv > 0.3 ? -2 : wv > -0.3 ? -1 : 0; } // волна: ручки по очереди
+                case 10: return (_dtime * 2.2) % 1 < 0.5 ? -3 : -1;                                          // хлопки над головой
+                case 11: return Math.Sin(_dtime * 8 + side) > 0 ? -1 : 1;                                    // твист: ручки навстречу бёдрам
+                case 12: return Math.Sin(_dtime * 7 + side) > 0 ? 0.5 : -0.5;                                // флосс: ручки качаются против бёдер
                 default: return Math.Sin(_dtime * 10 + side) > 0 ? -1 : 0;
             }
         }
+
+        /// <summary>Фаза хлопка (0..1): в первой половине руки сходятся над головой.</summary>
+        private double ClapPhase() => (_dtime * 2.2) % 1;
 
         /// <summary>Короткая радость (скриншот, ответ ИИ, файл на полке).</summary>
         public void Cheer() => _cheer = 1;
@@ -321,10 +337,11 @@ namespace Isle.Helpers
                 int h = DateTime.Now.Hour;
                 var pool = new System.Collections.Generic.List<int> { Stand, Sit, Sit, Look, Look, Wave, Hop, Walk, Walk, Stretch, Ball, Ball, Book, Book, Wink };
                 if (h >= 6 && h < 12) { pool.Add(Coffee); pool.Add(Coffee); pool.Add(Coffee); }
-                pool.AddRange(new[] { Phone, Phone, Game, Game, Snack, Guitar, Guitar, Bubbles, Skate, Paint });
+                pool.AddRange(new[] { Phone, Phone, Game, Game, Snack, Guitar, Guitar, Bubbles, Skate, Paint, Juggle, Juggle, YoYo, YoYo, Plane, Plane });
                 int a = pool[_rnd.Next(pool.Count)];
                 if (a == _activity) a = Stand;
-                double len = a switch { Wave => 2.2, Hop => 2.0, Stretch => 2.4, Wink => 0.9, Walk => 9 + _rnd.Next(5), Skate => 8 + _rnd.Next(4), Snack => 6, _ => 0 };
+                double len = a switch { Wave => 2.2, Hop => 2.0, Stretch => 2.4, Wink => 0.9, Walk => 9 + _rnd.Next(5), Skate => 8 + _rnd.Next(4), Snack => 6,
+                    Plane => 9 + _rnd.Next(4), _ => 0 };
                 StartActivity(a, len);
                 _nextActivity = DateTime.Now.AddSeconds(a == Walk ? len + 4 : 14 + _rnd.Next(22));
             }
@@ -346,6 +363,25 @@ namespace Isle.Helpers
                 // следит за мячиком сбоку: глаза вправо, вверх-вниз за полётом
                 var (_, by) = BallPos();
                 _lookX += (0.85 - _lookX) * FrameClock.Lerp(0.3); _lookY += ((by - 4.5) / 4.5 - _lookY) * FrameClock.Lerp(0.3);
+            }
+            if (mood == Mood.Idle && _activity == Juggle)
+            {
+                // жонглирует: смотрит вверх, глаза за верхним мячиком
+                var (jx, _) = JugglePos(0);
+                _lookX += ((jx - 6.5) / 5 - _lookX) * FrameClock.Lerp(0.3); _lookY += (-0.9 - _lookY) * FrameClock.Lerp(0.3);
+            }
+            if (mood == Mood.Idle && _activity == YoYo)
+            {
+                // йо-йо: глаза вниз-вправо, за катушкой
+                double yy = YoYoDepth();
+                _lookX += (0.8 - _lookX) * FrameClock.Lerp(0.3); _lookY += ((yy - 2) / 4 - _lookY) * FrameClock.Lerp(0.3);
+            }
+            if (mood == Mood.Idle && _activity == Plane)
+            {
+                // бумажный самолётик кружит вокруг — Клоди провожает его глазами
+                var (plx, ply, _) = PlanePos();
+                _lookX += (Math.Clamp((plx - 6.5) / 6, -1, 1) - _lookX) * FrameClock.Lerp(0.3);
+                _lookY += (Math.Clamp((ply - 2) / 3, -1, 1) - _lookY) * FrameClock.Lerp(0.3);
             }
             if (mood == Mood.Idle && _activity == 2)
             {
@@ -371,6 +407,8 @@ namespace Isle.Helpers
         private static readonly Brush Paper = Freeze(new SolidColorBrush(Color.FromRgb(0xF4, 0xF1, 0xE8)));
         private static readonly Brush BallRed = Freeze(new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71)));
         private static readonly Brush Cup = Freeze(new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1)));
+        private static readonly Brush Shine = Freeze(new SolidColorBrush(Color.FromArgb(170, 255, 255, 255)));
+        private static readonly Brush Fold = Freeze(new SolidColorBrush(Color.FromRgb(0xB8, 0xB8, 0xC2)));
         private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
         /// <summary>Фаза чеканки 0..1 (0 — мяч у ноги) и положение мяча в клетках спрайта: справа от тела, по параболе.</summary>
@@ -380,6 +418,127 @@ namespace Isle.Helpers
             double p = BallPhase();
             double h = 4 * p * (1 - p);              // 0 у ноги → 1 в верхней точке
             return (13.2 + Math.Sin(p * Math.PI) * 0.4, 8.6 - h * 5.2);
+        }
+
+        /// <summary>Жонглирование: i-й мяч (0..2) летит над головой по «восьмёрке», в клетках спрайта.</summary>
+        private (double x, double y) JugglePos(int i)
+        {
+            double ph = (_time * 1.15 + i / 3.0) % 1;
+            double x = 6.5 + Math.Cos(ph * Math.PI * 2) * 4.2;
+            double y = 1.5 - Math.Abs(Math.Sin(ph * Math.PI * 2)) * 4.2;
+            return (x, y);
+        }
+
+        /// <summary>Йо-йо: на сколько клеток катушка опустилась от ручки (0 — в руке).</summary>
+        private double YoYoDepth() => Math.Pow(Math.Abs(Math.Sin(_time * 2.1)), 0.7) * 4.6;
+
+        /// <summary>Бумажный самолётик: кружит вокруг Клоди; третье — направление полёта (1 — вправо).</summary>
+        private (double x, double y, double dir) PlanePos()
+        {
+            double t = _time * 0.75;
+            double x = 6.5 + Math.Sin(t) * 9.5, y = 0.5 + Math.Sin(t * 2) * 1.6;
+            return (x, y, Math.Cos(t) >= 0 ? 1 : -1);
+        }
+
+        private static SolidColorBrush B(byte r, byte g, byte b) { var x = new SolidColorBrush(Color.FromRgb(r, g, b)); x.Freeze(); return x; }
+        private static readonly Brush FurDark = B(0x7A, 0x4E, 0x2A), FurLight = B(0xD9, 0xBE, 0x9A), Mustard = B(0xE3, 0xA5, 0x2B), Rust = B(0xB4, 0x53, 0x2A),
+            Beret = B(0x9F, 0x1D, 0x35), RainYellow = B(0xFA, 0xCC, 0x15), RainDark = B(0xCA, 0x8A, 0x04), Straw = B(0xF1, 0xDF, 0xB4), StrawDark = B(0xC8, 0xAE, 0x77),
+            Sky = B(0x3B, 0x82, 0xF6), Leather = B(0x8A, 0x55, 0x2B), LeatherDark = B(0x5C, 0x37, 0x1A), Bandana = B(0xDC, 0x26, 0x26), Gold = B(0xFA, 0xCC, 0x15),
+            GoldDark = B(0xCA, 0x8A, 0x04), Ruby = B(0xE1, 0x1D, 0x48), Sapphire = B(0x25, 0x63, 0xEB), Wizard = B(0x5B, 0x21, 0xB6), WizardLight = B(0x7C, 0x3A, 0xED),
+            Star = B(0xFD, 0xE0, 0x47), Pirate = B(0x18, 0x18, 0x1B), Bone = B(0xF4, 0xF1, 0xE8), Linen = B(0xFA, 0xFA, 0xF9), LinenShade = B(0xD6, 0xD3, 0xD1);
+
+        /// <summary>
+        /// Шапки и наряды сверх погодных: рисуются половинками клеток спрайта — так видно отвороты, швы,
+        /// камни короны, звёзды на колпаке. Координаты — в клетках спрайта (голова: x 2..10, y 0..3).
+        /// </summary>
+        private void DrawOutfit(DrawingContext dc, double ox, double oy, double px)
+        {
+            void P(Brush b, double x, double y, double w, double h) => dc.DrawRectangle(b, null, new Rect(ox + x * px, oy + y * px, w * px + 0.3, h * px + 0.3));
+            switch (Outfit)
+            {
+                case Outfit.Frost: // ушанка: мех сверху, отворот и уши-клапаны с завязками
+                    P(FurDark, 2, -1.6, 9, 1.6);
+                    P(FurDark, 3, -2.2, 7, 0.7);
+                    P(FurLight, 1.5, -0.3, 10, 0.8);                       // меховой отворот
+                    for (double x = 2; x < 11; x += 1.5) P(FurDark, x, -0.1, 0.4, 0.3); // «ворс» на отвороте
+                    P(FurLight, 1.1, 0.3, 1.4, 2.6); P(FurLight, 10.5, 0.3, 1.4, 2.6); // уши
+                    P(FurDark, 1.5, 2.9, 0.4, 1.2); P(FurDark, 11.1, 2.9, 0.4, 1.2);   // завязки
+                    P(Ruby, 6.2, -1.3, 0.6, 0.6);                          // звёздочка-значок
+                    break;
+                case Outfit.Autumn: // берет набок и полосатый шарф
+                    P(Beret, 2.5, -0.8, 8.5, 1);
+                    P(Beret, 3.5, -1.5, 7.5, 0.8);
+                    P(Beret, 6.5, -2.0, 0.5, 0.6);                         // хвостик берета
+                    for (int x = 2; x <= 10; x++) P(x % 2 == 0 ? Mustard : Rust, x, 4, 1, 0.9);
+                    for (int i = 0; i < 4; i++) P(i % 2 == 0 ? Mustard : Rust, 3, 4.9 + i * 0.6, 1, 0.6); // свисающий конец
+                    P(Rust, 2.9, 7.3, 0.3, 0.4); P(Rust, 3.5, 7.3, 0.3, 0.4);                           // бахрома
+                    break;
+                case Outfit.Storm: // жёлтый дождевик с капюшоном и пуговицами
+                    P(RainYellow, 1.5, -1.3, 10, 1.3);
+                    P(RainYellow, 1.4, -0.1, 0.9, 4.1); P(RainYellow, 10.7, -0.1, 0.9, 4.1);
+                    P(RainDark, 1.5, -0.1, 10, 0.25);                     // шов капюшона
+                    P(RainYellow, 2, 4, 9, 2.8);                          // плащ
+                    P(RainDark, 6.4, 4, 0.2, 2.8);                        // застёжка
+                    P(RainDark, 5.7, 4.5, 0.5, 0.5); P(RainDark, 5.7, 5.7, 0.5, 0.5);
+                    for (int i = 0; i < 3; i++)                            // капли
+                    {
+                        double ph = (_time * 0.9 + i * 0.33) % 1;
+                        P(Sky, -1 + i * 6.5, -3 + ph * 11, 0.3, 0.7);
+                    }
+                    break;
+                case Outfit.Heat: // панама с лентой и капелька пота
+                    P(Straw, 0.8, -0.5, 11.4, 0.7);                       // поля
+                    P(Straw, 2.8, -1.9, 7.4, 1.5);                        // тулья
+                    P(StrawDark, 2.8, -0.7, 7.4, 0.35);                   // лента
+                    P(Sky, 8.3, -0.75, 1, 0.45);                          // бантик
+                    for (double x = 3.3; x < 10; x += 1.4) P(StrawDark, x, -1.6, 0.25, 0.25); // плетение
+                    if ((_time % 4) < 2.2) P(Sky, 10.4, 1.2 + (_time % 4) * 0.5, 0.45, 0.7); // пот
+                    break;
+                case Outfit.Cowboy: // шляпа с загнутыми полями и бандана
+                    P(Leather, 0.3, -0.6, 12.4, 0.7);
+                    P(Leather, -0.3, -1.2, 1, 0.7); P(Leather, 12.3, -1.2, 1, 0.7); // загнутые края
+                    P(Leather, 3, -2.6, 7, 2.1);
+                    P(LeatherDark, 5.3, -2.6, 2.4, 0.45);                 // вмятина
+                    P(LeatherDark, 3, -0.95, 7, 0.4);                     // лента
+                    P(Gold, 4, -0.95, 0.5, 0.4);                          // пряжка
+                    P(Bandana, 3.5, 4, 6, 0.8); P(Bandana, 5.5, 4.8, 2, 0.7);
+                    P(Bone, 4.5, 4.2, 0.3, 0.3); P(Bone, 7.8, 4.3, 0.3, 0.3); // горошек
+                    break;
+                case Outfit.Crown: // корона с камнями, иногда блестит
+                    P(Gold, 2.5, -1.1, 8, 1.1);
+                    P(GoldDark, 2.5, -0.25, 8, 0.25);
+                    P(Gold, 2.5, -2.1, 1.1, 1); P(Gold, 5.95, -2.5, 1.1, 1.4); P(Gold, 9.4, -2.1, 1.1, 1);
+                    P(Ruby, 6.2, -0.85, 0.6, 0.6); P(Sapphire, 3.8, -0.8, 0.5, 0.5); P(Sapphire, 8.7, -0.8, 0.5, 0.5);
+                    P(Bone, 6.3, -2.7, 0.4, 0.4); P(Bone, 2.85, -2.3, 0.4, 0.4); P(Bone, 9.75, -2.3, 0.4, 0.4); // жемчужины
+                    if ((_time % 3) < 0.35) { P(Bone, 4.4, -1.6, 0.3, 0.9); P(Bone, 4.1, -1.3, 0.9, 0.3); } // блик
+                    break;
+                case Outfit.Wizard: // колпак со звёздами, кончик загнут (по высоте — как ночной колпак, чтобы не обрезался чёлкой)
+                    P(Wizard, 0.8, -0.6, 11.4, 0.7);
+                    P(Wizard, 3, -1.5, 7, 1);
+                    P(WizardLight, 4, -2.3, 5, 0.9);
+                    P(Wizard, 5, -3.0, 3, 0.8);
+                    P(WizardLight, 7.4, -3.5, 1.4, 0.6);                  // загнутый кончик
+                    P(Star, 4.4, -1.3, 0.5, 0.5); P(Star, 7.4, -2.1, 0.4, 0.4); P(Star, 5.8, -2.8, 0.35, 0.35);
+                    P(Star, 3, -0.85, 7, 0.25);                           // золотая кайма
+                    break;
+                case Outfit.Pirate: // треуголка с черепом (повязка на глаз рисуется после глаз)
+                    P(Pirate, 1.2, -1.1, 10.6, 1.2);
+                    P(Pirate, 2.5, -2.2, 8, 1.2);
+                    P(Pirate, 0.6, -1.7, 1.2, 0.8); P(Pirate, 11.2, -1.7, 1.2, 0.8); // загнутые края
+                    P(Gold, 1.2, -0.15, 10.6, 0.25);                      // кайма
+                    P(Bone, 6, -1.85, 1, 0.75);                           // череп
+                    P(Pirate, 6.2, -1.6, 0.25, 0.25); P(Pirate, 6.55, -1.6, 0.25, 0.25);
+                    P(Bone, 5.7, -1.0, 1.6, 0.2);                         // кости
+                    break;
+                case Outfit.Chef: // поварской колпак: пышный верх, складки на ободе
+                    P(Linen, 2.5, -1, 8, 1);
+                    for (double x = 3; x < 10.5; x += 1.5) P(LinenShade, x, -1, 0.25, 1); // складки
+                    dc.DrawEllipse(Linen, null, new Point(ox + 4.3 * px, oy - 1.8 * px), 1.8 * px, 1.2 * px);
+                    dc.DrawEllipse(Linen, null, new Point(ox + 6.5 * px, oy - 2.2 * px), 2.0 * px, 1.3 * px);
+                    dc.DrawEllipse(Linen, null, new Point(ox + 8.7 * px, oy - 1.8 * px), 1.8 * px, 1.2 * px);
+                    P(LinenShade, 3.5, -1.3, 6, 0.25);
+                    break;
+            }
         }
 
         private static void DrawHeart(DrawingContext dc, double x, double y, double s)
@@ -516,6 +675,50 @@ namespace Isle.Helpers
                         dc.DrawRectangle(new SolidColorBrush(colors[i]), null, new Rect(x + (0.3 + (i % 2) * 1.4) * px, y + (0.4 + (i / 2) * 2) * px, 1.3 * px, 1.6 * px));
                     break;
                 }
+                case Juggle:
+                {
+                    // три мячика по «восьмёрке» над головой, у каждого блик
+                    Brush[] balls = { BallRed, Freeze(new SolidColorBrush(Color.FromRgb(0xFA, 0xCC, 0x15))), Freeze(new SolidColorBrush(Color.FromRgb(0x60, 0xA5, 0xFA))) };
+                    for (int i = 0; i < 3; i++)
+                    {
+                        var (bx, by) = JugglePos(i);
+                        dc.DrawEllipse(balls[i], null, new Point(ox + bx * px, oy + by * px), 0.75 * px, 0.75 * px);
+                        dc.DrawEllipse(Shine, null, new Point(ox + (bx - 0.25) * px, oy + (by - 0.25) * px), 0.22 * px, 0.22 * px);
+                    }
+                    break;
+                }
+                case YoYo:
+                {
+                    // йо-йо на ниточке из правой ручки: падает и возвращается в руку
+                    double hx = ox + 12.6 * px, hy = oy + 5 * px;
+                    double depth = YoYoDepth();
+                    double yx = hx, yy = hy + depth * px;
+                    dc.DrawLine(new Pen(Cup, Math.Max(0.6, 0.18 * px)), new Point(hx, hy), new Point(yx, yy));
+                    double spin = _time * 18;
+                    dc.DrawEllipse(BallRed, null, new Point(yx, yy + 0.7 * px), 0.85 * px, 0.85 * px);
+                    // «спицы» крутятся, пока катушка в полёте
+                    dc.DrawLine(new Pen(Cup, Math.Max(0.6, 0.2 * px)), new Point(yx + Math.Cos(spin) * 0.6 * px, yy + 0.7 * px + Math.Sin(spin) * 0.6 * px),
+                        new Point(yx - Math.Cos(spin) * 0.6 * px, yy + 0.7 * px - Math.Sin(spin) * 0.6 * px));
+                    break;
+                }
+                case Plane:
+                {
+                    // бумажный самолётик: белый треугольник носом по ходу полёта, с серым сгибом
+                    var (plx, ply, dir) = PlanePos();
+                    double x = ox + plx * px, y = oy + ply * px, s2 = 1.5 * px;
+                    var g = new StreamGeometry();
+                    using (var c = g.Open())
+                    {
+                        c.BeginFigure(new Point(x + dir * s2, y), true, true);
+                        c.LineTo(new Point(x - dir * s2, y - 0.7 * s2), true, false);
+                        c.LineTo(new Point(x - dir * 0.6 * s2, y + 0.1 * s2), true, false);
+                        c.LineTo(new Point(x - dir * s2, y + 0.55 * s2), true, false);
+                    }
+                    g.Freeze();
+                    dc.DrawGeometry(Paper, null, g);
+                    dc.DrawLine(new Pen(Fold, Math.Max(0.5, 0.15 * px)), new Point(x + dir * s2, y), new Point(x - dir * 0.6 * s2, y + 0.1 * s2));
+                    break;
+                }
                 case Coffee:
                 {
                     // чашка в правой ручке, над ней поднимается пар
@@ -623,6 +826,30 @@ namespace Isle.Helpers
                             step = bph >= 0.15 && bph < 0.8 && Math.Sin(_dtime * 16) > 0; // на спине болтает ножками
                         }
                             break;
+                        case 9: // волна: тело перекатывается волной, ручки поднимаются одна за другой
+                            dx = Math.Sin(_dtime * 2.5) * 0.6 * px;
+                            tilt = Math.Sin(_dtime * 5) * 6;
+                            dy = -(Math.Max(0, Math.Sin(_dtime * 5 + 0.8)) * 0.6 + _bob * 0.8) * px;
+                            step = Math.Sin(_dtime * 5) > 0;
+                            break;
+                        case 10: // хлопки: на каждый хлопок подпрыгивает
+                        {
+                            double ph = ClapPhase();
+                            dy = -((ph < 0.5 ? Math.Sin(ph / 0.5 * Math.PI) * 1.3 : 0) + _bob * 0.6) * px;
+                            step = ph < 0.5;
+                            break;
+                        }
+                        case 11: // твист: бёдрами из стороны в сторону, приседая
+                            tilt = Math.Sin(_dtime * 8) * 10;
+                            dy = (Math.Abs(Math.Sin(_dtime * 4)) * 0.8 - _bob * 0.5) * px;
+                            step = Math.Sin(_dtime * 8) > 0;
+                            break;
+                        case 12: // флосс: бёдра быстро влево-вправо
+                            dx = Math.Sin(_dtime * 7) * 1.2 * px;
+                            tilt = -Math.Sin(_dtime * 7) * 5;
+                            dy = -_bob * 0.6 * px;
+                            step = Math.Sin(_dtime * 7) > 0;
+                            break;
                         default: // прыжки (как раньше)
                             dy = -(Math.Abs(Math.Sin(_dtime * 7.5)) * 1.1 + _bob * 1.4) * px;
                             tilt = Math.Sin(_dtime * 3.75) * 9;
@@ -715,6 +942,9 @@ namespace Isle.Helpers
                         if (_activity == Bubbles && x == 0) cy = y - 1;                                        // держит палочку для пузырей
                         if (_activity == Paint && x == 12) cy = y - 1 - (Math.Sin(_time * 4) > 0 ? 1 : 0);    // водит кистью
                         if (_activity == Skate) cy = y - 1;                                                    // балансирует руками
+                        if (_activity == Juggle) cy = y - (Math.Sin(_time * 7.2 + (x == 0 ? 0 : Math.PI)) > 0 ? 1 : 0); // подкидывает по очереди
+                        if (_activity == YoYo && x == 12) cy = y + (YoYoDepth() < 0.6 ? 0 : 1);               // дёргает за ниточку
+                        if (_activity == Plane && x == 0) cy = y - (Math.Sin(_time * 0.75) > 0.95 ? 1 : 0);  // машет самолётику
                     }
                     if ((x == 0 || x == 12) && mood == Mood.Working)
                     {
@@ -793,10 +1023,11 @@ namespace Isle.Helpers
                 for (int x = 3; x <= 9; x++) dc.DrawRectangle(canopy, null, new Rect(ox + x * px, oy - 3 * px, px + 0.35, px + 0.35));
                 dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x95)), null, new Rect(ox + 6 * px, oy - 1 * px, px * 0.6, px));
             }
+            else if (!nightcap) DrawOutfit(dc, ox, oy, px);
 
             // ---- праздничные шапки (вместо обычной): Новый год — колпак Деда Мороза, Хэллоуин — шляпа ведьмы
             var holiday = Holiday();
-            if (holiday != null && !nightcap && Outfit != Outfit.Rain)
+            if (holiday != null && !nightcap && (Outfit == Outfit.None || Outfit == Outfit.Winter || Outfit == Outfit.Summer || Outfit == Outfit.Sunny))
             {
                 if (holiday == "ny")
                 {
@@ -849,8 +1080,10 @@ namespace Isle.Helpers
             double eh = 2 * px * (1 - _blink);
             bool wink = mood == Mood.Idle && _activity == Wink;
             bool sip = mood == Mood.Idle && _activity == Coffee && Math.Sin(_time * 0.8) > 0.85;
+            bool patch = Outfit == Outfit.Pirate && !nightcap;
             foreach (var e in glasses ? Array.Empty<Point>() : new[] { EyeL, EyeR })
             {
+                if (patch && e == EyeL) continue; // под пиратской повязкой
                 double x = ox + e.X * px + ex, y = oy + e.Y * px + ey;
                 if ((wink && e == EyeL) || sip) { dc.DrawRectangle(eye, null, new Rect(x - 0.15 * px, y + 1.2 * px, px * 1.3, Math.Max(0.4, 0.35 * px))); continue; } // подмигивает / жмурится от кофе
                 if (eh < 0.45 * px) dc.DrawRectangle(eye, null, new Rect(x - 0.15 * px, y + 1.2 * px, px * 1.3, Math.Max(0.4, 0.35 * px)));
@@ -862,6 +1095,26 @@ namespace Isle.Helpers
                 double open = Math.Sin(_yawn * Math.PI);
                 double mh = 1.8 * px * open, mw = (1 + 0.6 * open) * px;
                 if (mh > 0.2 * px) dc.DrawRectangle(eye, null, new Rect(ox + 6.5 * px - mw / 2, oy + 4.6 * px - mh / 2, mw, mh));
+            }
+            if (patch)
+            {
+                // повязка на левый глаз и ремешок через голову
+                var blk = new SolidColorBrush(Color.FromRgb(0x12, 0x12, 0x14));
+                dc.DrawRectangle(blk, null, new Rect(ox + 2 * px, oy + 1.4 * px, 9 * px, 0.35 * px));
+                dc.DrawEllipse(blk, null, new Point(ox + 4.5 * px, oy + 2.9 * px), 1.15 * px, 1.05 * px);
+            }
+            if (mood == Mood.Music && _dance == 10 && _cheer <= 0)
+            {
+                // хлопок: над головой вспыхивает искорка
+                double ph = ClapPhase();
+                if (ph > 0.18 && ph < 0.42)
+                {
+                    double k = 1 - Math.Abs((ph - 0.3) / 0.12);
+                    var spark = new SolidColorBrush(Color.FromArgb((byte)(255 * Math.Clamp(k, 0, 1)), 0xFF, 0xE9, 0xD6));
+                    double cx = ox + 6.5 * px, cyy = oy - 3.4 * px, r = (0.6 + k * 0.9) * px;
+                    dc.DrawRectangle(spark, null, new Rect(cx - r, cyy - 0.15 * px, r * 2, 0.3 * px));
+                    dc.DrawRectangle(spark, null, new Rect(cx - 0.15 * px, cyy - r, 0.3 * px, r * 2));
+                }
             }
             dc.Pop();
 

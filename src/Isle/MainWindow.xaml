@@ -38,7 +38,7 @@
                     <Grid x:Name="CollapsedView" Margin="16,0">
                         <!-- покой: «глаза», время, погода -->
                         <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <h:Character x:Name="Buddy" Width="30" Height="22" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <h:Character x:Name="Buddy" Width="36" Height="26" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <StackPanel x:Name="Eyes" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border x:Name="EyeL" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" VerticalAlignment="Center"/>
                                 <Border x:Name="EyeR" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
@@ -62,7 +62,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <h:Character x:Name="BuddyMedia" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
+                            <h:Character x:Name="BuddyMedia" Width="36" Height="26" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                             <Border x:Name="MiniCoverBox" Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True" VerticalAlignment="Center">
                                 <Image x:Name="MiniCover" Stretch="UniformToFill"/>
                             </Border>
@@ -101,7 +101,7 @@
                         <!-- таймер -->
                         <Grid x:Name="TimerRow" Visibility="Collapsed" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                <h:Character x:Name="BuddyTimer" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
+                                <h:Character x:Name="BuddyTimer" Width="36" Height="26" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                                 <h:Icon Kind="Timer" Width="15" Height="15" Foreground="{DynamicResource Accent}"/>
                                 <TextBlock Text="Таймер" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="7,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
