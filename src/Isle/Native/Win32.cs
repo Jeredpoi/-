@@ -50,6 +50,8 @@ namespace Isle.Native
 
         /// <summary>0x11 = WDA_EXCLUDEFROMCAPTURE: окно не видно на скриншотах и в записи экрана (Win10 2004+).</summary>
         [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
+        /// <summary>Дождаться, пока DWM выведет следующий кадр (окно действительно исчезло с экрана).</summary>
+        [DllImport("dwmapi.dll")] public static extern int DwmFlush();
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
         [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
         [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
