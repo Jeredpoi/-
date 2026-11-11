@@ -189,7 +189,13 @@ namespace Isle.Services
         {
             try
             {
-                var img = Clipboard.GetImage();
+                // буфер может быть на мгновение занят другой программой (CLIPBRD_E_CANT_OPEN) — пробуем ещё пару раз
+                BitmapSource img = null;
+                for (int attempt = 0; ; attempt++)
+                {
+                    try { img = Clipboard.GetImage(); break; }
+                    catch (System.Runtime.InteropServices.COMException) when (attempt < 4) { await Task.Delay(60 + attempt * 60); }
+                }
                 if (img == null) return;
                 var source = Win32.ForegroundProcessName();
                 // Хэш и PNG для снимка 4K — это сотни миллисекунд: считаем в фоне, чтобы чёлка не замирала при копировании картинки

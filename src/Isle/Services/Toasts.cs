@@ -43,6 +43,8 @@ namespace Isle.Services
         public bool Important { get; set; }
         /// <summary>Таймер вышел: справа кнопки «Ещё раз» (заново на это время) и ✓ (выключить).</summary>
         public TimeSpan? RepeatTimer { get; set; }
+        /// <summary>«Внимание» (не ошибка): янтарная плитка — загрузка на паузе и т. п.</summary>
+        public bool Warning { get; set; }
     }
 
     public static class ToastBus
