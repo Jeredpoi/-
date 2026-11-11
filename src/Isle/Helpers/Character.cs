@@ -289,6 +289,12 @@ namespace Isle.Helpers
 
         /// <summary>Короткая радость (скриншот, ответ ИИ, файл на полке).</summary>
         public void Cheer() => _cheer = 1;
+        private double _bed;
+        private static readonly Brush BedWood = Freeze(new SolidColorBrush(Color.FromRgb(0x8B, 0x5A, 0x2B)));
+        private static readonly Brush BedWoodDark = Freeze(new SolidColorBrush(Color.FromRgb(0x5C, 0x3A, 0x1A)));
+        private static readonly Brush Blanket = Freeze(new SolidColorBrush(Color.FromRgb(0x3B, 0x5B, 0xD9)));
+        private static readonly Brush BlanketFold = Freeze(new SolidColorBrush(Color.FromRgb(0x2E, 0x48, 0xB0)));
+        private static readonly Brush Pillow = Freeze(new SolidColorBrush(Color.FromRgb(0xF4, 0xF1, 0xE8)));
 
         private void Tick()
         {
@@ -377,6 +383,9 @@ namespace Isle.Helpers
             else _blink += (1 - _blink) * FrameClock.Lerp(0.2);
 
             if (_cheer > 0) _cheer = Math.Max(0, _cheer - 0.035 * FrameClock.K);
+            // сонный не выдержал и уснул — появляется кровать, одеяло медленно натягивается
+            _bed += ((mood == Mood.Sleep ? 1 : 0) - _bed) * FrameClock.Lerp(mood == Mood.Sleep ? 0.03 : 0.12);
+            if (_bed < 0.002) _bed = 0;
             if (mood == Mood.Idle && DateTime.Now >= _activityUntil) StartActivity(Stand, 0); // короткое занятие закончилось
             if (mood == Mood.Idle && DateTime.Now >= _nextActivity)
             {
@@ -1190,6 +1199,18 @@ namespace Isle.Helpers
             }
             else tf.Children.Add(new RotateTransform(tilt, ActualWidth / 2, ActualHeight));
             dc.PushTransform(tf);
+            if (_bed > 0.01)
+            {
+                // кровать за Клоди: изголовье, подушка за головой, рама и ножки — проявляются вместе с одеялом
+                dc.PushOpacity(Math.Min(1, _bed * 1.4));
+                dc.DrawRectangle(BedWoodDark, null, new Rect(ox - 1.6 * px, oy - 0.6 * px, 1.2 * px, 10.4 * px));    // изголовье
+                dc.DrawRectangle(BedWood, null, new Rect(ox - 1.4 * px, oy - 0.4 * px, 0.8 * px, 10 * px));
+                dc.DrawRectangle(Pillow, null, new Rect(ox + 1.2 * px, oy - 0.8 * px, 10.6 * px, 1.8 * px));      // подушка
+                dc.DrawRectangle(BedWood, null, new Rect(ox - 1.6 * px, oy + 8.6 * px, 16.2 * px, 1.2 * px));     // рама
+                dc.DrawRectangle(BedWoodDark, null, new Rect(ox - 1.6 * px, oy + 9.8 * px, 1 * px, 0.8 * px));    // ножки
+                dc.DrawRectangle(BedWoodDark, null, new Rect(ox + 13.6 * px, oy + 9.8 * px, 1 * px, 0.8 * px));
+                dc.Pop();
+            }
             for (int y = 0; y < H; y++)
             {
                 var row = Sprite[y];
@@ -1252,6 +1273,16 @@ namespace Isle.Helpers
                     }
                     dc.DrawRectangle(body, null, new Rect(ox + x * px, oy + cy * px, px + 0.35, px + 0.35));
                 }
+            }
+
+            if (_bed > 0.01)
+            {
+                // одеяло натягивается снизу до плеч; складка и узор
+                double top = 8.6 - 4.4 * _bed;                 // от ножек до 4,2 клетки (по плечи)
+                dc.DrawRectangle(Blanket, null, new Rect(ox - 0.4 * px, oy + top * px, 14.4 * px, (8.8 - top) * px));
+                dc.DrawRectangle(BlanketFold, null, new Rect(ox - 0.4 * px, oy + top * px, 14.4 * px, 0.6 * px)); // отворот
+                for (double fx = 1.5; fx < 13; fx += 3)
+                    dc.DrawRectangle(BlanketFold, null, new Rect(ox + fx * px, oy + (top + 1.6) * px, 0.6 * px, 0.6 * px));
             }
 
             // ---- одежда по погоде

@@ -130,6 +130,10 @@ namespace Isle.Services
         /// <summary>Одежда Клоди: auto — по погоде, иначе имя наряда (Cowboy, Crown, Wizard, Pirate, Chef, Frost, Autumn, Storm, Heat, Winter, Sunny, Summer, None).</summary>
         public string BuddyOutfit { get; set; } = "auto";
         public bool FirstRunDone { get; set; } = false;
+        /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
+        public bool WelcomeShown { get; set; }
+        /// <summary>Настроек ещё не было на диске — это самый первый запуск Isle на этом компьютере.</summary>
+        [System.Text.Json.Serialization.JsonIgnore] public static bool IsFreshInstall { get; private set; }
         /// <summary>Подсказка из трея «Isle запущен» уже показывалась.</summary>
         public bool TrayHintShown { get; set; } = false;
         public bool AutoUpdateCheck { get; set; } = true;
@@ -184,7 +188,15 @@ namespace Isle.Services
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;
-        public static AppSettings Current => _current ??= Migrate(Storage.Load<AppSettings>("settings.json"));
+        public static AppSettings Current
+        {
+            get
+            {
+                if (_current != null) return _current;
+                try { IsFreshInstall = !File.Exists(Path.Combine(Storage.Dir, "settings.json")); } catch { }
+                return _current = Migrate(Storage.Load<AppSettings>("settings.json"));
+            }
+        }
 
         /// <summary>Старые значения по умолчанию → новые (облегчённый turbo хуже ставит знаки препинания).</summary>
         private static AppSettings Migrate(AppSettings s)
