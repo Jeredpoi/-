@@ -297,6 +297,12 @@ namespace Isle.Helpers
 
         /// <summary>Короткая радость (скриншот, ответ ИИ, файл на полке).</summary>
         public void Cheer() => _cheer = 1;
+        /// <summary>Включить конкретное занятие в покое на заданное время (для съёмки README и демонстраций).</summary>
+        public void ForceActivity(int activity, double seconds)
+        {
+            StartActivity(activity, seconds);
+            _nextActivity = DateTime.Now.AddSeconds(seconds + 1);
+        }
         private double _bed;
         private static readonly Brush BedWood = Freeze(new SolidColorBrush(Color.FromRgb(0x8B, 0x5A, 0x2B)));
         private static readonly Brush BedWoodDark = Freeze(new SolidColorBrush(Color.FromRgb(0x5C, 0x3A, 0x1A)));
