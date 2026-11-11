@@ -93,6 +93,8 @@ namespace Isle.Overlays
             _page.MouseLeftButtonDown += MarkDown;
             _page.MouseMove += MarkMove;
             _page.MouseLeftButtonUp += MarkUp;
+            // мышь отпустили за пределами окна или захват потерян (Alt+Tab) — завершаем рисование как обычное отпускание
+            _page.LostMouseCapture += (_, e) => { if (_drawing) MarkUp(_page, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent }); };
 
             BuildBar();
             _hintText.Text = "Рисуй прямо на снимке · Enter — сохранить · Esc — отмена";
@@ -270,14 +272,14 @@ namespace Isle.Overlays
                     _live?.Show(_live.Clamp(r.X * PxPerDip, r.Y * PxPerDip, r.Width * PxPerDip, r.Height * PxPerDip));
                     PlaceFrame(r);
                     break;
-                case Mark.Rect:
+                case Mark.Rect when _shape != null:
                     Canvas.SetLeft(_shape, r.X); Canvas.SetTop(_shape, r.Y); _shape.Width = r.Width; _shape.Height = r.Height;
                     break;
-                case Mark.Arrow:
-                    ((ShapePath)_shape).Data = Arrow(_from, p, Ink);
+                case Mark.Arrow when _shape is ShapePath arrow:
+                    arrow.Data = Arrow(_from, p, Ink);
                     break;
-                case Mark.Pen:
-                case Mark.Marker:
+                case Mark.Pen when _line != null:
+                case Mark.Marker when _line != null:
                     _line.Points.Add(p);
                     break;
             }
@@ -308,12 +310,14 @@ namespace Isle.Overlays
                 case Mark.Rect:
                 case Mark.Arrow:
                     var shape = _shape; _shape = null;
+                    if (shape == null) break;
                     if (r.Width < 4 && r.Height < 4) { _ink.Children.Remove(shape); break; }
                     _markUndo.Push(() => _ink.Children.Remove(shape));
                     break;
                 case Mark.Pen:
                 case Mark.Marker:
                     var line = _line; _line = null;
+                    if (line == null) break;
                     if (line.Points.Count < 2) { _ink.Children.Remove(line); break; }
                     _markUndo.Push(() => _ink.Children.Remove(line));
                     break;
