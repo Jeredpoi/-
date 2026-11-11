@@ -73,6 +73,7 @@ namespace Isle.Overlays
         /// <summary>Вместо мгновенного снимка — режим пометок на месте выделения.</summary>
         private void EnterMarkup(Rect area, BitmapSource crop)
         {
+            if (_markup) return; // панель пометок — ровно одна
             _markup = true;
             _area = area;
             Cursor = Cursors.Arrow;
@@ -141,10 +142,10 @@ namespace Isle.Overlays
             _bar = new Border
             {
                 Background = BarBg, CornerRadius = new CornerRadius(18), Padding = new Thickness(8, 6, 6, 6),
-                BorderBrush = Frz(Color.FromRgb(0x23, 0x23, 0x2A)), BorderThickness = new Thickness(1),
+                BorderBrush = Frz(Color.FromRgb(0x3A, 0x3A, 0x44)), BorderThickness = new Thickness(1),
                 Child = row, RenderTransformOrigin = new Point(0.5, 0)
             };
-            _bar.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 4, Opacity = 0.45, Color = Colors.Black };
+            // без DropShadowEffect: на части видеокарт/масштабов WPF рисует тень жёстким чёрным прямоугольником вокруг панели
             _bar.MouseLeftButtonDown += (_, e) => e.Handled = true; // клик по панели не рисует и не начинает новое выделение
             _canvas.Children.Add(_bar);
             _bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -156,6 +157,12 @@ namespace Isle.Overlays
             if (y < 8) y = _area.Bottom - sz.Height - 12;
             double x = Math.Clamp(_area.X + (_area.Width - sz.Width) / 2, 8, Math.Max(8, ActualWidth - sz.Width - 8));
             Canvas.SetLeft(_bar, x); Canvas.SetTop(_bar, y);
+            try
+            {
+                var dpi = VisualTreeHelper.GetDpi(this);
+                App.Trace($"пометки: экран {_vs.X},{_vs.Y} {_vs.Width}×{_vs.Height}, окно {ActualWidth:0}×{ActualHeight:0}, масштаб {dpi.DpiScaleX:0.##}, область {_area.X:0},{_area.Y:0} {_area.Width:0}×{_area.Height:0}, панель {sz.Width:0}×{sz.Height:0} в {x:0},{y:0}, слоёв {_openCount}");
+            }
+            catch { }
 
             // панель выезжает с лёгкой пружиной
             var st = new ScaleTransform(0.9, 0.9);
@@ -370,8 +377,9 @@ namespace Isle.Overlays
             if (string.IsNullOrWhiteSpace(box.Text)) { Keyboard.Focus(this); return; }
             var tb = new TextBlock
             {
-                Text = box.Text, FontSize = box.FontSize, FontWeight = box.FontWeight, Foreground = box.Foreground, Padding = new Thickness(4, 1, 4, 1),
-                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 4, ShadowDepth = 0, Opacity = 0.9, Color = Colors.Black }
+                Text = box.Text, FontSize = box.FontSize, FontWeight = box.FontWeight, Foreground = box.Foreground, Padding = new Thickness(5, 1, 5, 2),
+                // полупрозрачная подложка вместо тени — читается на любом фоне и не даёт чёрных прямоугольников
+                Background = Frz(Color.FromArgb(140, 0, 0, 0))
             };
             Canvas.SetLeft(tb, Canvas.GetLeft(box)); Canvas.SetTop(tb, Canvas.GetTop(box));
             _ink.Children.Add(tb);

@@ -115,11 +115,18 @@ namespace Isle.Overlays
             }
         }
 
+        private static CaptureOverlay _open;
+        private static int _openCount;
+
         public static Task<object> Run(CaptureMode mode)
         {
+            // прошлый слой почему-то остался на экране — закрываем, иначе он попадёт в новый снимок второй панелью
+            if (_open != null) { try { _open.Finish(null); } catch { } _open = null; }
             var vs = ScreenTools.VirtualScreen();
             var shot = ScreenTools.Capture(vs);
             var w = new CaptureOverlay(shot, vs, mode);
+            _open = w; _openCount++;
+            w.Closed += (_, __) => { _openCount--; if (ReferenceEquals(_open, w)) _open = null; };
             w.Show();
             return w._tcs.Task;
         }
