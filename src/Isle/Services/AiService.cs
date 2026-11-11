@@ -18,6 +18,9 @@ namespace Isle.Services
         public AiAction Pending { get; set; }
         public bool HasPending => Pending != null;
         public string PendingLabel => Pending?.Label ?? "";
+        /// <summary>Клоди у ответа — в разной позе: машет, радуется, думает, подмигивает… (по тексту ответа, стабильно).</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Windows.Media.ImageSource Avatar => Helpers.Character.AvatarFor(Text);
     }
 
     public class AiPreset
@@ -58,7 +61,10 @@ namespace Isle.Services
         private static string SystemPrompt => BasePrompt + AiActions.Prompt;
         private const string BasePrompt =
             "Ты — помощник, встроенный в панель Isle на рабочем столе Windows. Отвечай кратко и по делу, на языке пользователя. " +
-            "Используй простой текст без лишней разметки.";
+            "Используй простой текст без лишней разметки. " +
+            "Учитывай весь разговор: короткая реплика — продолжение предыдущего вопроса. Если пользователь спросил «столица Италии», " +
+            "а потом пишет просто «Германия», он спрашивает столицу Германии — ответь так же коротко (например: «Берлин»), а не рассказывай про страну. " +
+            "Так же с «а для 7?», «а если в евро?», «а завтра?» — подставляй новое значение в прошлый вопрос и отвечай в том же формате.";
 
         public static event Action<bool> BusyChanged;
 

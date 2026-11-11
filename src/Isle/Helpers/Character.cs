@@ -112,23 +112,67 @@ namespace Isle.Helpers
         /// <summary>Неподвижный Клоди (те же пиксели) — аватар у ответов в чате, без покадровой анимации.</summary>
         public static ImageSource Avatar { get; } = BuildAvatar();
 
-        private static ImageSource BuildAvatar()
+        // позы для аватара в чате: 0 — стоит, 1 — машет, 2 — радуется (обе ручки вверх), 3 — подмигивает,
+        // 4 — довольный (глаза-дуги), 5 — думает (глаза вверх, ручка у подбородка), 6 — косится вправо, 7 — грустит (ошибка)
+        private static readonly ImageSource[] Poses = BuildPoses();
+        private static ImageSource[] BuildPoses() { var a = new ImageSource[8]; for (int i = 0; i < a.Length; i++) a[i] = BuildAvatar(i); return a; }
+
+        /// <summary>Поза Клоди для ответа: ошибка — грустит, вопрос — думает, иначе — одна из весёлых поз (одна и та же для одного текста).</summary>
+        public static ImageSource AvatarFor(string text)
         {
-            var body = new SolidColorBrush(Color.FromRgb(0xE0, 0x7A, 0x5F)); body.Freeze();
-            var group = new DrawingGroup();
-            using (var dc = group.Open())
+            text ??= "";
+            if (text.StartsWith("Ошибка") || text.StartsWith("Нужен API-ключ") || text.StartsWith("✗")) return Poses[7];
+            if (text.TrimEnd().EndsWith("?")) return Poses[5];
+            if (text == "…") return Poses[5];
+            int h = 17;
+            foreach (char c in text) h = unchecked(h * 31 + c);
+            int[] happy = { 0, 1, 2, 3, 4, 6, 0, 4 };
+            return Poses[happy[(int)((uint)h % happy.Length)]];
+        }
+
+        private static ImageSource BuildAvatar(int pose = 0)
+        {
+            var body0 = new SolidColorBrush(Color.FromRgb(0xE0, 0x7A, 0x5F)); body0.Freeze();
+            var g = new DrawingGroup();
+            using (var dc = g.Open())
             {
-                dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, W, H));
+                // поле шире спрайта: поднятые ручки не обрезаются
+                dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, -2, W, H + 2));
                 for (int y = 0; y < H; y++)
                     for (int x = 0; x < W; x++)
-                        if (Sprite[y][x] != '.') dc.DrawRectangle(body, null, new Rect(x, y, 1.02, 1.02));
-                dc.DrawRectangle(Brushes.Black, null, new Rect(EyeL.X, EyeL.Y, 1, 2));
-                dc.DrawRectangle(Brushes.Black, null, new Rect(EyeR.X, EyeR.Y, 1, 2));
+                    {
+                        if (Sprite[y][x] == '.') continue;
+                        double yy = y;
+                        bool arm = x == 0 || x == W - 1;
+                        if (arm)
+                        {
+                            bool right = x == W - 1;
+                            if (pose == 1 && right) yy = y - 2;                 // машет правой
+                            if (pose == 2) yy = y - 2;                          // обе вверх
+                            if (pose == 5 && right) continue;                   // правая — у подбородка (ниже)
+                            if (pose == 7) yy = y + 1;                          // опустил ручки
+                        }
+                        dc.DrawRectangle(body0, null, new Rect(x, yy, 1.02, 1.02));
+                    }
+                if (pose == 5) { dc.DrawRectangle(body0, null, new Rect(10, 4, 1.02, 1.02)); dc.DrawRectangle(body0, null, new Rect(10, 3, 1.02, 1.02)); }
+                double ex = pose == 6 ? 0.6 : pose == 5 ? -0.4 : 0, ey = pose == 5 ? -0.4 : pose == 7 ? 0.6 : 0;
+                foreach (var e in new[] { EyeL, EyeR })
+                {
+                    if (pose == 3 && e == EyeL) { dc.DrawRectangle(Brushes.Black, null, new Rect(e.X - 0.2, e.Y + 1.2, 1.4, 0.4)); continue; } // подмигнул
+                    if (pose == 4)                                                                                                         // глаза-дуги ^^
+                    {
+                        dc.DrawRectangle(Brushes.Black, null, new Rect(e.X - 0.3, e.Y + 1.2, 0.5, 0.4));
+                        dc.DrawRectangle(Brushes.Black, null, new Rect(e.X + 0.1, e.Y + 0.8, 0.8, 0.4));
+                        dc.DrawRectangle(Brushes.Black, null, new Rect(e.X + 0.8, e.Y + 1.2, 0.5, 0.4));
+                        continue;
+                    }
+                    dc.DrawRectangle(Brushes.Black, null, new Rect(e.X + ex, e.Y + ey, 1, pose == 7 ? 1.4 : 2));
+                }
             }
-            group.Freeze();
-            var img = new DrawingImage(group);
-            img.Freeze();
-            return img;
+            g.Freeze();
+            var di = new DrawingImage(g);
+            di.Freeze();
+            return di;
         }
 
         public Character()
