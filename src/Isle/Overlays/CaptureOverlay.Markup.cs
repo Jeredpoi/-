@@ -42,8 +42,15 @@ namespace Isle.Overlays
         private bool _markup;
         private Rect _area;                // выделенная область в координатах слоя
         private Grid _page;                // снимок + мозаика + пометки, стоит ровно на месте выделения
-        private WriteableBitmap _edit;     // пиксели снимка (мозаика вписывается сюда)
-        private LiveMosaic _live;          // мозаика прямо в пикселях снимка, пока тянешь рамку
+        // Снимок — обычная «замороженная» картинка, как и весь экран под слоем. WriteableBitmap на 4K
+        // на части видеокарт рисовался кусками: недорисованный кусок оставался чёрным прямоугольником.
+        private BitmapSource _crop;
+        private int _cropW, _cropH;
+        private byte[] _cropPx;
+        private BitmapSource _mosaicSrc;   // весь снимок в квадратах — считается при первой мозаике
+        private Canvas _patches;           // плитки мозаики поверх снимка (каждая — кусок _mosaicSrc)
+        private Image _livePatch;          // плитка, которая тянется за мышью
+        private Int32Rect _livePx;
         private Canvas _ink;
         private Rectangle _outline;
         private Border _bar;
@@ -67,7 +74,7 @@ namespace Isle.Overlays
         }
 
         private static SolidColorBrush Frz(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
-        private double PxPerDip => _edit.PixelWidth / Math.Max(1, _area.Width);
+        private double PxPerDip => _cropW / Math.Max(1, _area.Width);
         private double Ink => 3; // толщина линий (в точках экрана)
 
         /// <summary>Вместо мгновенного снимка — режим пометок на месте выделения.</summary>
@@ -79,12 +86,15 @@ namespace Isle.Overlays
             Cursor = Cursors.Arrow;
             _sel.Visibility = Visibility.Collapsed;
 
-            var px = ScreenTools.Bgra(crop, out int w, out int h);
-            _edit = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgr32, null);
-            _edit.WritePixels(new Int32Rect(0, 0, w, h), px, w * 4, 0);
+            _crop = crop;
+            _cropW = crop.PixelWidth; _cropH = crop.PixelHeight;
+            // выделенное место не затемнено — и до, и после появления панели
+            UpdateDim(area);
 
             _page = new Grid { Width = area.Width, Height = area.Height, ClipToBounds = true, Background = Brushes.Transparent, Cursor = Cursors.Cross, RenderTransformOrigin = new Point(0.5, 0.5) };
-            _page.Children.Add(new Image { Source = _edit, Stretch = Stretch.Fill });
+            _page.Children.Add(new Image { Source = _crop, Stretch = Stretch.Fill });
+            _patches = new Canvas { IsHitTestVisible = false };
+            _page.Children.Add(_patches);
             _ink = new Canvas();
             _page.Children.Add(_ink);
             _outline = new Rectangle { Stroke = Brushes.White, StrokeThickness = 1.5, IsHitTestVisible = false };
@@ -236,7 +246,11 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    _live = new LiveMosaic(_edit);
+                    EnsureMosaic();
+                    _livePatch = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
+                    RenderOptions.SetBitmapScalingMode(_livePatch, BitmapScalingMode.NearestNeighbor);
+                    _patches.Children.Add(_livePatch);
+                    _livePx = Int32Rect.Empty;
                     // рамка выделения: тонкий чёрный контур и белый пунктир поверх — видна на любом фоне, ничего не затемняет
                     _mosaicFrame = new Grid { IsHitTestVisible = false };
                     _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.Black, StrokeThickness = 1 });
@@ -275,8 +289,8 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    // квадраты пишутся прямо в снимок, за пределами рамки — исходные пиксели
-                    _live?.Show(_live.Clamp(r.X * PxPerDip, r.Y * PxPerDip, r.Width * PxPerDip, r.Height * PxPerDip));
+                    // плитка мозаики тянется за мышью — квадраты видны сразу
+                    ShowPatch(r);
                     PlaceFrame(r);
                     break;
                 case Mark.Rect when _shape != null:
@@ -302,16 +316,13 @@ namespace Isle.Overlays
             {
                 case Mark.Mosaic:
                     if (_mosaicFrame != null) { _ink.Children.Remove(_mosaicFrame); _mosaicFrame = null; }
-                    if (_live != null)
+                    if (_livePatch != null)
                     {
-                        var ir = _live.Clamp(r.X * PxPerDip, r.Y * PxPerDip, r.Width * PxPerDip, r.Height * PxPerDip);
-                        if (r.Width >= 3 && r.Height >= 3 && ir.Width > 0 && ir.Height > 0)
-                        {
-                            _live.Show(ir); // итоговая рамка — та же, что была видна
-                            _markUndo.Push(_live.UndoFor(ir));
-                        }
-                        else _live.Cancel();
-                        _live = null;
+                        var patch = _livePatch; _livePatch = null;
+                        ShowPatch(r, patch);
+                        if (r.Width >= 3 && r.Height >= 3 && patch.Source != null)
+                            _markUndo.Push(() => _patches.Children.Remove(patch)); // итоговая плитка — та же, что была видна
+                        else _patches.Children.Remove(patch);
                     }
                     break;
                 case Mark.Rect:
@@ -329,6 +340,36 @@ namespace Isle.Overlays
                     _markUndo.Push(() => _ink.Children.Remove(line));
                     break;
             }
+        }
+
+        private void EnsureMosaic()
+        {
+            if (_mosaicSrc != null) return;
+            _cropPx ??= ScreenTools.Bgra(_crop, out _, out _);
+            var m = Mosaic.Build(_cropPx, _cropW, _cropH, Mosaic.BlockFor(_cropW, _cropH));
+            _mosaicSrc = BitmapSource.Create(_cropW, _cropH, 96, 96, PixelFormats.Bgr32, null, m, _cropW * 4);
+            _mosaicSrc.Freeze();
+        }
+
+        /// <summary>Плитка мозаики на месте рамки r (в точках снимка): кусок заранее посчитанной мозаики, по сетке пикселей.</summary>
+        private void ShowPatch(Rect r, Image patch = null)
+        {
+            patch ??= _livePatch;
+            if (patch == null || _mosaicSrc == null) return;
+            double k = PxPerDip;
+            int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
+            int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
+            var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
+            if (ir.Width <= 0 || ir.Height <= 0) { patch.Source = null; return; }
+            if (!ir.Equals(_livePx) || patch.Source == null)
+            {
+                var cb = new CroppedBitmap(_mosaicSrc, ir);
+                cb.Freeze();
+                patch.Source = cb;
+                _livePx = ir;
+            }
+            Canvas.SetLeft(patch, x0 / k); Canvas.SetTop(patch, y0 / k);
+            patch.Width = ir.Width / k; patch.Height = ir.Height / k;
         }
 
         private static Geometry Arrow(Point a, Point b, double t)
@@ -416,7 +457,7 @@ namespace Isle.Overlays
             if (_saving) return;
             CommitMarkText();
             _saving = true;
-            int w = _edit.PixelWidth, h = _edit.PixelHeight;
+            int w = _cropW, h = _cropH;
             _outline.Visibility = Visibility.Hidden;
             _page.UpdateLayout();
             var dv = new DrawingVisual();
