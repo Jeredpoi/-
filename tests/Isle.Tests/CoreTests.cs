@@ -705,3 +705,32 @@ SSID 3 : Office
         }
     }
 }
+
+namespace Isle.Tests
+{
+    public class LiveMosaicTests
+    {
+        [Fact]
+        public void MovingFrameRestoresPixelsOutsideAndCancelRestoresAll()
+        {
+            int w = 64, h = 32;
+            var px = new byte[w * h * 4];
+            for (int i = 0; i < px.Length; i += 4) { px[i] = (byte)(i % 251); px[i + 1] = (byte)(i % 199); px[i + 2] = (byte)(i % 97); px[i + 3] = 255; }
+            var bmp = new System.Windows.Media.Imaging.WriteableBitmap(w, h, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null);
+            bmp.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), px, w * 4, 0);
+            byte[] Now() { var b = new byte[w * h * 4]; bmp.CopyPixels(b, w * 4, 0); return b; }
+
+            var live = new LiveMosaic(bmp);
+            live.Show(live.Clamp(0, 0, 40, 20));
+            Assert.NotEqual(px, Now());
+            // рамка уехала вправо — левая часть снова исходная
+            live.Show(live.Clamp(40, 0, 24, 32));
+            var now = Now();
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < 40; x++)
+                    Assert.Equal(px[(y * w + x) * 4], now[(y * w + x) * 4]);
+            live.Cancel();
+            Assert.Equal(px, Now());
+        }
+    }
+}

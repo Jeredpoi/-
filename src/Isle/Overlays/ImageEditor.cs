@@ -377,7 +377,7 @@ namespace Isle.Overlays
             {
                 case Rectangle r:
                     Canvas.SetLeft(r, rect.X); Canvas.SetTop(r, rect.Y); r.Width = rect.Width; r.Height = rect.Height;
-                    if (_tool == Tool.Mosaic && _liveMosaic != null) _liveMosaic.Clip = new RectangleGeometry(rect); // мозаика видна сразу, пока тянешь
+                    if (_tool == Tool.Mosaic && _live != null) _live.Show(_live.Clamp(rect.X, rect.Y, rect.Width, rect.Height)); // квадраты прямо в снимке, пока тянешь
                     break;
                 case Ellipse el:
                     Canvas.SetLeft(el, rect.X); Canvas.SetTop(el, rect.Y); el.Width = rect.Width; el.Height = rect.Height;
@@ -404,13 +404,18 @@ namespace Isle.Overlays
             var shape = _preview; _preview = null;
             if (shape == null) return;
             var rect = new Rect(_start, p);
-            if (rect.Width < 4 && rect.Height < 4) { _overlay.Children.Remove(shape); if (_liveMosaic != null) _liveMosaic.Visibility = Visibility.Collapsed; return; }
+            if (rect.Width < 4 && rect.Height < 4) { _overlay.Children.Remove(shape); _live?.Cancel(); _live = null; return; }
             switch (_tool)
             {
                 case Tool.Mosaic:
                     _overlay.Children.Remove(shape);
-                    Pixelate(new Int32Rect((int)rect.X, (int)rect.Y, Math.Max(1, (int)rect.Width), Math.Max(1, (int)rect.Height)));
-                    if (_liveMosaic != null) _liveMosaic.Visibility = Visibility.Collapsed; // уже вписано — без мигания
+                    if (_live != null)
+                    {
+                        var ir = _live.Clamp(rect.X, rect.Y, rect.Width, rect.Height);
+                        _live.Show(ir);
+                        if (ir.Width > 0 && ir.Height > 0) PushUndo(_live.UndoFor(ir));
+                        _live = null;
+                    }
                     break;
                 case Tool.Crop:
                     _overlay.Children.Remove(shape);
@@ -524,44 +529,10 @@ namespace Isle.Overlays
             if (undoable) PushUndo(() => SetCrop(before, undoable: false));
         }
 
-        private Image _liveMosaic;
-        private byte[] _mosaicPx;
+        private LiveMosaic _live;
 
-        /// <summary>Вся картинка заранее превращается в мозаику и показывается только внутри тянущейся рамки — как в живом режиме.</summary>
-        private void StartLiveMosaic()
-        {
-            int w = _bmp.PixelWidth, h = _bmp.PixelHeight;
-            var px = new byte[w * h * 4];
-            _bmp.CopyPixels(px, w * 4, 0);
-            _mosaicPx = Mosaic.Build(px, w, h, Mosaic.BlockFor(w, h));
-            var src = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, _mosaicPx, w * 4);
-            src.Freeze();
-            if (_liveMosaic == null)
-            {
-                _liveMosaic = new Image { Width = w, Height = h, Stretch = Stretch.Fill, IsHitTestVisible = false };
-                _page.Children.Insert(1, _liveMosaic); // над снимком, под пометками
-            }
-            _liveMosaic.Source = src;
-            _liveMosaic.Clip = new RectangleGeometry(new Rect(_start, _start));
-            _liveMosaic.Visibility = Visibility.Visible;
-        }
-
-        /// <summary>Крупные «пиксели» вместо выделенного куска — ровно те, что были видны при выделении.</summary>
-        private void Pixelate(Int32Rect r)
-        {
-            int w = _bmp.PixelWidth;
-            r.Width = Math.Min(r.Width, w - r.X);
-            r.Height = Math.Min(r.Height, _bmp.PixelHeight - r.Y);
-            if (r.Width <= 0 || r.Height <= 0 || _mosaicPx == null) return;
-            int stride = r.Width * 4;
-            var backup = new byte[stride * r.Height];
-            _bmp.CopyPixels(r, backup, stride, 0);
-            var patch = new byte[stride * r.Height];
-            for (int row = 0; row < r.Height; row++)
-                Buffer.BlockCopy(_mosaicPx, ((r.Y + row) * w + r.X) * 4, patch, row * stride, stride);
-            _bmp.WritePixels(r, patch, stride, 0);
-            PushUndo(() => _bmp.WritePixels(r, backup, stride, 0));
-        }
+        /// <summary>Мозаика пишется прямо в пиксели снимка, пока тянешь рамку; снаружи рамки — исходные пиксели.</summary>
+        private void StartLiveMosaic() => _live = new LiveMosaic(_bmp);
 
         private static Geometry ArrowGeometry(Point a, Point b, double t)
         {

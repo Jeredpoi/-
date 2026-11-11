@@ -43,8 +43,7 @@ namespace Isle.Overlays
         private Rect _area;                // выделенная область в координатах слоя
         private Grid _page;                // снимок + мозаика + пометки, стоит ровно на месте выделения
         private WriteableBitmap _edit;     // пиксели снимка (мозаика вписывается сюда)
-        private byte[] _mosaic;            // весь снимок, заранее превращённый в мозаику
-        private Image _mosaicPreview;      // мозаика, обрезанная по тянущейся рамке — видно вживую
+        private LiveMosaic _live;          // мозаика прямо в пикселях снимка, пока тянешь рамку
         private Canvas _ink;
         private Rectangle _outline;
         private Border _bar;
@@ -82,14 +81,9 @@ namespace Isle.Overlays
             var px = ScreenTools.Bgra(crop, out int w, out int h);
             _edit = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgr32, null);
             _edit.WritePixels(new Int32Rect(0, 0, w, h), px, w * 4, 0);
-            _mosaic = Mosaic.Build(px, w, h, Mosaic.BlockFor(w, h));
-            var mosaicSrc = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgr32, null, _mosaic, w * 4);
-            mosaicSrc.Freeze();
 
             _page = new Grid { Width = area.Width, Height = area.Height, ClipToBounds = true, Background = Brushes.Transparent, Cursor = Cursors.Cross, RenderTransformOrigin = new Point(0.5, 0.5) };
             _page.Children.Add(new Image { Source = _edit, Stretch = Stretch.Fill });
-            _mosaicPreview = new Image { Source = mosaicSrc, Stretch = Stretch.Fill, Visibility = Visibility.Collapsed, IsHitTestVisible = false };
-            _page.Children.Add(_mosaicPreview);
             _ink = new Canvas();
             _page.Children.Add(_ink);
             _outline = new Rectangle { Stroke = Brushes.White, StrokeThickness = 1.5, IsHitTestVisible = false };
@@ -233,12 +227,11 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    _mosaicPreview.Clip = new RectangleGeometry(new Rect(p, p));
-                    _mosaicPreview.Visibility = Visibility.Visible;
-                    // рамка выделения: белый пунктир с тёмной подложкой — видна и на светлом, и на тёмном
+                    _live = new LiveMosaic(_edit);
+                    // рамка выделения: тонкий чёрный контур и белый пунктир поверх — видна на любом фоне, ничего не затемняет
                     _mosaicFrame = new Grid { IsHitTestVisible = false };
-                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Frz(Color.FromArgb(150, 0, 0, 0)), StrokeThickness = 3 });
-                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.White, StrokeThickness = 1.5, StrokeDashArray = new DoubleCollection { 4, 3 } });
+                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.Black, StrokeThickness = 1 });
+                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } });
                     _ink.Children.Add(_mosaicFrame);
                     PlaceFrame(new Rect(p, p));
                     break;
@@ -273,8 +266,8 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    // новая обрезка на каждый сдвиг мыши — пиксели появляются прямо под курсором
-                    _mosaicPreview.Clip = new RectangleGeometry(r);
+                    // квадраты пишутся прямо в снимок, за пределами рамки — исходные пиксели
+                    _live?.Show(_live.Clamp(r.X * PxPerDip, r.Y * PxPerDip, r.Width * PxPerDip, r.Height * PxPerDip));
                     PlaceFrame(r);
                     break;
                 case Mark.Rect:
@@ -300,8 +293,17 @@ namespace Isle.Overlays
             {
                 case Mark.Mosaic:
                     if (_mosaicFrame != null) { _ink.Children.Remove(_mosaicFrame); _mosaicFrame = null; }
-                    if (r.Width >= 3 && r.Height >= 3) ApplyMosaic(r);
-                    _mosaicPreview.Visibility = Visibility.Collapsed; // уже вписано в снимок — без мигания
+                    if (_live != null)
+                    {
+                        var ir = _live.Clamp(r.X * PxPerDip, r.Y * PxPerDip, r.Width * PxPerDip, r.Height * PxPerDip);
+                        if (r.Width >= 3 && r.Height >= 3 && ir.Width > 0 && ir.Height > 0)
+                        {
+                            _live.Show(ir); // итоговая рамка — та же, что была видна
+                            _markUndo.Push(_live.UndoFor(ir));
+                        }
+                        else _live.Cancel();
+                        _live = null;
+                    }
                     break;
                 case Mark.Rect:
                 case Mark.Arrow:
@@ -316,24 +318,6 @@ namespace Isle.Overlays
                     _markUndo.Push(() => _ink.Children.Remove(line));
                     break;
             }
-        }
-
-        /// <summary>Мозаику из заранее посчитанного буфера вписываем в снимок — ровно то, что было видно при выделении.</summary>
-        private void ApplyMosaic(Rect r)
-        {
-            double k = PxPerDip;
-            int w = _edit.PixelWidth, h = _edit.PixelHeight;
-            int x = Math.Clamp((int)Math.Floor(r.X * k), 0, w - 1), y = Math.Clamp((int)Math.Floor(r.Y * k), 0, h - 1);
-            int rw = Math.Min(w - x, (int)Math.Ceiling(r.Width * k)), rh = Math.Min(h - y, (int)Math.Ceiling(r.Height * k));
-            if (rw <= 0 || rh <= 0) return;
-            var ir = new Int32Rect(x, y, rw, rh);
-            var backup = new byte[rw * rh * 4];
-            _edit.CopyPixels(ir, backup, rw * 4, 0);
-            var patch = new byte[rw * rh * 4];
-            for (int row = 0; row < rh; row++)
-                Buffer.BlockCopy(_mosaic, ((y + row) * w + x) * 4, patch, row * rw * 4, rw * 4);
-            _edit.WritePixels(ir, patch, rw * 4, 0);
-            _markUndo.Push(() => _edit.WritePixels(ir, backup, rw * 4, 0));
         }
 
         private static Geometry Arrow(Point a, Point b, double t)
