@@ -853,11 +853,19 @@ namespace Isle
         {
             if (row == null || ReferenceEquals(row, _lastRow)) return;
             _lastRow = row;
-            var tt = new TranslateTransform(0, 5);
-            row.RenderTransform = tt;
+            // строка свёрнутой чёлки (музыка, таймер, загрузка, уведомление) появляется снизу с лёгкой пружинкой
+            var tt = new TranslateTransform(0, 6);
+            var sc = new ScaleTransform(0.94, 0.94);
+            var group = new TransformGroup();
+            group.Children.Add(sc); group.Children.Add(tt);
+            row.RenderTransform = group;
+            if (row is FrameworkElement fe) fe.RenderTransformOrigin = new Point(0.5, 0.5);
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(280)) { EasingFunction = ease });
-            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(60) });
+            var spring = new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut };
+            tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(380)) { EasingFunction = spring });
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(380)) { EasingFunction = spring });
+            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(50) });
         }
 
         private static void Fade(UIElement el, double to, int ms, int delayMs = 0)
@@ -938,7 +946,12 @@ namespace Isle
             {
                 TabHost.Content = view;
                 view.Opacity = 0;
-                Fade(view, 1, 200);
+                view.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+                // вкладка чуть «подрастает» на место — мягче, чем просто сдвиг
+                if (view.RenderTransform is not ScaleTransform vs) { view.RenderTransform = vs = new ScaleTransform(1, 1); view.RenderTransformOrigin = new Point(0.5, 0.35); }
+                var grow = new DoubleAnimation(0.975, 1, TimeSpan.FromMilliseconds(340)) { EasingFunction = new QuinticEase { EasingMode = EasingMode.EaseOut } };
+                vs.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                vs.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
                 // содержимое въезжает со стороны выбранной вкладки
                 var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
                 TabSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(26 * _slideDir, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
