@@ -269,6 +269,12 @@
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Волшебник" Click="OnOutfit" Tag="Wizard"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Пират" Click="OnOutfit" Tag="Pirate"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Повар" Click="OnOutfit" Tag="Chef"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Праздник" Click="OnOutfit" Tag="Party"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Викинг" Click="OnOutfit" Tag="Viking"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Детектив" Click="OnOutfit" Tag="Detective"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ниндзя" Click="OnOutfit" Tag="Ninja"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Венок" Click="OnOutfit" Tag="Flowers"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Выпускник" Click="OnOutfit" Tag="Graduate"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ушанка" Click="OnOutfit" Tag="Frost"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Берет" Click="OnOutfit" Tag="Autumn"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Дождевик" Click="OnOutfit" Tag="Storm"/>
