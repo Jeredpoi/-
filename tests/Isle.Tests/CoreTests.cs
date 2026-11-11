@@ -639,3 +639,69 @@ namespace Isle.Tests
         }
     }
 }
+
+namespace Isle.Tests
+{
+    public class WifiTests
+    {
+        private const string NetshRu = @"
+Имя интерфейса : Беспроводная сеть
+В данный момент видно 3 сети.
+
+SSID 1 : HomeNet
+    Тип сети                : Инфраструктура
+    Проверка подлинности    : WPA2-Personal
+    Шифрование              : CCMP
+    BSSID 1                 : aa:bb:cc:dd:ee:01
+         Сигнал             : 62%
+    BSSID 2                 : aa:bb:cc:dd:ee:02
+         Сигнал             : 91%
+
+SSID 2 : Кафе & <Гости>
+    Тип сети                : Инфраструктура
+    Проверка подлинности    : Открытая
+    Шифрование              : Нет
+    BSSID 1                 : aa:bb:cc:dd:ee:03
+         Сигнал             : 40%
+
+SSID 3 : Office
+    Проверка подлинности    : WPA2-Enterprise
+    Шифрование              : CCMP
+    BSSID 1                 : aa:bb:cc:dd:ee:04
+         Сигнал             : 20%
+";
+
+        [Fact]
+        public void NetworksParsedWithBestSignalAndSecurity()
+        {
+            var nets = SystemControls.ParseNetworks(NetshRu);
+            Assert.Equal(3, nets.Count);
+            Assert.Equal("HomeNet", nets[0].Ssid);
+            Assert.Equal(91, nets[0].Signal);
+            Assert.True(nets[0].Secured);
+            Assert.Equal("WPA2-Personal", nets[0].Auth);
+            Assert.True(nets[0].PasswordSupported);
+            var cafe = nets.Single(n => n.Ssid == "Кафе & <Гости>");
+            Assert.False(cafe.Secured);
+            var office = nets.Single(n => n.Ssid == "Office");
+            Assert.False(office.PasswordSupported);
+        }
+
+        [Fact]
+        public void ProfileXmlEscapesNameAndPassword()
+        {
+            var net = new SystemControls.WifiNet { Ssid = "A&B <x>", Secured = true, Auth = "WPA2-Personal", Cipher = "CCMP" };
+            var xml = SystemControls.BuildProfileXml(net, "p&ss<word>");
+            var doc = System.Xml.Linq.XDocument.Parse(xml); // корректный XML
+            System.Xml.Linq.XNamespace ns = "http://www.microsoft.com/networking/WLAN/profile/v1";
+            Assert.Equal("A&B <x>", doc.Root.Element(ns + "name").Value);
+            Assert.Equal("WPA2PSK", doc.Descendants(ns + "authentication").Single().Value);
+            Assert.Equal("AES", doc.Descendants(ns + "encryption").Single().Value);
+            Assert.Equal("p&ss<word>", doc.Descendants(ns + "keyMaterial").Single().Value);
+            Assert.Equal(Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes("A&B <x>")), doc.Descendants(ns + "hex").Single().Value);
+            Assert.Equal("WPA3SAE", SystemControls.ProfileAuth("WPA3-Personal"));
+            Assert.Null(SystemControls.ProfileAuth("WPA2-Enterprise"));
+            Assert.Null(SystemControls.BuildProfileXml(new SystemControls.WifiNet { Ssid = "x", Secured = true, Auth = "WPA2-Enterprise" }, "12345678"));
+        }
+    }
+}
