@@ -124,7 +124,7 @@ namespace Isle
             if (AppSettings.IsFreshInstall && !s.WelcomeShown)
             {
                 var welcome = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
-                welcome.Tick += (_, __) => { welcome.Stop(); try { new Views.WelcomeWindow().Show(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
+                welcome.Tick += (_, __) => { welcome.Stop(); if (s.WelcomeShown) return; try { new Views.WelcomeWindow().Show(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
                 welcome.Start();
             }
             AppHost.Vpn = new VpnService();
