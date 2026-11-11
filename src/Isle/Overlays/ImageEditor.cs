@@ -338,7 +338,7 @@ namespace Isle.Overlays
                     break;
                 case Tool.Mosaic:
                     StartLiveMosaic();
-                    _preview = new Rectangle { Stroke = Frozen(Color.FromArgb(140, 255, 255, 255)), StrokeThickness = Math.Max(1, _thick / 3), StrokeDashArray = new DoubleCollection { 4, 3 } };
+                    _preview = new Rectangle { Stroke = Brushes.White, StrokeThickness = Math.Max(1.5, _thick / 2), StrokeDashArray = new DoubleCollection { 4, 3 } };
                     break;
                 case Tool.Crop:
                     _preview = new Rectangle { Stroke = Brushes.White, StrokeThickness = Math.Max(1.5, _thick / 2), StrokeDashArray = new DoubleCollection { 4, 3 }, Fill = Frozen(Color.FromArgb(50, 255, 255, 255)) };
@@ -377,7 +377,7 @@ namespace Isle.Overlays
             {
                 case Rectangle r:
                     Canvas.SetLeft(r, rect.X); Canvas.SetTop(r, rect.Y); r.Width = rect.Width; r.Height = rect.Height;
-                    if (_tool == Tool.Mosaic && _liveMosaic?.Clip is RectangleGeometry clip) clip.Rect = rect; // мозаика видна сразу, пока тянешь
+                    if (_tool == Tool.Mosaic && _liveMosaic != null) _liveMosaic.Clip = new RectangleGeometry(rect); // мозаика видна сразу, пока тянешь
                     break;
                 case Ellipse el:
                     Canvas.SetLeft(el, rect.X); Canvas.SetTop(el, rect.Y); el.Width = rect.Width; el.Height = rect.Height;
@@ -404,13 +404,13 @@ namespace Isle.Overlays
             var shape = _preview; _preview = null;
             if (shape == null) return;
             var rect = new Rect(_start, p);
-            if (_liveMosaic != null) _liveMosaic.Visibility = Visibility.Collapsed;
-            if (rect.Width < 4 && rect.Height < 4) { _overlay.Children.Remove(shape); return; }
+            if (rect.Width < 4 && rect.Height < 4) { _overlay.Children.Remove(shape); if (_liveMosaic != null) _liveMosaic.Visibility = Visibility.Collapsed; return; }
             switch (_tool)
             {
                 case Tool.Mosaic:
                     _overlay.Children.Remove(shape);
                     Pixelate(new Int32Rect((int)rect.X, (int)rect.Y, Math.Max(1, (int)rect.Width), Math.Max(1, (int)rect.Height)));
+                    if (_liveMosaic != null) _liveMosaic.Visibility = Visibility.Collapsed; // уже вписано — без мигания
                     break;
                 case Tool.Crop:
                     _overlay.Children.Remove(shape);
