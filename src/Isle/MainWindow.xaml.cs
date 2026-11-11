@@ -50,7 +50,16 @@ namespace Isle
         /// <summary>Вкладки нельзя строить, пока не созданы сервисы (RadioButton шлёт Checked прямо из InitializeComponent).</summary>
         private bool _ready;
 
-        public IslandState State { get; private set; } = IslandState.Collapsed;
+        private IslandState _state = IslandState.Collapsed;
+        public IslandState State
+        {
+            get => _state;
+            private set
+            {
+                if (_state != value) Journal.Info("island", "состояние " + _state + " → " + value);
+                _state = value;
+            }
+        }
         /// <summary>Окно, которое было активным до того, как пользователь кликнул в остров (туда вставляем из буфера).</summary>
         public IntPtr PreviousForeground { get; private set; }
         private bool _suppressCollapse;
@@ -503,6 +512,11 @@ namespace Isle
             if (msg == Win32.WM_HOTKEY)
             {
                 handled = true;
+                Journal.Info("hotkey", "хоткей id=" + w.ToInt32() + (w.ToInt32() switch
+                {
+                    HkToggle => " (показать/скрыть)", HkCommand => " (команда)", HkClipboard => " (буфер)", HkVoice => " (голос в текст)",
+                    HkVoiceCmd => " (голосовая команда)", HkShot => " (снимок)", HkPrint => " (PrintScreen)", _ => ""
+                }));
                 switch (w.ToInt32())
                 {
                     case HkToggle:
@@ -643,6 +657,7 @@ namespace Isle
 
         public void Expand(string tab)
         {
+            Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
             _hoverOpen.Stop();
             _leaveClose.Stop();
@@ -685,6 +700,7 @@ namespace Isle
         public void Collapse()
         {
             if (State == IslandState.Collapsed) return;
+            Journal.Info("island", "свернуть (было " + State + ")");
             _leaveClose.Stop();
             if (FocusManager.GetFocusedElement(this) is IInputElement) Keyboard.ClearFocus();
             MakeNoActivate(true);
@@ -910,6 +926,7 @@ namespace Isle
 
         public void SelectTab(string tab)
         {
+            Journal.Info("island", "вкладка " + tab);
             int from = Array.IndexOf(TabOrder, _currentTab), to = Array.IndexOf(TabOrder, tab);
             _slideDir = to >= from ? 1 : -1;
             _currentTab = tab;

@@ -40,7 +40,9 @@ namespace Isle
             catch (Exception ex) { Log("autostart repair: " + ex.Message); }
 
             DispatcherUnhandledException += OnError;
-            AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject?.ToString());
+            AppDomain.CurrentDomain.UnhandledException += (_, a) => { Log(a.ExceptionObject?.ToString()); Journal.Flush(); };
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, a) => { Journal.Error("task", a.Exception); a.SetObserved(); };
+            LogSession();
             base.OnStartup(e);
 
             try
@@ -69,8 +71,31 @@ namespace Isle
             t.Start();
         }
 
+        /// <summary>Шапка сессии в подробном журнале: версия, система, экраны, язык, настройки (без ключей).</summary>
+        private static void LogSession()
+        {
+            try
+            {
+                Journal.Info("session", "==================== запуск Isle " + typeof(App).Assembly.GetName().Version + " ====================");
+                Journal.Info("session", "ОС " + Environment.OSVersion + ", .NET " + Environment.Version + ", 64-бит " + Environment.Is64BitProcess
+                    + ", ядер " + Environment.ProcessorCount + ", культура " + System.Globalization.CultureInfo.CurrentCulture.Name
+                    + ", UI " + System.Globalization.CultureInfo.CurrentUICulture.Name + ", путь " + Environment.ProcessPath);
+                Journal.Info("session", "экран (DIP) " + SystemParameters.PrimaryScreenWidth + "×" + SystemParameters.PrimaryScreenHeight
+                    + ", рабочая область " + SystemParameters.WorkArea + ", виртуальный " + SystemParameters.VirtualScreenWidth + "×" + SystemParameters.VirtualScreenHeight
+                    + ", рендер tier " + (System.Windows.Media.RenderCapability.Tier >> 16));
+                var json = System.Text.Json.JsonSerializer.Serialize(AppSettings.Current);
+                // ключи и пароли в журнал не попадают
+                json = System.Text.RegularExpressions.Regex.Replace(json, "\"([A-Za-z]*(Key|Password|Token|Protected)[A-Za-z]*)\":\"[^\"]*\"", "\"$1\":\"***\"");
+                Journal.Info("session", "настройки " + json);
+                AppSettings.Current.LogBaseline();
+            }
+            catch (Exception ex) { Journal.Error("session", ex); }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            Journal.Info("session", "выход, код " + e.ApplicationExitCode);
+            Journal.Flush();
             _tray?.Dispose();
             base.OnExit(e);
         }
@@ -132,6 +157,7 @@ namespace Isle
                 if (fresh) File.WriteAllText(path, line); else File.AppendAllText(path, line);
             }
             catch { }
+            Journal.Info("trace", text);
         }
 
         public static void Log(string text)
@@ -142,6 +168,7 @@ namespace Isle
                 File.AppendAllText(Path.Combine(Storage.Dir, "errors.log"), DateTime.Now + "  " + text + Environment.NewLine + Environment.NewLine);
             }
             catch { }
+            Journal.Error("error", text);
         }
     }
 }

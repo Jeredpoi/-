@@ -116,6 +116,7 @@ namespace Isle.Services
 
         public static async Task<WeatherNow> LoadAsync(double lat, double lon, string city)
         {
+            Journal.Info("weather", "запрос " + city + " (" + lat.ToString("0.###", CultureInfo.InvariantCulture) + "," + lon.ToString("0.###", CultureInfo.InvariantCulture) + ")");
             var inv = CultureInfo.InvariantCulture;
             lat = Math.Round(lat, 4);
             lon = Math.Round(lon, 4);

@@ -35,6 +35,7 @@ namespace Isle.Overlays
         private CaptureOverlay(BitmapSource shot, Int32Rect vs, CaptureMode mode)
         {
             _shot = shot; _vs = vs; _mode = mode;
+            Journal.Info("capture", mode + ": слой открыт, экран " + vs.X + "," + vs.Y + " " + vs.Width + "×" + vs.Height + ", снимок " + shot.PixelWidth + "×" + shot.PixelHeight + " " + shot.Format);
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
@@ -131,9 +132,18 @@ namespace Isle.Overlays
             return w._tcs.Task;
         }
 
+        private readonly System.Diagnostics.Stopwatch _openedFor = System.Diagnostics.Stopwatch.StartNew();
+
         private void Finish(object result)
         {
             if (_tcs.Task.IsCompleted) return;
+            Journal.Info("capture", _mode + ": " + (result switch
+            {
+                null => "отменено",
+                BitmapSource b => "готово " + b.PixelWidth + "×" + b.PixelHeight + (_markup ? " (с пометками)" : ""),
+                Color c => "цвет " + Hex(c),
+                _ => result.GetType().Name
+            }) + " через " + _openedFor.ElapsedMilliseconds + " мс");
             _tcs.TrySetResult(result);
             Close();
         }

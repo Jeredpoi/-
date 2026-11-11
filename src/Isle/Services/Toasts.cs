@@ -51,6 +51,10 @@ namespace Isle.Services
 
         public static void Show(Toast t)
         {
+            Journal.Info("toast", t.Kind + (t.Warning ? "/внимание" : "") + (t.On.HasValue ? "/" + (t.On.Value ? "вкл" : "выкл") : "") + " " + Journal.Short(t.Title, 80)
+                + (string.IsNullOrEmpty(t.Subtitle) ? "" : " · " + Journal.Short(t.Subtitle, 120)) + (t.ReplaceKey != null ? " key=" + t.ReplaceKey : "")
+                + (t.Progress.HasValue ? " " + (t.Progress.Value * 100).ToString("0") + "%" : "")
+                + (AppSettings.Current.DoNotDisturb && !t.Important ? " — скрыто («Не беспокоить»)" : ""));
             if (AppSettings.Current.DoNotDisturb && !t.Important) return;
             Raised?.Invoke(t);
         }

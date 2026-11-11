@@ -113,12 +113,18 @@ namespace Isle.Services
             if (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama")
                 return "Нужен API-ключ: открой Настройки → ИИ, выбери сервис (например, бесплатный Groq), вставь ключ и нажми «Проверить».";
             BusyChanged?.Invoke(true);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Journal.Info("ai", "запрос: сервис " + s.AiPreset + ", модель " + s.AiModel + ", сообщений " + history.Count
+                + ", последнее " + Journal.Short(history.Count > 0 ? history[^1].Text : "", 100));
             try
             {
-                return s.AiProvider == "anthropic"
+                var answer = s.AiProvider == "anthropic"
                     ? await AnthropicAsync(history, s.AiKey, s.AiModel, ct)
                     : await OpenAiAsync(history, s.AiBaseUrl, s.AiKey, s.AiModel, ct);
+                Journal.Info("ai", "ответ за " + sw.ElapsedMilliseconds + " мс: " + Journal.Short(answer, 160));
+                return answer;
             }
+            catch (Exception ex) { Journal.Error("ai", "ошибка за " + sw.ElapsedMilliseconds + " мс: " + ex.Message); throw; }
             finally { BusyChanged?.Invoke(false); }
         }
 
