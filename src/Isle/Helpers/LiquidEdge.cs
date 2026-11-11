@@ -80,7 +80,9 @@ namespace Isle.Helpers
                     {
                         double dist = Math.Max(0, dy) + dxOut;
                         targetAmp = 13 * Math.Max(0, 1 - dist / 140.0);
-                        targetX = Math.Clamp(local.X, CornerRadius, w - CornerRadius);
+                        // центр выпуклости держим подальше от углов: у самого угла кривая уходила вниз почти отвесно
+                        double margin = CornerRadius + 26;
+                        targetX = margin < w / 2 ? Math.Clamp(local.X, margin, w - margin) : w / 2;
                     }
                 }
                 catch { }
@@ -118,7 +120,9 @@ namespace Isle.Helpers
             {
                 double t = i / (double)(Samples - 1);
                 double x = r + t * span;
-                double taper = Math.Sin(Math.PI * t); // к углам — ноль
+                // к углам — ноль, и так же плавно, как скругление угла: без излома в месте стыка
+                double s0 = Math.Sin(Math.PI * t);
+                double taper = s0 * s0 * (3 - 2 * s0);
                 double fb = t * (_spec.Length - 1);
                 int b0 = (int)fb; int b1 = Math.Min(_spec.Length - 1, b0 + 1);
                 double k = fb - b0; k = (1 - Math.Cos(k * Math.PI)) / 2;
@@ -134,7 +138,7 @@ namespace Isle.Helpers
                     double jitter = 0.6 + 0.4 * Math.Sin(now * 19 + i * 1.7) * Math.Sin(now * 7.3 + i * 0.9);
                     spike = (i % 2 == 1 ? 10 * jitter : 1.2) * reach;
                 }
-                _depth[i] = (music + bulge + sag + spike) * Math.Pow(taper, 0.6);
+                _depth[i] = (music + bulge + sag + spike) * taper;
                 if (_depth[i] > 0.05) any = true;
             }
             if (any || _wasAny) InvalidateVisual();
