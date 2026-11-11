@@ -20,7 +20,7 @@ namespace Isle.Overlays
         private readonly CaptureMode _mode;
         private readonly Int32Rect _vs;
         private readonly Canvas _canvas = new();
-        private readonly Rectangle _sel = new() { Stroke = Brushes.White, StrokeThickness = 1.5, Fill = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), Visibility = Visibility.Collapsed };
+        private readonly Rectangle _sel = new() { Stroke = Brushes.White, StrokeThickness = 1.5, Fill = null, Visibility = Visibility.Collapsed }; // без заливки — снимок внутри не высветляется
         private readonly Path _dim = new() { Fill = new SolidColorBrush(Color.FromArgb(110, 0, 0, 0)) };
         private readonly Border _hint;
         private readonly TextBlock _hintText;
