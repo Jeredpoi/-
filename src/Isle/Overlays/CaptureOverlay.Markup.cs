@@ -58,6 +58,14 @@ namespace Isle.Overlays
         private Shape _shape;
         private Polyline _line;
         private TextBox _text;
+        private Grid _mosaicFrame;
+
+        private void PlaceFrame(Rect r)
+        {
+            if (_mosaicFrame == null) return;
+            Canvas.SetLeft(_mosaicFrame, r.X); Canvas.SetTop(_mosaicFrame, r.Y);
+            _mosaicFrame.Width = Math.Max(1, r.Width); _mosaicFrame.Height = Math.Max(1, r.Height);
+        }
 
         private static SolidColorBrush Frz(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
         private double PxPerDip => _edit.PixelWidth / Math.Max(1, _area.Width);
@@ -227,6 +235,12 @@ namespace Isle.Overlays
                 case Mark.Mosaic:
                     _mosaicPreview.Clip = new RectangleGeometry(new Rect(p, p));
                     _mosaicPreview.Visibility = Visibility.Visible;
+                    // рамка выделения: белый пунктир с тёмной подложкой — видна и на светлом, и на тёмном
+                    _mosaicFrame = new Grid { IsHitTestVisible = false };
+                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Frz(Color.FromArgb(150, 0, 0, 0)), StrokeThickness = 3 });
+                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.White, StrokeThickness = 1.5, StrokeDashArray = new DoubleCollection { 4, 3 } });
+                    _ink.Children.Add(_mosaicFrame);
+                    PlaceFrame(new Rect(p, p));
                     break;
                 case Mark.Rect:
                     _shape = new Rectangle { Stroke = brush, StrokeThickness = Ink, RadiusX = 4, RadiusY = 4 };
@@ -259,7 +273,9 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    ((RectangleGeometry)_mosaicPreview.Clip).Rect = r; // пиксели появляются прямо под курсором
+                    // новая обрезка на каждый сдвиг мыши — пиксели появляются прямо под курсором
+                    _mosaicPreview.Clip = new RectangleGeometry(r);
+                    PlaceFrame(r);
                     break;
                 case Mark.Rect:
                     Canvas.SetLeft(_shape, r.X); Canvas.SetTop(_shape, r.Y); _shape.Width = r.Width; _shape.Height = r.Height;
@@ -283,8 +299,9 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    _mosaicPreview.Visibility = Visibility.Collapsed;
+                    if (_mosaicFrame != null) { _ink.Children.Remove(_mosaicFrame); _mosaicFrame = null; }
                     if (r.Width >= 3 && r.Height >= 3) ApplyMosaic(r);
+                    _mosaicPreview.Visibility = Visibility.Collapsed; // уже вписано в снимок — без мигания
                     break;
                 case Mark.Rect:
                 case Mark.Arrow:
