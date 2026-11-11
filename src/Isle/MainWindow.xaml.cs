@@ -120,6 +120,13 @@ namespace Isle
             }
             ApplyScale();
             if (!s.VoiceDefaultsV2) { s.VoiceAutoPaste = true; s.VoiceDefaultsV2 = true; s.Save(); } // диктовка сразу вставляет текст, где стоит курсор
+            // самый первый запуск — приветствие посередине экрана (чуть позже, когда чёлка уже на месте)
+            if (AppSettings.IsFreshInstall && !s.WelcomeShown)
+            {
+                var welcome = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
+                welcome.Tick += (_, __) => { welcome.Stop(); if (s.WelcomeShown) return; try { new Views.WelcomeWindow().Show(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
+                welcome.Start();
+            }
             AppHost.Vpn = new VpnService();
             AppHost.Vpn.Changed += () =>
             {
