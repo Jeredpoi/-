@@ -1475,6 +1475,10 @@ namespace Isle
             ToastSwatch.Visibility = swatch ? Visibility.Visible : Visibility.Collapsed;
             if (swatch) ToastSwatchFill.Background = new SolidColorBrush(t.Swatch.Value);
             // плитка значка — карточка #0E0E10; у квадратика цвета подложки нет, у него своя рамка
+            // та же всплывашка обновилась (Caps Lock вкл → выкл) — плитка перетечёт из прошлого цвета, а не с нуля
+            bool sameToast = State == IslandState.Toast && (t.ReplaceKey ?? t.Kind + "|" + t.Title) == _lastToastKey && t.ReplaceKey != null;
+            _tileFromBg = sameToast ? TileColorOf(ToastIconBox.Background) : null;
+            _tileFromFg = sameToast ? TileColorOf(ToastIcon.Foreground) : null;
             ToastIconBox.Background = swatch ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x10));
             ToastTitle.Foreground = (Brush)FindResource("Fg");
             ToastSpeed.Foreground = (Brush)FindResource("Fg");
@@ -1548,9 +1552,23 @@ namespace Isle
             }
             AnimateToastGlyph(t, same);
             // пипетка: зелёная «змейка» прорисовывается по краю плитки и замыкается (~1,1 с)
-            ToastSnake.Visibility = t.Swatch.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            // снимок/обложка с результатом: цветная «змейка» обегает картинку — зелёная (готово) или красная (ошибка)
+            bool imageTile = t.Image != null && !t.Swatch.HasValue && (t.Kind == ToastKind.Success || IsErrorToast(t));
+            ToastSnake.Visibility = t.Swatch.HasValue || imageTile ? Visibility.Visible : Visibility.Collapsed;
+            if (imageTile)
+            {
+                double tile = ToastIconBox.Width, rad = ToastIconBox.CornerRadius.TopLeft;
+                ToastSnake.Stroke = new SolidColorBrush(IsErrorToast(t) ? Color.FromRgb(0xF8, 0x71, 0x71) : Color.FromRgb(0x4A, 0xDE, 0x80));
+                ToastSnake.RadiusX = ToastSnake.RadiusY = rad;
+                double per = (4 * Math.Max(0, tile - 2 * rad) + 2 * Math.PI * rad) / ToastSnake.StrokeThickness;
+                ToastSnake.StrokeDashArray = new DoubleCollection { per, per };
+                ToastSnake.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty, new DoubleAnimation(per, 0, TimeSpan.FromMilliseconds(900))
+                { BeginTime = TimeSpan.FromMilliseconds(140), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
+            }
             if (t.Swatch.HasValue)
             {
+                ToastSnake.Stroke = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+                ToastSnake.RadiusX = ToastSnake.RadiusY = 14;
                 double perimeter = (4 * (48 - 28) + 2 * Math.PI * 14) / ToastSnake.StrokeThickness; // в толщинах линии
                 ToastSnake.StrokeDashArray = new DoubleCollection { perimeter, perimeter };
                 ToastSnake.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty, new DoubleAnimation(perimeter, 0, TimeSpan.FromMilliseconds(1100))
@@ -1596,7 +1614,7 @@ namespace Isle
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
             }
-            else if (t.Kind == ToastKind.Success && (t.Icon == Icons.Wifi || t.Icon == Icons.Scan || t.Icon == Icons.Bluetooth))
+            else if (t.Kind == ToastKind.Success && t.Icon != Icons.Pipette)
             {
                 var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520), BeginTime = TimeSpan.FromMilliseconds(120) };
                 pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.5, KeyTime.FromTimeSpan(TimeSpan.Zero)));
@@ -1718,19 +1736,26 @@ namespace Isle
                 double box = ToastIconBox.Width;
                 ToastOffSlash.X1 = ToastOffSlash.Y1 = box * 0.26; ToastOffSlash.X2 = ToastOffSlash.Y2 = box * 0.74;
                 // по макету: включено — белая плитка и чёрный значок; выключено — тёмная плитка, серые значок и текст
-                ToastIconBox.Background = t.On.Value ? (Brush)FindResource("Fg") : new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x10));
-                ToastIcon.Foreground = t.On.Value ? Brushes.Black : grey;
+                // плитка плавно перетекает: тёмная ↔ белая (Caps Lock, микрофон, VPN, «Не беспокоить»…)
+                AnimateTile(t.On.Value ? Color.FromRgb(0xEC, 0xEC, 0xF1) : Color.FromRgb(0x0E, 0x0E, 0x10),
+                            t.On.Value ? Colors.Black : Color.FromRgb(0x8B, 0x8B, 0x95));
                 if (!t.On.Value) { ToastTitle.Foreground = grey; ToastSpeed.Foreground = grey; }
             }
             if (badge) ToastBadge.Foreground = (Brush)FindResource("Fg"); // раскладка: код «RU» белым на тёмной плитке
 
-            bool error = t.Kind == ToastKind.Error || (t.Kind == ToastKind.Info && FailTitle.IsMatch(t.Title ?? ""));
-            bool success = !error && t.Kind == ToastKind.Success;
-            // цвет — только у значка, не у фона (как в макете)
-            if (!t.On.HasValue && !badge)
+            bool error = IsErrorToast(t);
+            bool warning = !error && t.Warning;
+            bool success = !error && !warning && t.Kind == ToastKind.Success;
+            // Как у Caps Lock: состояние видно по всей плитке, а не только по значку.
+            // Получилось — зелёная плитка, не получилось — красная, «внимание» — янтарная; значок на ней тёмный.
+            bool plainTile = !t.On.HasValue && !badge && ToastIcon.Visibility == Visibility.Visible && t.Icon != Icons.Pipette
+                             && !(t.Kind == ToastKind.Alarm);
+            if (plainTile && (error || success || warning))
             {
-                if (error) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71));
-                else if (success && t.Icon != Icons.Pipette) ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+                var (bg, fg) = error ? (Color.FromRgb(0xF8, 0x71, 0x71), Color.FromRgb(0x2B, 0x0A, 0x0A))
+                             : warning ? (Color.FromRgb(0xFB, 0xBF, 0x24), Color.FromRgb(0x2B, 0x1D, 0x02))
+                             : (Color.FromRgb(0x4A, 0xDE, 0x80), Color.FromRgb(0x06, 0x25, 0x12));
+                AnimateTile(bg, fg);
             }
             // переключатель «включился» — короткий «прыжок», чтобы смена была заметна
             if (t.On == true || badge) success = true;
@@ -1767,6 +1792,30 @@ namespace Isle
                 sc.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
                 sc.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
             }
+        }
+
+        /// <summary>Ошибка: явный тип или «Info» с заголовком вида «Не удалось…», «Ошибка…», «Нет …».</summary>
+        private static bool IsErrorToast(Toast t) =>
+            t.Kind == ToastKind.Error || (t.Kind == ToastKind.Info && FailTitle.IsMatch(t.Title ?? ""));
+
+        private static Color TileColorOf(Brush b) => b is SolidColorBrush sb ? sb.Color : Color.FromRgb(0x0E, 0x0E, 0x10);
+
+        /// <summary>Плитка значка плавно меняет цвет (фон и значок) — без резкого скачка.</summary>
+        private Color? _tileFromBg, _tileFromFg;
+
+        private void AnimateTile(Color bg, Color fg)
+        {
+            var from = _tileFromBg ?? TileColorOf(ToastIconBox.Background);
+            var bgBrush = new SolidColorBrush(from);
+            ToastIconBox.Background = bgBrush;
+            var fgFrom = _tileFromFg ?? TileColorOf(ToastIcon.Foreground);
+            _tileFromBg = _tileFromFg = null;
+            var fgBrush = new SolidColorBrush(fgFrom);
+            ToastIcon.Foreground = fgBrush;
+            var dur = TimeSpan.FromMilliseconds(from == bg ? 1 : 280);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(from, bg, dur) { BeginTime = TimeSpan.FromMilliseconds(60), EasingFunction = ease });
+            fgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(fgFrom, fg, dur) { BeginTime = TimeSpan.FromMilliseconds(60), EasingFunction = ease });
         }
 
         private static Geometry ProgressArc(double progress, double cx, double cy, double radius)
@@ -1882,7 +1931,7 @@ namespace Isle
                 foreach (var paused in result.steamPaused)
                     ToastBus.Show(new Toast
                     {
-                        Kind = ToastKind.Info,
+                        Kind = ToastKind.Info, Warning = true,
                         Title = "Загрузка приостановлена",
                         Subtitle = paused.Name + " · " + paused.ProgressText,
                         Image = paused.Icon, RoundImage = true,
