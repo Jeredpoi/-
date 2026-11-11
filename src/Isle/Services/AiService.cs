@@ -113,6 +113,60 @@ namespace Isle.Services
             catch { return text; }
         }
 
+        /// <summary>
+        /// Короткое название разговора (2–5 слов) по первому вопросу и ответу — для «Истории» чатов.
+        /// null — нет ключа, сервис не ответил или вернул что-то странное (тогда остаётся первое сообщение).
+        /// </summary>
+        public static async Task<string> TitleAsync(string question, string answer)
+        {
+            const string sys = "Придумай короткое название для разговора: 2–5 слов, на языке вопроса, с заглавной буквы, " +
+                               "без кавычек, точки в конце и эмодзи. Название передаёт суть, а не пересказывает вопрос. " +
+                               "Примеры: «Столицы стран Европы», «Подсчёт синуса и степеней», «Рецепт блинов». Верни только название.";
+            var user = "Вопрос: " + (question.Length > 600 ? question.Substring(0, 600) : question)
+                     + "\nОтвет: " + ((answer ?? "").Length > 400 ? answer.Substring(0, 400) : answer);
+            var t = await QuickAsync(sys, user, 40, 10);
+            if (string.IsNullOrWhiteSpace(t)) return null;
+            t = t.Split('\n')[0].Trim().Trim('"', '«', '»', '.', ' ', '*', '#');
+            if (t.Length < 2 || t.Length > 60) return null;
+            Journal.Info("ai", "название чата: " + Journal.Short(t, 60));
+            return t;
+        }
+
+        /// <summary>Один короткий запрос «система + пользователь» без истории. null при любой ошибке.</summary>
+        private static async Task<string> QuickAsync(string sys, string user, int maxTokens, int timeoutSec)
+        {
+            var s = AppSettings.Current;
+            if (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama") return null;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSec));
+                if (s.AiProvider == "anthropic")
+                {
+                    var body = new { model = s.AiModel, max_tokens = maxTokens, system = sys, messages = new[] { new { role = "user", content = user } } };
+                    using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+                    AddAuth(req, "anthropic", s.AiKey);
+                    req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                    using var resp = await Http.SendAsync(req, cts.Token);
+                    if (!resp.IsSuccessStatusCode) return null;
+                    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cts.Token));
+                    return StripThinking(string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
+                        .Where(b => b.TryGetProperty("type", out var t) && t.GetString() == "text").Select(b => b.GetProperty("text").GetString())));
+                }
+                else
+                {
+                    var body = new { model = s.AiModel, max_tokens = maxTokens, temperature = 0.3, messages = new object[] { new { role = "system", content = sys }, new { role = "user", content = user } } };
+                    using var req = new HttpRequestMessage(HttpMethod.Post, s.AiBaseUrl.TrimEnd('/') + "/chat/completions");
+                    AddAuth(req, "openai", s.AiKey);
+                    req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                    using var resp = await Http.SendAsync(req, cts.Token);
+                    if (!resp.IsSuccessStatusCode) return null;
+                    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cts.Token));
+                    return StripThinking(doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "");
+                }
+            }
+            catch { return null; }
+        }
+
         public static async Task<string> AskAsync(IReadOnlyList<ChatMessage> history, CancellationToken ct = default)
         {
             var s = AppSettings.Current;
@@ -394,6 +448,8 @@ namespace Isle.Services
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Title { get; set; } = "Разговор";
+        /// <summary>Название придумал ИИ — больше не перезаписываем первым сообщением.</summary>
+        public bool AiTitle { get; set; }
         public DateTime Updated { get; set; } = DateTime.Now;
         public List<ChatMessage> Messages { get; set; } = new();
     }
