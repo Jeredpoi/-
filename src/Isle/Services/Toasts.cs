@@ -41,6 +41,8 @@ namespace Isle.Services
         /// <summary>Тосты с ключом заменяют друг друга без мигания (громкость, раскладка).</summary>
         public string ReplaceKey { get; set; }
         public bool Important { get; set; }
+        /// <summary>Таймер вышел: справа кнопки «Ещё раз» (заново на это время) и ✓ (выключить).</summary>
+        public TimeSpan? RepeatTimer { get; set; }
     }
 
     public static class ToastBus

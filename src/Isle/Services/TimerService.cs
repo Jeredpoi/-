@@ -61,7 +61,7 @@ namespace Isle.Services
             if (Running && DateTime.Now >= _end)
             {
                 Running = false; _t.Stop(); _pausedLeft = TimeSpan.Zero;
-                AlarmService.Ring("Время вышло", "Таймер на " + Format(Total));
+                AlarmService.Ring("Время вышло", "Таймер на " + Format(Total), Total);
             }
             Changed?.Invoke();
         }

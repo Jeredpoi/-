@@ -210,6 +210,19 @@
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
                                 </Grid>
                             </Grid>
+                            <!-- таймер вышел: «Ещё раз» и ✓ -->
+                            <StackPanel x:Name="ToastAlarmButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="Collapsed">
+                                <Button x:Name="ToastRepeatButton" Style="{StaticResource Bare}" Click="OnToastRepeat" ToolTip="Запустить таймер заново">
+                                    <Border Height="32" CornerRadius="16" Background="#2C2C33" Padding="14,0">
+                                        <TextBlock Text="Ещё раз" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource Fg}"/>
+                                    </Border>
+                                </Button>
+                                <Button x:Name="ToastDoneButton" Style="{StaticResource Bare}" Margin="6,0,0,0" Click="OnToastDone" ToolTip="Выключить">
+                                    <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Fg}">
+                                        <h:Icon Kind="Check" Width="16" Height="16" StrokeWidth="2.4" Foreground="#08080A"/>
+                                    </Border>
+                                </Button>
+                            </StackPanel>
                             <!-- справа: карандаш (пометки на снимке) над папкой -->
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0">
                                 <Button x:Name="ToastEditButton" Width="28" Height="28" Margin="0,0,0,2" Padding="0" Style="{StaticResource Ghost}" Click="OnToastEdit" ToolTip="Пометки: замазать текст, рамка, стрелка" Visibility="Collapsed">
