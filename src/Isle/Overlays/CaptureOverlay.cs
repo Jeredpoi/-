@@ -206,10 +206,23 @@ namespace Isle.Overlays
             Finish(cb);
         }
 
+        // Затемнение вокруг выделения: два прямоугольника с правилом EvenOdd — внутренний вырезает «окно».
+        // Раньше на каждое движение мыши строилась CombinedGeometry на весь 4K-экран: это булева операция на CPU,
+        // курсор при выделении «шёл» заметно медленнее частоты монитора.
+        private readonly RectangleGeometry _dimOuter = new(), _dimHole = new();
+        private GeometryGroup _dimGroup;
+
         private void UpdateDim(Rect hole)
         {
-            var full = new RectangleGeometry(new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight)));
-            _dim.Data = hole.IsEmpty ? full : new CombinedGeometry(GeometryCombineMode.Exclude, full, new RectangleGeometry(hole));
+            if (_dimGroup == null)
+            {
+                _dimGroup = new GeometryGroup { FillRule = FillRule.EvenOdd };
+                _dimGroup.Children.Add(_dimOuter);
+                _dimGroup.Children.Add(_dimHole);
+                _dim.Data = _dimGroup;
+            }
+            _dimOuter.Rect = new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight));
+            _dimHole.Rect = hole.IsEmpty ? Rect.Empty : hole;
         }
 
         private Color ColorAt(Point p)
