@@ -161,6 +161,7 @@ namespace Isle.Views
             ChPixel.IsChecked = S.Character == "pixel";
             ChEyes.IsChecked = S.Character == "eyes";
             ChNone.IsChecked = S.Character == "none";
+            foreach (var rb in Outfits.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.BuddyOutfit ?? "auto");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
             OpacitySlider.Value = Math.Round(S.IslandOpacity * 100);
@@ -386,6 +387,14 @@ namespace Isle.Views
             S.Save();
             UpdatePreview();
             AppHost.Window.ApplyAppearance();
+        }
+
+        private void OnOutfit(object s, RoutedEventArgs e)
+        {
+            S.BuddyOutfit = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            UpdatePreview();
+            AppHost.Window.ApplyAppearance(); // Клоди в чёлке переодевается сразу
         }
 
         private void OnScale(object s, RoutedPropertyChangedEventArgs<double> e)

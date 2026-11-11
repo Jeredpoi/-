@@ -737,14 +737,14 @@ namespace Isle
             RevealRow(timer ? TimerRow : media ? MediaRow : dl ? DownloadRow : (UIElement)IdleRow);
 
             double h = 34;
-            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
+            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
             if (!AppSettings.Current.ShowClock && !timer && !media) w -= 50;
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
             if (dl) { w = 380; h = 54; } // компактно, как остальные состояния чёлки
-            if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
+            if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 42; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
             // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
@@ -1241,16 +1241,22 @@ namespace Isle
             catch { return false; }
         }
 
-        /// <summary>Клоди одевается по погоде за окном.</summary>
+        /// <summary>Клоди одевается по погоде за окном — или в наряд, выбранный в Настройках.</summary>
         public static Helpers.Outfit OutfitForWeather()
         {
+            var chosen = AppSettings.Current.BuddyOutfit;
+            if (!string.IsNullOrEmpty(chosen) && chosen != "auto" && Enum.TryParse<Helpers.Outfit>(chosen, out var o)) return o;
             var w = AppHost.Weather;
             if (w == null) return Helpers.Outfit.None;
-            bool rain = w.Code >= 51 && w.Code <= 67 || w.Code >= 80 && w.Code <= 82 || w.Code >= 95;
+            if (w.Code >= 95) return Helpers.Outfit.Storm;                                 // гроза — жёлтый дождевик
+            bool rain = w.Code >= 51 && w.Code <= 67 || w.Code >= 80 && w.Code <= 82;
             if (rain) return Helpers.Outfit.Rain;
+            if (w.Temp <= -10) return Helpers.Outfit.Frost;                                // мороз — ушанка
             if (w.Temp <= 3 || w.Code >= 71 && w.Code <= 77 || w.Code == 85 || w.Code == 86) return Helpers.Outfit.Winter;
+            if (w.Temp >= 30) return Helpers.Outfit.Heat;                                  // жара — панама
             if (w.Temp >= 25) return Helpers.Outfit.Summer;
             if (w.Temp >= 15 && w.Code <= 2) return Helpers.Outfit.Sunny; // тепло и ясно — кепка
+            if (w.Temp <= 12) return Helpers.Outfit.Autumn;                                // прохладно — берет и шарф
             return Helpers.Outfit.None;
         }
         private bool _pulsing;

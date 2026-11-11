@@ -225,7 +225,7 @@
                                     Height="34" Padding="16,0" BorderBrush="#26262B" BorderThickness="1,0,1,1" MouseEnter="OnPreviewEnter" MouseLeave="OnPreviewLeave">
                                 <Border.LayoutTransform><ScaleTransform x:Name="PreviewScale" ScaleX="1" ScaleY="1"/></Border.LayoutTransform>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <h:Character x:Name="PreviewBuddy" Width="30" Height="22" Margin="0,0,10,0"/>
+                                    <h:Character x:Name="PreviewBuddy" Width="36" Height="26" Margin="0,0,10,0"/>
                                     <StackPanel x:Name="PreviewEyes" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
                                         <Border Width="7" Height="14" CornerRadius="3.5" Background="#ECECF1"/>
                                         <Border Width="7" Height="14" CornerRadius="3.5" Background="#ECECF1" Margin="5,0,0,0"/>
@@ -254,6 +254,28 @@
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Клоди" x:Name="ChPixel" Click="OnCharacter" Tag="pixel"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Глаза" x:Name="ChEyes" Click="OnCharacter" Tag="eyes"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Без персонажа" x:Name="ChNone" Click="OnCharacter" Tag="none"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Одежда Клоди"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="«По погоде» — сам одевается по погоде за окном: шапка и шарф, берет, ушанка, дождевик, панама, кепка. Или выбери наряд насовсем."/>
+                                    <WrapPanel x:Name="Outfits" Margin="0,10,0,0">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="По погоде" Click="OnOutfit" Tag="auto"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Без одежды" Click="OnOutfit" Tag="None"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ковбой" Click="OnOutfit" Tag="Cowboy"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Корона" Click="OnOutfit" Tag="Crown"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Волшебник" Click="OnOutfit" Tag="Wizard"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Пират" Click="OnOutfit" Tag="Pirate"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Повар" Click="OnOutfit" Tag="Chef"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ушанка" Click="OnOutfit" Tag="Frost"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Берет" Click="OnOutfit" Tag="Autumn"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Дождевик" Click="OnOutfit" Tag="Storm"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Панама" Click="OnOutfit" Tag="Heat"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Шапка и шарф" Click="OnOutfit" Tag="Winter"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Кепка" Click="OnOutfit" Tag="Sunny"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Очки" Click="OnOutfit" Tag="Summer"/>
                                     </WrapPanel>
                                 </StackPanel>
                             </Grid>
