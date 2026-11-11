@@ -42,6 +42,7 @@ namespace Isle.Overlays
         private bool _markup;
         private Rect _area;                // выделенная область в координатах слоя
         private Grid _page;                // снимок + мозаика + пометки, стоит ровно на месте выделения
+        private Image _baseImage;
         // Снимок — обычная «замороженная» картинка, как и весь экран под слоем. WriteableBitmap на 4K
         // на части видеокарт рисовался кусками: недорисованный кусок оставался чёрным прямоугольником.
         private BitmapSource _crop;
@@ -92,7 +93,8 @@ namespace Isle.Overlays
             UpdateDim(area);
 
             _page = new Grid { Width = area.Width, Height = area.Height, ClipToBounds = true, Background = Brushes.Transparent, Cursor = Cursors.Cross, RenderTransformOrigin = new Point(0.5, 0.5) };
-            _page.Children.Add(new Image { Source = _crop, Stretch = Stretch.Fill });
+            _baseImage = new Image { Source = _crop, Stretch = Stretch.Fill };
+            _page.Children.Add(_baseImage);
             _patches = new Canvas { IsHitTestVisible = false };
             _page.Children.Add(_patches);
             _ink = new Canvas();
@@ -108,7 +110,8 @@ namespace Isle.Overlays
             _page.LostMouseCapture += (_, e) => { if (_drawing) MarkUp(_page, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent }); };
 
             BuildBar();
-            _hintText.Text = "Рисуй прямо на снимке · Enter — сохранить · Esc — отмена";
+            BuildHandles();
+            _hintText.Text = "Рисуй прямо на снимке · уголки растягивают область · Enter — сохранить · Esc — отмена";
         }
 
         // ---------- панель ----------
@@ -160,13 +163,7 @@ namespace Isle.Overlays
             _canvas.Children.Add(_bar);
             _bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             var sz = _bar.DesiredSize;
-            // под областью, если влезает; иначе над ней; иначе внутри у нижнего края
-            double y = _area.Bottom + 12;
-            bool below = y + sz.Height <= ActualHeight - 8;
-            if (!below) y = _area.Top - 12 - sz.Height;
-            if (y < 8) y = _area.Bottom - sz.Height - 12;
-            double x = Math.Clamp(_area.X + (_area.Width - sz.Width) / 2, 8, Math.Max(8, ActualWidth - sz.Width - 8));
-            Canvas.SetLeft(_bar, x); Canvas.SetTop(_bar, y);
+            var (x, y, below) = PlaceBar();
             try
             {
                 var dpi = VisualTreeHelper.GetDpi(this);
@@ -188,6 +185,120 @@ namespace Isle.Overlays
 
             SelectMark(Mark.Mosaic);
             SelectColor(0);
+        }
+
+        /// <summary>Панель — под областью, если влезает; иначе над ней; иначе внутри у нижнего края.</summary>
+        private (double x, double y, bool below) PlaceBar()
+        {
+            var sz = _bar.DesiredSize;
+            double y = _area.Bottom + 14;
+            bool below = y + sz.Height <= ActualHeight - 8;
+            if (!below) y = _area.Top - 14 - sz.Height;
+            if (y < 8) y = _area.Bottom - sz.Height - 12;
+            double x = Math.Clamp(_area.X + (_area.Width - sz.Width) / 2, 8, Math.Max(8, ActualWidth - sz.Width - 8));
+            Canvas.SetLeft(_bar, x); Canvas.SetTop(_bar, y);
+            return (x, y, below);
+        }
+
+        // ---------- уголки: область можно растянуть или сузить и после выделения ----------
+
+        private readonly List<Border> _handles = new();
+        private int _dragHandle = -1;
+        private Point _dragFrom;
+        private Rect _dragArea;
+        // 0 ↖, 1 ↑, 2 ↗, 3 →, 4 ↘, 5 ↓, 6 ↙, 7 ←
+        private static readonly (double fx, double fy)[] HandleAt = { (0, 0), (0.5, 0), (1, 0), (1, 0.5), (1, 1), (0.5, 1), (0, 1), (0, 0.5) };
+
+        private void BuildHandles()
+        {
+            Cursor[] cursors = { Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE };
+            for (int i = 0; i < 8; i++)
+            {
+                int idx = i;
+                var h = new Border
+                {
+                    Width = 11, Height = 11, CornerRadius = new CornerRadius(3), Background = Brushes.White,
+                    BorderBrush = Frz(Color.FromArgb(200, 0, 0, 0)), BorderThickness = new Thickness(1), Cursor = cursors[i]
+                };
+                h.MouseLeftButtonDown += (_, e) =>
+                {
+                    e.Handled = true;
+                    CommitMarkText();
+                    _dragHandle = idx; _dragFrom = e.GetPosition(_canvas); _dragArea = _area;
+                    h.CaptureMouse();
+                };
+                h.MouseMove += (_, e) =>
+                {
+                    if (_dragHandle != idx || !h.IsMouseCaptured) return;
+                    var p = e.GetPosition(_canvas);
+                    double dx = p.X - _dragFrom.X, dy = p.Y - _dragFrom.Y;
+                    double l = _dragArea.Left, t = _dragArea.Top, r = _dragArea.Right, b = _dragArea.Bottom;
+                    var (fx, fy) = HandleAt[idx];
+                    if (fx == 0) l += dx; else if (fx == 1) r += dx;
+                    if (fy == 0) t += dy; else if (fy == 1) b += dy;
+                    l = Math.Clamp(l, 0, ActualWidth); r = Math.Clamp(r, 0, ActualWidth);
+                    t = Math.Clamp(t, 0, ActualHeight); b = Math.Clamp(b, 0, ActualHeight);
+                    const double min = 16;
+                    if (r - l < min) { if (fx == 0) l = r - min; else r = l + min; }
+                    if (b - t < min) { if (fy == 0) t = b - min; else b = t + min; }
+                    SetArea(new Rect(l, t, r - l, b - t));
+                };
+                h.MouseLeftButtonUp += (_, e) =>
+                {
+                    if (_dragHandle != idx) return;
+                    _dragHandle = -1;
+                    h.ReleaseMouseCapture();
+                    e.Handled = true;
+                    Journal.Info("capture", "область изменена: " + _area.X.ToString("0") + "," + _area.Y.ToString("0") + " " + _area.Width.ToString("0") + "×" + _area.Height.ToString("0"));
+                };
+                _handles.Add(h);
+                _canvas.Children.Add(h);
+            }
+            PlaceHandles();
+        }
+
+        private void PlaceHandles()
+        {
+            for (int i = 0; i < _handles.Count; i++)
+            {
+                var (fx, fy) = HandleAt[i];
+                Canvas.SetLeft(_handles[i], _area.X + _area.Width * fx - 5.5);
+                Canvas.SetTop(_handles[i], _area.Y + _area.Height * fy - 5.5);
+            }
+        }
+
+        /// <summary>
+        /// Новая область: снимок под ней берётся заново из «замороженного» экрана, пометки и плитки мозаики
+        /// остаются на своих местах на экране (сдвигаются внутри страницы на разницу начала).
+        /// </summary>
+        private void SetArea(Rect a)
+        {
+            var crop = new Int32Rect(
+                (int)Math.Clamp(a.X * Kx, 0, _shot.PixelWidth - 1), (int)Math.Clamp(a.Y * Ky, 0, _shot.PixelHeight - 1), 0, 0);
+            crop.Width = Math.Max(1, Math.Min(_shot.PixelWidth - crop.X, (int)Math.Round(a.Width * Kx)));
+            crop.Height = Math.Max(1, Math.Min(_shot.PixelHeight - crop.Y, (int)Math.Round(a.Height * Ky)));
+            var cb = new CroppedBitmap(_shot, crop);
+            cb.Freeze();
+
+            double shiftX = _area.X - a.X, shiftY = _area.Y - a.Y;
+            if (shiftX != 0 || shiftY != 0)
+                foreach (var host in new Panel[] { _ink, _patches })
+                    foreach (UIElement el in host.Children)
+                    {
+                        double ex = Canvas.GetLeft(el), ey = Canvas.GetTop(el);
+                        Canvas.SetLeft(el, (double.IsNaN(ex) ? 0 : ex) + shiftX);
+                        Canvas.SetTop(el, (double.IsNaN(ey) ? 0 : ey) + shiftY);
+                    }
+
+            _area = a;
+            _crop = cb; _cropW = crop.Width; _cropH = crop.Height;
+            _cropPx = null; _mosaicSrc = null;                 // мозаика пересчитается для новой области
+            _baseImage.Source = cb;
+            _page.Width = a.Width; _page.Height = a.Height;
+            Canvas.SetLeft(_page, a.X); Canvas.SetTop(_page, a.Y);
+            UpdateDim(a);
+            PlaceHandles();
+            PlaceBar();
         }
 
         private static Border BarButton(UIElement content, string tip, Action click)
@@ -473,6 +584,7 @@ namespace Isle.Overlays
         /// <summary>Снимок сжимается и улетает в чёлку (верх основного экрана), затемнение тает.</summary>
         private void FlyToIsland(Action done)
         {
+            foreach (var h in _handles) h.Visibility = Visibility.Collapsed;
             _escPoll.Stop();
             IsHitTestVisible = false;
             // центр чёлки: верх основного монитора по центру (в координатах слоя)
