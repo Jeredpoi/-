@@ -22,8 +22,15 @@ namespace Isle
             _capturing = true;
             try
             {
+                // «Показывать остров на скриншотах»: снимаем экран вместе со свёрнутой чёлкой, и только потом прячем её под слоем выделения
+                BitmapSource shot = null;
+                if (AppSettings.Current.ShowInCaptures && mode == CaptureMode.Region)
+                {
+                    shot = await ShotWithIslandAsync();
+                    App.Trace("снимок: остров попадёт в снимок (настройка «видно на скриншотах»)");
+                }
                 await HideIslandAsync();
-                try { return await CaptureOverlay.Run(mode); }
+                try { return await CaptureOverlay.Run(mode, shot); }
                 finally { AppHost.Window.Visibility = Visibility.Visible; }
             }
             finally { _capturing = false; }
@@ -52,11 +59,24 @@ namespace Isle
 
         public static async Task FullShot()
         {
-            await HideIslandAsync();
             BitmapSource bmp;
+            if (AppSettings.Current.ShowInCaptures) { bmp = await ShotWithIslandAsync(); Done(bmp); return; }
+            await HideIslandAsync();
             try { bmp = ScreenTools.CaptureAll(); }
             finally { AppHost.Window.Visibility = Visibility.Visible; }
             Done(bmp);
+        }
+
+        /// <summary>Снимок всего экрана со свёрнутой чёлкой: сворачиваем, ждём конец анимации и кадр DWM, снимаем.</summary>
+        private static async Task<BitmapSource> ShotWithIslandAsync()
+        {
+            var w = AppHost.Window;
+            bool wasOpen = w.State != IslandState.Collapsed;
+            w.Collapse();
+            await w.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(wasOpen ? 380 : 60); // сворачивание — пружина ~0,35 с
+            try { Win32.DwmFlush(); Win32.DwmFlush(); } catch { }
+            return ScreenTools.CaptureAll();
         }
 
         private static void Done(BitmapSource bmp)
