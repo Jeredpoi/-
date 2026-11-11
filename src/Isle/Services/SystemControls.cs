@@ -92,48 +92,165 @@ namespace Isle.Services
             return text;
         }
 
-        /// <summary>Сети Wi-Fi рядом (имя, сила сигнала, есть ли пароль), сильные — первыми. error — понятная причина, если список не получить.</summary>
-        public static Task<(System.Collections.Generic.List<(string ssid, int signal, bool secured)> nets, string error)> WifiNetworksAsync() => Task.Run(() =>
+        /// <summary>Сеть Wi-Fi рядом: имя, сигнал, защита (как её показывает netsh).</summary>
+        public class WifiNet
         {
-            var nets = new System.Collections.Generic.List<(string ssid, int signal, bool secured)>();
+            public string Ssid;
+            public int Signal;
+            public bool Secured;
+            /// <summary>«WPA2-Personal», «WPA3-Personal», «WPA2-Enterprise», «Open»…</summary>
+            public string Auth = "";
+            /// <summary>«CCMP», «TKIP», «GCMP»…</summary>
+            public string Cipher = "";
+            /// <summary>Пароль можно ввести прямо в чёлке (WPA/WPA2/WPA3-Personal). Корпоративные сети — только через Windows.</summary>
+            public bool PasswordSupported => !Secured || ProfileAuth(Auth) != null;
+        }
+
+        /// <summary>Сети Wi-Fi рядом, сильные — первыми. error — понятная причина, если список не получить.</summary>
+        public static Task<(System.Collections.Generic.List<WifiNet> nets, string error)> WifiNetworksAsync() => Task.Run(() =>
+        {
+            var nets = new System.Collections.Generic.List<WifiNet>();
             try
             {
                 var text = RunNetsh("wlan show networks mode=bssid", out _);
                 if (text.IndexOf("location", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("расположен", StringComparison.OrdinalIgnoreCase) >= 0)
                     return (nets, "Windows не даёт список сетей без доступа к расположению — включи его в Параметрах → Конфиденциальность");
-                string ssid = null; int signal = -1; bool secured = false;
-                void Flush() { if (!string.IsNullOrWhiteSpace(ssid) && !nets.Exists(n => n.ssid == ssid)) nets.Add((ssid, Math.Max(0, signal), secured)); }
-                foreach (var raw in text.Split('\n'))
-                {
-                    var line = raw.Trim();
-                    var colon = line.IndexOf(':');
-                    if (colon < 0) continue;
-                    var name = line.Substring(0, colon).Trim();
-                    var value = line.Substring(colon + 1).Trim();
-                    if (name.StartsWith("SSID", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase))
-                    { Flush(); ssid = value; signal = -1; secured = false; }
-                    else if (value.EndsWith("%") && signal < 0 && int.TryParse(value.TrimEnd('%').Trim(), out var sg)) signal = sg;
-                    else if (name.IndexOf("Authentication", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Проверка подлинности", StringComparison.OrdinalIgnoreCase) >= 0)
-                        secured = !value.StartsWith("Open", StringComparison.OrdinalIgnoreCase) && !value.StartsWith("Открыт", StringComparison.OrdinalIgnoreCase);
-                }
-                Flush();
-                nets.Sort((a, b) => b.signal.CompareTo(a.signal));
-                return (nets, null);
+                return (ParseNetworks(text), null);
             }
             catch (Exception ex) { return (nets, "Не удалось получить список сетей: " + ex.Message); }
         });
+
+        /// <summary>Разбор вывода «netsh wlan show networks mode=bssid» (английская и русская Windows).</summary>
+        public static System.Collections.Generic.List<WifiNet> ParseNetworks(string text)
+        {
+            var nets = new System.Collections.Generic.List<WifiNet>();
+            WifiNet cur = null;
+            void Flush()
+            {
+                if (cur == null || string.IsNullOrWhiteSpace(cur.Ssid)) return;
+                var same = nets.Find(n => n.Ssid == cur.Ssid);
+                if (same == null) nets.Add(cur);
+                else if (cur.Signal > same.Signal) same.Signal = cur.Signal; // несколько точек доступа — берём лучшую
+            }
+            foreach (var raw in text.Split('\n'))
+            {
+                var line = raw.Trim();
+                var colon = line.IndexOf(':');
+                if (colon < 0) continue;
+                var name = line.Substring(0, colon).Trim();
+                var value = line.Substring(colon + 1).Trim();
+                if (name.StartsWith("SSID", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase))
+                { Flush(); cur = new WifiNet { Ssid = value, Signal = -1 }; }
+                else if (cur == null) continue;
+                else if (name.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase)) { }
+                else if (value.EndsWith("%") && int.TryParse(value.TrimEnd('%').Trim(), out var sg)) cur.Signal = Math.Max(cur.Signal, sg);
+                else if (name.IndexOf("Authentication", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Проверка подлинности", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    cur.Auth = value;
+                    cur.Secured = !value.StartsWith("Open", StringComparison.OrdinalIgnoreCase) && !value.StartsWith("Открыт", StringComparison.OrdinalIgnoreCase);
+                }
+                else if (name.IndexOf("Encryption", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Шифрование", StringComparison.OrdinalIgnoreCase) >= 0)
+                    cur.Cipher = value;
+            }
+            Flush();
+            foreach (var n in nets) n.Signal = Math.Max(0, n.Signal);
+            nets.Sort((a, b) => b.Signal.CompareTo(a.Signal));
+            return nets;
+        }
 
         /// <summary>Подключиться к сети, которую Windows уже знает. false — нужен пароль/настройки.</summary>
         public static Task<bool> ConnectWifiAsync(string ssid) => Task.Run(() =>
         {
             try
             {
+                if (!HasProfile(ssid)) return false;
                 var safe = ssid.Replace("\"", "");
                 RunNetsh("wlan connect name=\"" + safe + "\" ssid=\"" + safe + "\"", out int code);
-                return code == 0;
+                return code == 0 && WaitConnected(ssid, 12);
             }
             catch { return false; }
         });
+
+        /// <summary>
+        /// Подключиться к новой сети с паролем: создаём профиль Windows (как при вводе пароля в системном меню) и подключаемся.
+        /// Пароль не сохраняется у нас — только в профиле Windows. Не подключилось — профиль удаляем, чтобы не остался неверный пароль.
+        /// </summary>
+        public static Task<string> ConnectWifiWithPasswordAsync(WifiNet net, string password) => Task.Run(() =>
+        {
+            string file = null;
+            bool hadProfile = HasProfile(net.Ssid);
+            try
+            {
+                if (net.Secured && (password == null || password.Length < 8 || password.Length > 63))
+                    return "Пароль Wi-Fi — от 8 до 63 символов";
+                var xml = BuildProfileXml(net, password);
+                if (xml == null) return "Эту сеть можно подключить только через Параметры Windows";
+                file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "isle-wifi-" + Guid.NewGuid().ToString("N") + ".xml");
+                System.IO.File.WriteAllText(file, xml, new System.Text.UTF8Encoding(false));
+                RunNetsh("wlan add profile filename=\"" + file + "\" user=current", out int addCode);
+                if (addCode != 0) return "Windows не принял настройки сети";
+                var safe = net.Ssid.Replace("\"", "");
+                RunNetsh("wlan connect name=\"" + safe + "\" ssid=\"" + safe + "\"", out _);
+                if (WaitConnected(net.Ssid, 15)) return null;
+                if (!hadProfile) RunNetsh("wlan delete profile name=\"" + safe + "\"", out _);
+                return net.Secured ? "Не подключилось — проверь пароль" : "Не удалось подключиться";
+            }
+            catch (Exception ex) { return "Ошибка: " + ex.Message; }
+            finally { try { if (file != null) System.IO.File.Delete(file); } catch { } }
+        });
+
+        private static bool HasProfile(string ssid)
+        {
+            try
+            {
+                var safe = ssid.Replace("\"", "");
+                RunNetsh("wlan show profile name=\"" + safe + "\"", out int code);
+                return code == 0;
+            }
+            catch { return false; }
+        }
+
+        private static bool WaitConnected(string ssid, int seconds)
+        {
+            for (int i = 0; i < seconds * 2; i++)
+            {
+                System.Threading.Thread.Sleep(500);
+                if (string.Equals(WifiName(), ssid, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Тип защиты для профиля WLAN по тому, что показал netsh. null — не поддерживаем (корпоративная сеть).</summary>
+        public static string ProfileAuth(string netshAuth)
+        {
+            var a = (netshAuth ?? "").ToUpperInvariant();
+            if (a.Contains("ENTERPRISE") || a.Contains("802.1X")) return null;
+            if (a.StartsWith("WPA3")) return "WPA3SAE";
+            if (a.StartsWith("WPA2")) return "WPA2PSK";
+            if (a.StartsWith("WPA")) return "WPAPSK";
+            if (a.StartsWith("OPEN") || a.StartsWith("ОТКРЫТ") || a.Length == 0) return "open";
+            return null;
+        }
+
+        /// <summary>XML профиля WLAN (схема Microsoft WLANProfile v1) для netsh wlan add profile.</summary>
+        public static string BuildProfileXml(WifiNet net, string password)
+        {
+            var auth = net.Secured ? ProfileAuth(net.Auth) : "open";
+            if (auth == null) return null;
+            string enc = auth == "open" ? "none" : (net.Cipher ?? "").ToUpperInvariant().Contains("TKIP") && auth == "WPAPSK" ? "TKIP" : "AES";
+            string esc(string v) => System.Security.SecurityElement.Escape(v);
+            var hex = Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(net.Ssid));
+            var key = auth == "open" ? "" :
+                "<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>" + esc(password) + "</keyMaterial></sharedKey>";
+            return "<?xml version=\"1.0\"?>" +
+                "<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">" +
+                "<name>" + esc(net.Ssid) + "</name>" +
+                "<SSIDConfig><SSID><hex>" + hex + "</hex><name>" + esc(net.Ssid) + "</name></SSID></SSIDConfig>" +
+                "<connectionType>ESS</connectionType><connectionMode>auto</connectionMode>" +
+                "<MSM><security><authEncryption><authentication>" + auth + "</authentication><encryption>" + enc + "</encryption>" +
+                "<useOneX>false</useOneX></authEncryption>" + key + "</security></MSM>" +
+                "</WLANProfile>";
+        }
 
         /// <summary>Подключённые сейчас Bluetooth-устройства (наушники, мышь…): имена.</summary>
         public static async Task<System.Collections.Generic.List<string>> ConnectedBluetoothAsync()

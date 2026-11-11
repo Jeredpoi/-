@@ -230,5 +230,33 @@
                 </Grid>
             </Button>
         </UniformGrid>
+
+        <!-- Сети Wi-Fi прямо в чёлке: «Подключить», для новой защищённой сети — поле пароля и «Войти» -->
+        <Border x:Name="WifiPanel" Grid.RowSpan="5" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+                CornerRadius="18" Padding="14,12,14,12" Visibility="Collapsed" RenderTransformOrigin="0.9,0.1">
+            <Border.RenderTransform><ScaleTransform x:Name="WifiPanelScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnWifiBack" ToolTip="Назад">
+                        <h:Icon Kind="Next" Width="13" Height="13" RenderTransformOrigin="0.5,0.5">
+                            <h:Icon.RenderTransform><RotateTransform Angle="180"/></h:Icon.RenderTransform>
+                        </h:Icon>
+                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                        <TextBlock Text="Wi-Fi" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Fg}"/>
+                        <TextBlock x:Name="WifiHint" FontSize="12" Foreground="{StaticResource Muted}" Margin="10,2,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button x:Name="WifiRescanBtn" Grid.Column="2" Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnWifiRescan" ToolTip="Обновить список">
+                        <h:Icon x:Name="WifiRescanIcon" Kind="Restart" Width="14" Height="14" RenderTransformOrigin="0.5,0.5">
+                            <h:Icon.RenderTransform><RotateTransform/></h:Icon.RenderTransform>
+                        </h:Icon>
+                    </Button>
+                </Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="WifiList"/>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
     </Grid>
 </UserControl>
