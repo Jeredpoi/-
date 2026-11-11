@@ -50,7 +50,16 @@ namespace Isle
         /// <summary>Вкладки нельзя строить, пока не созданы сервисы (RadioButton шлёт Checked прямо из InitializeComponent).</summary>
         private bool _ready;
 
-        public IslandState State { get; private set; } = IslandState.Collapsed;
+        private IslandState _state = IslandState.Collapsed;
+        public IslandState State
+        {
+            get => _state;
+            private set
+            {
+                if (_state != value) Journal.Info("island", "состояние " + _state + " → " + value);
+                _state = value;
+            }
+        }
         /// <summary>Окно, которое было активным до того, как пользователь кликнул в остров (туда вставляем из буфера).</summary>
         public IntPtr PreviousForeground { get; private set; }
         private bool _suppressCollapse;
@@ -71,6 +80,7 @@ namespace Isle
             EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.ClosedEvent, new RoutedEventHandler((_, __) => _openMenus = Math.Max(0, _openMenus - 1)));
             var s = AppSettings.Current;
             ScaleT.ScaleX = ScaleT.ScaleY = Math.Clamp(s.Scale, 0.7, 1.6);
+            DndChip.IsChecked = s.DoNotDisturb; // «Не беспокоить» сохраняется — кнопка должна это показывать после перезапуска
 
             AppHost.Timer = new TimerService();
             AppHost.Shelf = new ShelfService();
@@ -110,6 +120,13 @@ namespace Isle
             }
             ApplyScale();
             if (!s.VoiceDefaultsV2) { s.VoiceAutoPaste = true; s.VoiceDefaultsV2 = true; s.Save(); } // диктовка сразу вставляет текст, где стоит курсор
+            // самый первый запуск — приветствие посередине экрана (чуть позже, когда чёлка уже на месте)
+            if (AppSettings.IsFreshInstall && !s.WelcomeShown)
+            {
+                var welcome = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
+                welcome.Tick += (_, __) => { welcome.Stop(); try { new Views.WelcomeWindow().Show(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
+                welcome.Start();
+            }
             AppHost.Vpn = new VpnService();
             AppHost.Vpn.Changed += () =>
             {
@@ -132,11 +149,17 @@ namespace Isle
                 int pct = (int)Math.Round(v * 100);
                 EnqueueToast(new Toast
                 {
-                    Kind = ToastKind.Volume, Title = muted ? "Звук выключен" : "Громкость " + pct, Icon = muted ? Icons.Mute : Icons.Volume,
+                    Kind = ToastKind.Volume, Title = muted ? "Звук выключен" : "Громкость", SpeedText = muted ? "0" : pct.ToString(),
+                    Icon = muted ? Icons.Mute : Icons.Volume, On = muted ? false : null,
                     Progress = muted ? 0 : v, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(1.3)
                 });
             };
-            AppHost.Watchers.LanguageChanged += () => LangChip.Text = AppHost.Watchers.LanguageCode;
+            AppHost.Watchers.LanguageChanged += () =>
+            {
+                if (LangChip.Text == AppHost.Watchers.LanguageCode) return;
+                LangChip.Text = AppHost.Watchers.LanguageCode;
+                AnimateLangChip();
+            };
             AppHost.Watchers.FullscreenChanged += fs => { _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen; ApplyVisibility(); };
             AppHost.WeatherChanged += UpdateWeatherMini;
 
@@ -162,6 +185,8 @@ namespace Isle
             // Загрузки по событиям: Steam/браузер записал файл — проверяем через 0,3 с (несколько записей подряд склеиваются).
             // Таймер остаётся подстраховкой: раз в секунду, пока что-то качается (скорость, остаток), и раз в 8 с в простое.
             _downloadKick.Tick += (_, __) => { _downloadKick.Stop(); RefreshSteamDownload(); };
+            _dlDoneTimer.Tick += (_, __) => ClearDownloadDone();
+            SteamClientApi.Updated += o => Dispatcher.BeginInvoke(new Action(() => OnSteamOverview(o)));
             // не перезапускаем таймер на каждое событие: браузер пишет файл непрерывно, и проверка иначе откладывалась бы бесконечно
             DownloadWatch.Changed += () => Dispatcher.InvokeAsync(() => { if (!_downloadKick.IsEnabled) _downloadKick.Start(); });
 
@@ -261,6 +286,7 @@ namespace Isle
                 _weatherTimer.Start();
                 _steamTimer.Start();
                 _ = Task.Run(DownloadWatch.Start);
+                _ = Task.Run(() => SteamClientApi.Apply(AppSettings.Current.SteamExactSpeed)); // «точная скорость Steam» — тихо включает/выключает
                 RefreshSteamDownload();
                 await RefreshWeather();
                 ApplyOledMode();
@@ -493,6 +519,11 @@ namespace Isle
             if (msg == Win32.WM_HOTKEY)
             {
                 handled = true;
+                Journal.Info("hotkey", "хоткей id=" + w.ToInt32() + (w.ToInt32() switch
+                {
+                    HkToggle => " (показать/скрыть)", HkCommand => " (команда)", HkClipboard => " (буфер)", HkVoice => " (голос в текст)",
+                    HkVoiceCmd => " (голосовая команда)", HkShot => " (снимок)", HkPrint => " (PrintScreen)", _ => ""
+                }));
                 switch (w.ToInt32())
                 {
                     case HkToggle:
@@ -547,8 +578,17 @@ namespace Isle
             Win32.ForceForeground(_hwnd); // без этого Windows часто не даёт печатать в остров
         }
 
+        private bool _displayHooked;
+
         private void PlaceWindow()
         {
+            if (!_displayHooked)
+            {
+                _displayHooked = true;
+                // сменили разрешение, монитор или масштаб — чёлка должна остаться сверху по центру
+                Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, __) => Dispatcher.InvokeAsync(PlaceWindow, DispatcherPriority.Background);
+                DpiChanged += (_, __) => Dispatcher.InvokeAsync(PlaceWindow, DispatcherPriority.Background);
+            }
             Left = SystemParameters.PrimaryScreenWidth / 2 - Width / 2;
             Top = 0;
         }
@@ -567,6 +607,7 @@ namespace Isle
             }
             if (AlarmService.Ringing && State != IslandState.Expanded)
             {
+                if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return; // «Ещё раз» / ✓ — пусть сработает кнопка
                 AlarmService.Stop(); // клик по звенящей чёлке (в любом виде) — выключить будильник
                 e.Handled = true;
                 return;
@@ -623,6 +664,7 @@ namespace Isle
 
         public void Expand(string tab)
         {
+            Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
             _hoverOpen.Stop();
             _leaveClose.Stop();
@@ -639,7 +681,7 @@ namespace Isle
             State = IslandState.Expanded;
             CollapsedView.Visibility = Visibility.Collapsed;
             ExpandedView.Visibility = Visibility.Visible;
-            Island.CornerRadius = new CornerRadius(0, 0, 30, 30);
+            Island.CornerRadius = new CornerRadius(0, 0, 40, 40); // раскрытая панель — нижние углы 40
             DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius; // тень с тем же скруглением, иначе её угол торчит из-под острова
             _collapseVersion++;
             MoveTabIndicator(TabButton(_currentTab), false);
@@ -665,6 +707,7 @@ namespace Isle
         public void Collapse()
         {
             if (State == IslandState.Collapsed) return;
+            Journal.Info("island", "свернуть (было " + State + ")");
             _leaveClose.Stop();
             if (FocusManager.GetFocusedElement(this) is IInputElement) Keyboard.ClearFocus();
             MakeNoActivate(true);
@@ -718,17 +761,18 @@ namespace Isle
             RevealRow(timer ? TimerRow : media ? MediaRow : dl ? DownloadRow : (UIElement)IdleRow);
 
             double h = 34;
-            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 170 : 210) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
+            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
             if (!AppSettings.Current.ShowClock && !timer && !media) w -= 50;
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
             if (MediaTimer.Visibility == Visibility.Visible) w += 60;
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
-            if (dl) { w = 330; h = 46; }
-            if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 36; // место для Клоди
+            if (dl) { w = 380; h = 54; } // компактно, как остальные состояния чёлки
+            if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 42; // место для Клоди
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
             // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
+            SetIslandRadius(dl ? 24 : 18); // у пилюли загрузки углы чуть крупнее
             if (onlyIfChanged && Math.Abs(_sizeTarget.Width - w) < 1 && Math.Abs(_sizeTarget.Height - h) < 1) return;
             AnimateSize(w, h, 380);
         }
@@ -802,16 +846,33 @@ namespace Isle
             Island.BeginAnimation(HeightProperty, new DoubleAnimation(h, TimeSpan.FromMilliseconds(spring ? ms : Math.Max(ms, 460))) { EasingFunction = ease });
         }
 
+        private void SetIslandRadius(double r)
+        {
+            if (Math.Abs(Island.CornerRadius.BottomLeft - r) < 0.5) return;
+            Island.CornerRadius = new CornerRadius(0, 0, r, r);
+            DropHint.CornerRadius = IslandShadow.CornerRadius = Island.CornerRadius;
+            Edge.CornerRadius = r;
+            UpdateClip();
+        }
+
         /// <summary>Новое состояние свёрнутой чёлки проявляется и чуть съезжает на место.</summary>
         private void RevealRow(UIElement row)
         {
             if (row == null || ReferenceEquals(row, _lastRow)) return;
             _lastRow = row;
-            var tt = new TranslateTransform(0, 5);
-            row.RenderTransform = tt;
+            // строка свёрнутой чёлки (музыка, таймер, загрузка, уведомление) появляется снизу с лёгкой пружинкой
+            var tt = new TranslateTransform(0, 6);
+            var sc = new ScaleTransform(0.94, 0.94);
+            var group = new TransformGroup();
+            group.Children.Add(sc); group.Children.Add(tt);
+            row.RenderTransform = group;
+            if (row is FrameworkElement fe) fe.RenderTransformOrigin = new Point(0.5, 0.5);
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(280)) { EasingFunction = ease });
-            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(60) });
+            var spring = new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut };
+            tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(380)) { EasingFunction = spring });
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(380)) { EasingFunction = spring });
+            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(50) });
         }
 
         private static void Fade(UIElement el, double to, int ms, int delayMs = 0)
@@ -880,6 +941,7 @@ namespace Isle
 
         public void SelectTab(string tab)
         {
+            Journal.Info("island", "вкладка " + tab);
             int from = Array.IndexOf(TabOrder, _currentTab), to = Array.IndexOf(TabOrder, tab);
             _slideDir = to >= from ? 1 : -1;
             _currentTab = tab;
@@ -891,7 +953,12 @@ namespace Isle
             {
                 TabHost.Content = view;
                 view.Opacity = 0;
-                Fade(view, 1, 200);
+                view.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+                // вкладка чуть «подрастает» на место — мягче, чем просто сдвиг
+                if (view.RenderTransform is not ScaleTransform vs) { view.RenderTransform = vs = new ScaleTransform(1, 1); view.RenderTransformOrigin = new Point(0.5, 0.35); }
+                var grow = new DoubleAnimation(0.975, 1, TimeSpan.FromMilliseconds(340)) { EasingFunction = new QuinticEase { EasingMode = EasingMode.EaseOut } };
+                vs.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                vs.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
                 // содержимое въезжает со стороны выбранной вкладки
                 var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
                 TabSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(26 * _slideDir, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
@@ -936,7 +1003,7 @@ namespace Isle
             {
                 // второе нажатие в режиме «нажал-нажал»
                 _voiceKeyPoll.Stop();
-                _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t), command: true);
                 return;
             }
             AppHost.Voice.Start("Говори команду и отпусти клавиши · например: «открой телеграм» или «сделай текст официальнее»");
@@ -954,7 +1021,7 @@ namespace Isle
                     if (held) return;
                     _voiceKeyPoll.Stop();
                     if (DateTime.Now - _voiceKeyDown < TimeSpan.FromMilliseconds(400)) return; // короткое нажатие — запись идёт до второго нажатия
-                    _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t));
+                    _ = AppHost.Voice.StopAsync(t => _ = RunVoiceCommand(t), command: true);
                 };
             }
             _voiceKeyPoll.Start();
@@ -971,7 +1038,9 @@ namespace Isle
             ToastBus.Show(new Toast { Title = "«" + text + "»", Subtitle = "Думаю…", Icon = Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
             _voiceContext.RemoveAll(c => DateTime.Now - c.at > TimeSpan.FromMinutes(5));
             var history = _voiceContext.Select(c => c.msg).ToList();
-            history.Add(new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой.)" });
+            history.Add(new() { Role = "user", Text = text + "\n\n(Это голосовая команда: если просят что-то сделать — выполни командой, ответ дай одной короткой фразой. " +
+                "Если просят переписать, исправить, перевести, сократить или оформить текст, который пользователь набрал или выделил, — " +
+                "ты его не видишь, Isle сам возьмёт его из поля ввода: НЕ проси прислать текст, ответь только строкой [[edit: что сделать с текстом]].)" });
             string answer;
             try { answer = await AiService.AskAsync(Views.ChatView.BuildHistory(history)); }
             catch (Exception ex) { answer = "Ошибка: " + ex.Message; }
@@ -983,6 +1052,13 @@ namespace Isle
                 if (_voiceContext.Count > 12) _voiceContext.RemoveRange(0, _voiceContext.Count - 12);
             }
             var (clean, actions) = AiActions.Extract(answer ?? "");
+            // ИИ понял, что это правка набранного текста — берём текст из поля, переписываем и вставляем на место
+            var edit = actions.FirstOrDefault(a => a.Name == "edit");
+            if (edit != null)
+            {
+                await TextEditor.EditFocusedAsync(string.IsNullOrWhiteSpace(edit.Arg) ? text : edit.Arg);
+                return;
+            }
             var reports = new List<string>();
             var confirm = new List<AiAction>();
             foreach (var a in actions)
@@ -995,7 +1071,7 @@ namespace Isle
             if (sub.Length > 160) sub = sub.Substring(0, 160) + "…";
             ToastBus.Show(new Toast
             {
-                Kind = failed ? ToastKind.Info : ToastKind.Success,
+                Kind = failed ? ToastKind.Error : ToastKind.Success,
                 Title = reports.Count > 0 && clean.Length > 0 && clean.Length <= 80 ? clean : "«" + text + "»",
                 Subtitle = sub, Icon = failed ? Icons.Info : Icons.Check, ReplaceKey = "voice", Important = true,
                 Duration = TimeSpan.FromSeconds(Math.Clamp(2 + sub.Length / 25.0, 3, 9))
@@ -1010,36 +1086,65 @@ namespace Isle
 
         private async void OnLangClick(object sender, RoutedEventArgs e)
         {
-            // Клик по острову не забирает фокус у твоего окна, поэтому переключаем раскладку именно там.
-            // Win+Пробел больше не жмём: он открывает системную плашку языка, и из-за неё мигали живые обои.
-            var target = Win32.GetForegroundWindow();
-            if (target == _hwnd && PreviousForeground != IntPtr.Zero && !IsDesktopWindow(PreviousForeground))
+            // Куда переключаем: окно, где ты печатаешь. Если сейчас активен остров, рабочий стол или обои —
+            // берём последнее обычное окно (раньше раскладка менялась у самой чёлки или рабочего стола — и «ничего не происходило»).
+            var fg = Win32.GetForegroundWindow();
+            bool fgReal = fg != IntPtr.Zero && fg != _hwnd && !IsDesktopWindow(fg);
+            var target = fgReal ? fg : AppHost.Watchers.LastRealWindow;
+            if (target == IntPtr.Zero || !Win32.IsWindow(target)) target = fgReal ? fg : PreviousForeground;
+            if (target == IntPtr.Zero || !Win32.IsWindow(target)) target = fg;
+
+            var before = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
+            // 1) просим окно включить следующую раскладку (так делают переключатели вроде Punto)
+            var next = (int)((long)Win32.RequestNextLayout(target) & 0xFFFF);
+            for (int i = 0; i < 10 && (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) == before; i++) await Task.Delay(50);
+            bool changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
+            // 2) окно проигнорировало просьбу (консоли, некоторые игры) — жмём сочетание пользователя, но только если
+            //    это окно и правда активно: сочетание приходит в активное окно
+            if (!changed && fgReal && target == fg)
             {
-                Win32.ForceForeground(PreviousForeground); // печатали в острове — вернуть фокус в обычное окно
-                await Task.Delay(90);
-                target = PreviousForeground;
-            }
-            var before = Win32.LayoutOf(Win32.FocusWindowOf(target));
-            // 1) вежливо просим окно включить следующую раскладку (так делают переключатели вроде Punto)
-            Win32.RequestNextLayout(target);
-            // ждём до 0,5 с: окно меняет раскладку не мгновенно. Раньше через 150 мс считали, что не вышло,
-            // и жали ещё и сочетание — раскладка переключалась дважды и возвращалась обратно
-            for (int i = 0; i < 10 && Win32.LayoutOf(Win32.FocusWindowOf(target)) == before; i++) await Task.Delay(50);
-            // 2) окно проигнорировало просьбу (бывает у консолей и некоторых игр) — жмём сочетание пользователя
-            if (Win32.LayoutOf(Win32.FocusWindowOf(target)) == before)
-            {
-                await WaitModifiersUp(); // клавиши, зажатые пользователем, смешались бы с нашим сочетанием
-                if (!Win32.PressLayoutHotkey())
-                    ToastBus.Show(new Toast
-                    {
-                        Title = "Окно не дало сменить раскладку", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
-                        Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
-                    });
-                await Task.Delay(200);
+                await WaitModifiersUp();
+                if (Win32.PressLayoutHotkey())
+                {
+                    await Task.Delay(200);
+                    changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
+                }
                 Win32.ReleaseModifiers(); // страховка от «залипших» Alt/Shift/Win
             }
-            AppHost.Watchers.RefreshLanguage();
-            LangChip.Text = AppHost.Watchers.LanguageCode;
+            int now = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
+            int shown = changed ? now : next;
+            if (shown != 0 && shown != before)
+            {
+                AppHost.Watchers.ForceLanguage(shown);
+                // своя всплывашка: в раскрытой панели обычные не показываются, а тут ты сам нажал — нужна отдача
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Layout, Title = Services.SystemWatchers.LangName(shown), Badge = AppHost.Watchers.LanguageCode,
+                    Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(1.2)
+                });
+            }
+            else
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Error, Title = "Раскладка не переключилась", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
+                    Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
+                });
+        }
+
+        /// <summary>Значок раскладки в панели: короткий «переворот», чтобы смена была заметна.</summary>
+        private void AnimateLangChip()
+        {
+            if (LangChip.RenderTransform is not ScaleTransform sc)
+            {
+                sc = new ScaleTransform(1, 1);
+                LangChip.RenderTransform = sc;
+                LangChip.RenderTransformOrigin = new Point(0.5, 0.5);
+            }
+            var flip = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(320) };
+            flip.KeyFrames.Add(new EasingDoubleKeyFrame(0.2, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            flip.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320)), new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut }));
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, flip);
+            LangChip.BeginAnimation(OpacityProperty, new DoubleAnimation(0.3, 1, TimeSpan.FromMilliseconds(260)));
         }
 
         private static async Task WaitModifiersUp()
@@ -1174,16 +1279,22 @@ namespace Isle
             catch { return false; }
         }
 
-        /// <summary>Клоди одевается по погоде за окном.</summary>
+        /// <summary>Клоди одевается по погоде за окном — или в наряд, выбранный в Настройках.</summary>
         public static Helpers.Outfit OutfitForWeather()
         {
+            var chosen = AppSettings.Current.BuddyOutfit;
+            if (!string.IsNullOrEmpty(chosen) && chosen != "auto" && Enum.TryParse<Helpers.Outfit>(chosen, out var o)) return o;
             var w = AppHost.Weather;
             if (w == null) return Helpers.Outfit.None;
-            bool rain = w.Code >= 51 && w.Code <= 67 || w.Code >= 80 && w.Code <= 82 || w.Code >= 95;
+            if (w.Code >= 95) return Helpers.Outfit.Storm;                                 // гроза — жёлтый дождевик
+            bool rain = w.Code >= 51 && w.Code <= 67 || w.Code >= 80 && w.Code <= 82;
             if (rain) return Helpers.Outfit.Rain;
+            if (w.Temp <= -10) return Helpers.Outfit.Frost;                                // мороз — ушанка
             if (w.Temp <= 3 || w.Code >= 71 && w.Code <= 77 || w.Code == 85 || w.Code == 86) return Helpers.Outfit.Winter;
+            if (w.Temp >= 30) return Helpers.Outfit.Heat;                                  // жара — панама
             if (w.Temp >= 25) return Helpers.Outfit.Summer;
             if (w.Temp >= 15 && w.Code <= 2) return Helpers.Outfit.Sunny; // тепло и ясно — кепка
+            if (w.Temp <= 12) return Helpers.Outfit.Autumn;                                // прохладно — берет и шарф
             return Helpers.Outfit.None;
         }
         private bool _pulsing;
@@ -1200,12 +1311,14 @@ namespace Isle
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
             ToastIcon.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(260)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
             foreach (var b in _characters) b.Mood = Helpers.Mood.Attention;
+            Edge.Bristle = true; // край «ощетинивается» острыми дрожащими шипами
         }
 
         private void StopAlarmPulse()
         {
             if (!_pulsing) return;
             _pulsing = false;
+            Edge.Bristle = false;
             ToastIcon.BeginAnimation(OpacityProperty, null);
             ToastIcon.Opacity = 1;
             ApplyAppearance(); // вернуть обычный чёрный фон
@@ -1291,6 +1404,12 @@ namespace Isle
         {
             AppSettings.Current.DoNotDisturb = DndChip.IsChecked == true;
             AppSettings.Current.Save();
+            bool on = AppSettings.Current.DoNotDisturb;
+            ToastBus.Show(new Toast
+            {
+                Title = on ? "Не беспокоить" : "Уведомления включены", Subtitle = on ? "Уведомления приложений не покажутся" : "Снова показываю уведомления",
+                Icon = Icons.Moon, On = on, ReplaceKey = "dnd", Important = true, Duration = TimeSpan.FromSeconds(2.5)
+            });
         }
 
         // ===================== Всплывашки =====================
@@ -1371,6 +1490,7 @@ namespace Isle
         private void RenderToast(Toast t)
         {
             _currentToast = t;
+            SetIslandRadius(18);
             if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
             if (t.Kind == ToastKind.Alarm) StartAlarmPulse(); else StopAlarmPulse();
             ToastTitle.Text = t.Title;
@@ -1390,32 +1510,51 @@ namespace Isle
             ToastWeather.Visibility = weatherIcon ? Visibility.Visible : Visibility.Collapsed; // анимированная погода в предупреждении
             bool swatch = t.Swatch.HasValue;
             ToastSwatch.Visibility = swatch ? Visibility.Visible : Visibility.Collapsed;
-            if (swatch) ((Border)ToastSwatch.Child).Background = new SolidColorBrush(t.Swatch.Value);
-            // у квадратика цвета подложка острова не нужна — он сам по себе
-            ToastIconBox.Background = swatch ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x17));
+            if (swatch) ToastSwatchFill.Background = new SolidColorBrush(t.Swatch.Value);
+            // плитка значка — карточка #0E0E10; у квадратика цвета подложки нет, у него своя рамка
+            // та же всплывашка обновилась (Caps Lock вкл → выкл) — плитка перетечёт из прошлого цвета, а не с нуля
+            bool sameToast = State == IslandState.Toast && (t.ReplaceKey ?? t.Kind + "|" + t.Title) == _lastToastKey && t.ReplaceKey != null;
+            _tileFromBg = sameToast ? TileColorOf(ToastIconBox.Background) : null;
+            _tileFromFg = sameToast ? TileColorOf(ToastIcon.Foreground) : null;
+            ToastIconBox.Background = swatch ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x10));
+            ToastTitle.Foreground = (Brush)FindResource("Fg");
+            ToastSpeed.Foreground = (Brush)FindResource("Fg");
             ToastIcon.Visibility = t.Image == null && !weatherIcon && !swatch ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
             ToastRing.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
-            bool compact = string.IsNullOrEmpty(t.Subtitle) && string.IsNullOrEmpty(t.SpeedText) && !t.Progress.HasValue;
-            ToastIconBox.Width = ToastIconBox.Height = compact ? 26 : 36;
-            ToastIconBox.CornerRadius = new CornerRadius(swatch ? 8 : compact ? 13 : 18);
+            bool compact = string.IsNullOrEmpty(t.Subtitle) && !t.Progress.HasValue;
+            // плитка-значок: скруглённый квадрат 36 (одна строка) / 40 (две строки) / 48 (пипетка), как в макете
+            double tile = swatch ? 48 : download ? 40 : compact ? 36 : 40;
+            ToastIconBox.Width = ToastIconBox.Height = tile;
+            ToastIconBox.CornerRadius = new CornerRadius(download || t.RoundImage ? tile / 2 : swatch ? 14 : 12);
+            ToastIcon.Width = ToastIcon.Height = tile >= 40 ? 18 : 17;
+            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2, tile / 2, tile / 2 - 1);
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
-            ToastFolderButton.Tag = t.FolderPath;
-            ToastFolderButton.Visibility = !string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath) ? Visibility.Visible : Visibility.Collapsed;
+            ToastFolderButton.Tag = t;
+            bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
+            ToastFolderButton.Visibility = hasFolder ? Visibility.Visible : Visibility.Collapsed;
+            ToastEditButton.Tag = t;
+            ToastEditButton.Visibility = t.EditImage != null ? Visibility.Visible : Visibility.Collapsed;
+            bool alarmButtons = t.Kind == ToastKind.Alarm && t.RepeatTimer.HasValue;
+            if (alarmButtons && ToastAlarmButtons.Visibility != Visibility.Visible) PopAlarmButtons();
+            ToastAlarmButtons.Visibility = alarmButtons ? Visibility.Visible : Visibility.Collapsed;
+            PlayToastStatus(t);
 
-            double textLen = Math.Max(t.Title.Length, (t.Subtitle ?? "").Length);
-            double w = Math.Clamp(120 + textLen * 7.4, compact ? 210 : 260, 600);
-            if (t.Progress.HasValue) w = Math.Max(w, 280);
-            if (ToastFolderButton.Visibility == Visibility.Visible) w += 38;
-            double h = compact ? 40 : (string.IsNullOrEmpty(t.Subtitle) ? 52 : 64);
+            double textLen = Math.Max(t.Title.Length + (t.SpeedText?.Length ?? 0) + 2, (t.Subtitle ?? "").Length * 0.86);
+            double w = Math.Clamp(tile + 64 + textLen * 8.3, compact ? 230 : 280, 600);
+            if (t.Progress.HasValue) w = Math.Max(w, 360);
+            if (ToastFolderButton.Visibility == Visibility.Visible || ToastEditButton.Visibility == Visibility.Visible) w += 38;
+            if (alarmButtons) w = Math.Max(w, 250) + 128;
+            double h = swatch ? 72 : compact ? 56 : 64;
+            if (ToastFolderButton.Visibility == Visibility.Visible && ToastEditButton.Visibility == Visibility.Visible) h = Math.Max(h, 70);
             // запись голоса — вместо полоски волна, как в ChatGPT
             bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
             if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
             VoiceWave.Visibility = voiceWave ? Visibility.Visible : Visibility.Collapsed;
             if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 18; w = Math.Max(w, 320); }
-            double imageSize = compact ? 26 : 36;
+            double imageSize = tile;
             // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
             ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
             ToastImage.Clip = t.Image == null ? null : t.RoundImage
@@ -1423,20 +1562,297 @@ namespace Isle
                 : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
             if (t.Progress.HasValue)
             {
-                double barW = w - 16 * 2 - 36 - 12;
+                double barW = w - 16 * 2 - tile - 12;
                 ToastBarFill.BeginAnimation(WidthProperty, new DoubleAnimation(Math.Clamp(t.Progress.Value, 0, 1) * barW, TimeSpan.FromMilliseconds(160)));
             }
             AnimateSize(w, h, 360);
+            PlayToastEntrance(t);
+        }
+
+        private string _lastToastKey;
+
+        /// <summary>
+        /// Появление содержимого всплывашки: съезжает сверху и проявляется (360 мс, ease-out, как в макете).
+        /// Повторные всплывашки того же вида (громкость колёсиком, раскладка) не анимируются заново — только обновляются.
+        /// </summary>
+        private void PlayToastEntrance(Toast t)
+        {
+            string key = t.ReplaceKey ?? t.Kind + "|" + t.Title;
+            bool same = key == _lastToastKey && State == IslandState.Toast;
+            _lastToastKey = key;
+            if (ToastRow.RenderTransform is not TranslateTransform shift) ToastRow.RenderTransform = shift = new TranslateTransform();
+            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
+            if (!same)
+            {
+                ToastRow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+                shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(360)) { EasingFunction = ease });
+            }
+            AnimateToastGlyph(t, same);
+            // пипетка: зелёная «змейка» прорисовывается по краю плитки и замыкается (~1,1 с)
+            // снимок/обложка с результатом: цветная «змейка» обегает картинку — зелёная (готово) или красная (ошибка)
+            bool imageTile = t.Image != null && !t.Swatch.HasValue && (t.Kind == ToastKind.Success || IsErrorToast(t));
+            ToastSnake.Visibility = t.Swatch.HasValue || imageTile ? Visibility.Visible : Visibility.Collapsed;
+            if (imageTile)
+            {
+                double tile = ToastIconBox.Width, rad = ToastIconBox.CornerRadius.TopLeft;
+                ToastSnake.Stroke = new SolidColorBrush(IsErrorToast(t) ? Color.FromRgb(0xF8, 0x71, 0x71) : Color.FromRgb(0x4A, 0xDE, 0x80));
+                ToastSnake.RadiusX = ToastSnake.RadiusY = rad;
+                double per = (4 * Math.Max(0, tile - 2 * rad) + 2 * Math.PI * rad) / ToastSnake.StrokeThickness;
+                ToastSnake.StrokeDashArray = new DoubleCollection { per, per };
+                ToastSnake.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty, new DoubleAnimation(per, 0, TimeSpan.FromMilliseconds(900))
+                { BeginTime = TimeSpan.FromMilliseconds(140), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
+            }
+            if (t.Swatch.HasValue)
+            {
+                ToastSnake.Stroke = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+                ToastSnake.RadiusX = ToastSnake.RadiusY = 14;
+                double perimeter = (4 * (48 - 28) + 2 * Math.PI * 14) / ToastSnake.StrokeThickness; // в толщинах линии
+                ToastSnake.StrokeDashArray = new DoubleCollection { perimeter, perimeter };
+                ToastSnake.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty, new DoubleAnimation(perimeter, 0, TimeSpan.FromMilliseconds(1100))
+                { BeginTime = TimeSpan.FromMilliseconds(120), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
+                if (ToastSwatchFill.RenderTransform is not ScaleTransform pop)
+                {
+                    ToastSwatchFill.RenderTransform = pop = new ScaleTransform(1, 1);
+                    ToastSwatchFill.RenderTransformOrigin = new Point(0.5, 0.5);
+                }
+                var grow = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(420) };
+                grow.KeyFrames.Add(new EasingDoubleKeyFrame(0.3, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                grow.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(260)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
+                grow.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                pop.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                pop.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            }
+        }
+
+        /// <summary>
+        /// «Живые» значки: будильник — красный колокольчик раскачивается ±22°, «Не беспокоить» — луна покачивается,
+        /// низкий заряд — значок пульсирует, Wi-Fi подключён и текст распознан — значок «выпрыгивает».
+        /// </summary>
+        private void AnimateToastGlyph(Toast t, bool same)
+        {
+            if (same) return; // та же всплывашка обновилась (будильник, громкость) — анимацию значка не сбрасываем
+            var scale = ToastIconScale();
+            var rot = (RotateTransform)((TransformGroup)ToastIcon.RenderTransform).Children[1];
+            rot.BeginAnimation(RotateTransform.AngleProperty, null);
+            ToastIcon.RenderTransformOrigin = new Point(0.5, 0.5);
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+
+            if (t.Kind == ToastKind.Alarm && t.Icon == Icons.Bell)
+            {
+                ToastIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71)); // таймер и будильник — красные
+                Swing(22, 450, RepeatBehavior.Forever, new Point(0.5, 0.15));
+            }
+            else if (t.Icon == Icons.Moon)
+                Swing(10, 1200, new RepeatBehavior(2), new Point(0.5, 0.5));
+            else if (t.Kind == ToastKind.Error && t.Icon == Icons.Battery)
+            {
+                var pulse = new DoubleAnimation(1, 0.82, TimeSpan.FromMilliseconds(500)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
+            }
+            else if (t.Kind == ToastKind.Success && t.Icon != Icons.Pipette)
+            {
+                var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520), BeginTime = TimeSpan.FromMilliseconds(120) };
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.5, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+        }
+
+        /// <summary>Поворот и масштаб значка всплывашки (одна группа трансформаций, чтобы анимации не мешали друг другу).</summary>
+        private ScaleTransform ToastIconScale()
+        {
+            if (ToastIcon.RenderTransform is TransformGroup g && g.Children.Count == 2 && g.Children[0] is ScaleTransform existing) return existing;
+            var sc = new ScaleTransform(1, 1);
+            var group = new TransformGroup();
+            group.Children.Add(sc);
+            group.Children.Add(new RotateTransform(0));
+            ToastIcon.RenderTransform = group;
+            ToastIcon.RenderTransformOrigin = new Point(0.5, 0.5);
+            return sc;
+        }
+
+        private void Swing(double degrees, int periodMs, RepeatBehavior repeat, Point origin)
+        {
+            ToastIconScale();
+            var rot = (RotateTransform)((TransformGroup)ToastIcon.RenderTransform).Children[1];
+            ToastIcon.RenderTransformOrigin = origin;
+            var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(periodMs), RepeatBehavior = repeat };
+            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(degrees, KeyTime.FromPercent(0.25), ease));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(-degrees, KeyTime.FromPercent(0.75), ease));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1), ease));
+            rot.BeginAnimation(RotateTransform.AngleProperty, a);
+        }
+
+        /// <summary>Таймер вышел → «Ещё раз»: выключить звонок и запустить таймер на то же время.</summary>
+        private void OnToastRepeat(object sender, RoutedEventArgs e)
+        {
+            var total = _currentToast?.RepeatTimer;
+            AlarmService.Stop();
+            if (total is TimeSpan t && t > TimeSpan.Zero) AppHost.Timer.StartNew(t);
+            e.Handled = true;
+        }
+
+        /// <summary>Таймер вышел → ✓: просто выключить.</summary>
+        private void OnToastDone(object sender, RoutedEventArgs e)
+        {
+            AlarmService.Stop();
+            e.Handled = true;
+        }
+
+        /// <summary>Кнопки выезжают справа с лёгкой пружиной — по очереди.</summary>
+        private void PopAlarmButtons()
+        {
+            int k = 0;
+            foreach (FrameworkElement b in new FrameworkElement[] { ToastRepeatButton, ToastDoneButton })
+            {
+                var st = new ScaleTransform(0.6, 0.6);
+                var tt = new TranslateTransform(14, 0);
+                b.RenderTransformOrigin = new Point(0.5, 0.5);
+                var group = new TransformGroup();
+                group.Children.Add(st); group.Children.Add(tt);
+                b.RenderTransform = group;
+                var delay = TimeSpan.FromMilliseconds(120 + 70 * k++);
+                var ease = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut };
+                var dur = TimeSpan.FromMilliseconds(380);
+                st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.6, 1, dur) { BeginTime = delay, EasingFunction = ease });
+                st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.6, 1, dur) { BeginTime = delay, EasingFunction = ease });
+                tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(14, 0, dur) { BeginTime = delay, EasingFunction = ease });
+                b.Opacity = 0;
+                b.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)) { BeginTime = delay });
+            }
         }
 
         private void OnToastFolder(object sender, RoutedEventArgs e)
         {
-            if (ToastFolderButton.Tag is string folder && Directory.Exists(folder))
-            {
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true }); }
-                catch (Exception ex) { App.Trace("не удалось открыть папку игры: " + ex.Message); }
-            }
             e.Handled = true;
+            if (ToastFolderButton.Tag is not Toast t) return;
+            try
+            {
+                // снимок — открыть Проводник с выделенным файлом; игра — её папку
+                if (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath))
+                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + t.FilePath + "\"");
+                else if (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(t.FolderPath) { UseShellExecute = true });
+            }
+            catch (Exception ex) { App.Trace("не удалось открыть папку: " + ex.Message); }
+        }
+
+        private void OnToastEdit(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if (ToastEditButton.Tag is not Toast t || t.EditImage == null) return;
+            try { new Overlays.ImageEditor(t.EditImage, t.FilePath).Show(); }
+            catch (Exception ex) { App.Log("editor: " + ex); }
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex FailTitle =
+            new(@"^(Не |Ошибка|Тишина|Слишком коротко|Нет |✗|Лимит ИИ закончился)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Итог действия видно сразу: получилось — значок зелёный и «подпрыгивает»,
+        /// не вышло — красный и качается из стороны в сторону (как «нет» головой).
+        /// </summary>
+        private void PlayToastStatus(Toast t)
+        {
+            // надпись вместо значка (раскладка) и «включено / выключено» для переключателей
+            bool badge = !string.IsNullOrEmpty(t.Badge);
+            ToastBadge.Text = t.Badge ?? "";
+            ToastBadge.Visibility = badge ? Visibility.Visible : Visibility.Collapsed;
+            if (badge) ToastIcon.Visibility = Visibility.Collapsed;
+            // косая черта — только у микрофона (своего «выключенного» значка нет); остальные выключенные просто серые
+            ToastOffSlash.Visibility = t.On == false && !badge && t.Icon == Icons.Mic ? Visibility.Visible : Visibility.Collapsed;
+            var grey = new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x95));
+            if (t.On.HasValue)
+            {
+                double box = ToastIconBox.Width;
+                ToastOffSlash.X1 = ToastOffSlash.Y1 = box * 0.26; ToastOffSlash.X2 = ToastOffSlash.Y2 = box * 0.74;
+                // по макету: включено — белая плитка и чёрный значок; выключено — тёмная плитка, серые значок и текст
+                // плитка плавно перетекает: тёмная ↔ белая (Caps Lock, микрофон, VPN, «Не беспокоить»…)
+                AnimateTile(t.On.Value ? Color.FromRgb(0xEC, 0xEC, 0xF1) : Color.FromRgb(0x0E, 0x0E, 0x10),
+                            t.On.Value ? Colors.Black : Color.FromRgb(0x8B, 0x8B, 0x95));
+                if (!t.On.Value) { ToastTitle.Foreground = grey; ToastSpeed.Foreground = grey; }
+            }
+            if (badge) ToastBadge.Foreground = (Brush)FindResource("Fg"); // раскладка: код «RU» белым на тёмной плитке
+
+            bool error = IsErrorToast(t);
+            bool warning = !error && t.Warning;
+            bool success = !error && !warning && t.Kind == ToastKind.Success;
+            // Как у Caps Lock: состояние видно по всей плитке, а не только по значку.
+            // Получилось — зелёная плитка, не получилось — красная, «внимание» — янтарная; значок на ней тёмный.
+            bool plainTile = !t.On.HasValue && !badge && ToastIcon.Visibility == Visibility.Visible && t.Icon != Icons.Pipette
+                             && !(t.Kind == ToastKind.Alarm);
+            if (plainTile && (error || success || warning))
+            {
+                var (bg, fg) = error ? (Color.FromRgb(0xF8, 0x71, 0x71), Color.FromRgb(0x2B, 0x0A, 0x0A))
+                             : warning ? (Color.FromRgb(0xFB, 0xBF, 0x24), Color.FromRgb(0x2B, 0x1D, 0x02))
+                             : (Color.FromRgb(0x4A, 0xDE, 0x80), Color.FromRgb(0x06, 0x25, 0x12));
+                AnimateTile(bg, fg);
+            }
+            // переключатель «включился» — короткий «прыжок», чтобы смена была заметна
+            if (t.On == true || badge) success = true;
+            if (ToastIconBox.RenderTransform is not TransformGroup tg)
+            {
+                tg = new TransformGroup();
+                tg.Children.Add(new ScaleTransform(1, 1));
+                tg.Children.Add(new TranslateTransform());
+                ToastIconBox.RenderTransform = tg;
+                ToastIconBox.RenderTransformOrigin = new Point(0.5, 0.5);
+            }
+            var sc = (ScaleTransform)tg.Children[0];
+            var tr = (TranslateTransform)tg.Children[1];
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, null); sc.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            tr.BeginAnimation(TranslateTransform.XProperty, null);
+            // Анимации стартуют чуть позже, чем чёлка начинает расти (иначе две анимации в первый кадр — рывок),
+            // и движутся мягко: без резких скачков масштаба, тряска затухает.
+            var delay = TimeSpan.FromMilliseconds(110);
+            if (error)
+            {
+                var shake = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(300) };
+                double[] xs = { 0, -4, 4, -3, 2, 0 };
+                for (int i = 0; i < xs.Length; i++)
+                    shake.KeyFrames.Add(new EasingDoubleKeyFrame(xs[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 60)),
+                        new SineEase { EasingMode = EasingMode.EaseInOut }));
+                tr.BeginAnimation(TranslateTransform.XProperty, shake);
+            }
+            else if (success)
+            {
+                var pop = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(420) };
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(190)), new SineEase { EasingMode = EasingMode.EaseOut }));
+                pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                sc.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                sc.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+        }
+
+        /// <summary>Ошибка: явный тип или «Info» с заголовком вида «Не удалось…», «Ошибка…», «Нет …».</summary>
+        private static bool IsErrorToast(Toast t) =>
+            t.Kind == ToastKind.Error || (t.Kind == ToastKind.Info && FailTitle.IsMatch(t.Title ?? ""));
+
+        private static Color TileColorOf(Brush b) => b is SolidColorBrush sb ? sb.Color : Color.FromRgb(0x0E, 0x0E, 0x10);
+
+        /// <summary>Плитка значка плавно меняет цвет (фон и значок) — без резкого скачка.</summary>
+        private Color? _tileFromBg, _tileFromFg;
+
+        private void AnimateTile(Color bg, Color fg)
+        {
+            var from = _tileFromBg ?? TileColorOf(ToastIconBox.Background);
+            var bgBrush = new SolidColorBrush(from);
+            ToastIconBox.Background = bgBrush;
+            var fgFrom = _tileFromFg ?? TileColorOf(ToastIcon.Foreground);
+            _tileFromBg = _tileFromFg = null;
+            var fgBrush = new SolidColorBrush(fgFrom);
+            ToastIcon.Foreground = fgBrush;
+            var dur = TimeSpan.FromMilliseconds(from == bg ? 1 : 280);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(from, bg, dur) { BeginTime = TimeSpan.FromMilliseconds(60), EasingFunction = ease });
+            fgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(fgFrom, fg, dur) { BeginTime = TimeSpan.FromMilliseconds(60), EasingFunction = ease });
         }
 
         private static Geometry ProgressArc(double progress, double cx, double cy, double radius)
@@ -1476,7 +1892,15 @@ namespace Isle
                     while (SteamDownloadService.TakeCompleted() is { } completed) steamCompleted.Add(completed);
                     var steamPaused = new List<SteamDownload>();
                     while (SteamDownloadService.TakePaused() is { } paused) steamPaused.Add(paused);
-                    var browser = BrowserDownloadService.ReadSnapshot();
+                    // история браузеров (SQLite) тяжелее — читаем её не чаще раза в 2 с, Steam — каждые 0,5 с
+                    BrowserDownloadSnapshot browser;
+                    if (DateTime.Now - _browserReadAt >= TimeSpan.FromSeconds(2) || _browserLast == null)
+                    {
+                        browser = BrowserDownloadService.ReadSnapshot();
+                        _browserLast = browser;
+                        _browserReadAt = DateTime.Now;
+                    }
+                    else browser = new BrowserDownloadSnapshot { Active = _browserLast.Active }; // завершённые уже показаны
                     // загрузки браузера по недокачанным файлам в папке «Загрузки» — работают, даже если историю браузера прочитать не вышло
                     var partials = PartialDownloadService.Scan();
                     var partialDone = new List<FinishedDownload>();
@@ -1485,6 +1909,13 @@ namespace Isle
                 });
 
                 foreach (var completed in result.steamCompleted)
+                {
+                    // свёрнутая чёлка показывает «Установлена» прямо в пилюле загрузки (кольцо зеленеет, кнопка папки)
+                    if (CanShowDownloadPill())
+                    {
+                        ShowDownloadDone(new DownloadState(completed.Name, "Steam", 1, null, null, completed.Icon, 0, completed.Total, true, completed.FolderPath));
+                        continue;
+                    }
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Success,
@@ -1496,6 +1927,7 @@ namespace Isle
                         Important = true,
                         Duration = TimeSpan.FromSeconds(8) // чтобы успеть заметить и нажать «папку»
                     });
+                }
 
                 // завершённые по файлам — если история браузера уже не сообщила о том же файле
                 foreach (var done in result.partialDone)
@@ -1509,23 +1941,34 @@ namespace Isle
                         Icon = Icons.Check, FolderPath = done.Folder, Important = true, Duration = TimeSpan.FromSeconds(7)
                     });
                 }
-                foreach (var c in result.browser.Completed) _recentDone[c.FileName] = DateTime.Now;
-
                 foreach (var completed in result.browser.Completed)
+                {
+                    // о том же файле уже сообщили по временному файлу (история браузера пишется позже)
+                    bool shown = _recentDone.TryGetValue(completed.FileName ?? "", out var shownAt) && DateTime.Now - shownAt < TimeSpan.FromMinutes(1);
+                    _recentDone[completed.FileName ?? ""] = DateTime.Now;
+                    if (shown) continue;
+                    if (CanShowDownloadPill())
+                    {
+                        ShowDownloadDone(new DownloadState(completed.FileName, completed.Browser, 1, null, null, null, 0, completed.TotalBytes, true,
+                            Services.PartialDownloadService.Folders().FirstOrDefault()));
+                        continue;
+                    }
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Success,
                         Title = "Загрузка завершена",
                         Subtitle = completed.Browser + " · " + completed.FileName,
                         Icon = Icons.Check,
+                        FolderPath = Services.PartialDownloadService.Folders().FirstOrDefault(),
                         Important = true,
                         Duration = TimeSpan.FromSeconds(7)
                     });
+                }
 
                 foreach (var paused in result.steamPaused)
                     ToastBus.Show(new Toast
                     {
-                        Kind = ToastKind.Info,
+                        Kind = ToastKind.Info, Warning = true,
                         Title = "Загрузка приостановлена",
                         Subtitle = paused.Name + " · " + paused.ProgressText,
                         Image = paused.Icon, RoundImage = true,
@@ -1536,32 +1979,171 @@ namespace Isle
                     });
 
                 // Идущая загрузка живёт в самой чёлке (как музыка или таймер), а не всплывашками каждые 2 секунды
-                var steam = result.steam;
+                // «Точная скорость Steam»: загрузку Steam показываем ТОЛЬКО по сводке самого Steam (живая подписка),
+                // свой подсчёт по логу не используется. Лог Steam нужен лишь для «Загружено» и «Приостановлено».
+                var steam = AppSettings.Current.SteamExactSpeed ? FromOverview(SteamClientApi.Last) : result.steam;
+                // для решения «перезапустить Steam с ключом» загрузку видим и по логу Steam: без ключа сводки ещё нет
+                SteamClientApi.DownloadActive = steam != null || result.steam is { IsPaused: false };
                 var download = result.browser.Active.FirstOrDefault();
                 if (steam is { IsPaused: false })
-                    SetDownload(new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon));
+                    SetDownload(AppSettings.Current.SteamExactSpeed
+                        ? new DownloadState(steam.Name, steam.Phase ?? "Steam", steam.Progress, SteamSpeed(steam.BytesPerSecond), SteamEta(steam.Remaining), steam.Icon, steam.Got, steam.Total)
+                        : new DownloadState(steam.Name, "Steam", steam.Progress, steam.SpeedText, steam.EtaText, steam.Icon, steam.Got, steam.Total));
                 else if (download != null)
                 {
                     // скорость из истории браузера рваная — если есть недокачанный файл, берём его скорость (по росту файла)
                     var firstPartial = result.partials.FirstOrDefault();
                     var speed = firstPartial != null && firstPartial.BytesPerSecond > 0 ? firstPartial.SpeedText : download.SpeedText;
-                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, speed, download.EtaText, null));
+                    SetDownload(new DownloadState(download.FileName, download.Browser, download.Progress, speed, download.EtaText, null, download.ReceivedBytes, download.TotalBytes));
                 }
                 else if (result.partials.FirstOrDefault() is { } part)
-                    SetDownload(new DownloadState(part.Name, part.Browser, null, part.SpeedText, part.SizeText, null)); // размер неизвестен — «крутилка» и сколько скачано
+                    SetDownload(new DownloadState(part.Name, part.Browser, null, part.SpeedText, null, null, part.Bytes)); // размер неизвестен — «крутилка» и сколько скачано
                 else SetDownload(null);
             }
             catch (Exception ex) { App.Trace("ошибка отслеживания загрузок: " + ex.Message); }
             finally { _downloadPollInProgress = false; }
         }
 
+        /// <summary>
+        /// Сводка Steam → загрузка для чёлки, один в один как на странице загрузок Steam:
+        /// пока качаются данные — «Загрузка данных X / Y», скорость сети и остаток от Steam; потом — «Установка файлов».
+        /// </summary>
+        private static SteamDownload FromOverview(SteamClientApi.Overview o)
+        {
+            if (o == null || o.AppId == 0 || o.Paused) return null;
+            if (string.Equals(o.State, "None", StringComparison.OrdinalIgnoreCase) || string.Equals(o.State, "Stopping", StringComparison.OrdinalIgnoreCase)) return null;
+            // «X из Y» — как на странице загрузок Steam: всегда этап загрузки данных (progress[2])
+            long got = o.Downloaded, total = o.ToDownload;
+            // процент — общий процент самого Steam
+            double progress = o.OverallPercent > 0 ? Math.Clamp(o.OverallPercent / 100.0, 0, 1)
+                : total > 0 ? Math.Clamp((double)got / total, 0, 1) : 0;
+            var info = SteamDownloadService.AppInfo(o.AppId);
+            return new SteamDownload
+            {
+                AppId = o.AppId, Name = info.Name, Icon = info.Icon, FolderPath = info.Folder,
+                Progress = progress, Got = got, Total = total,
+                BytesPerSecond = o.NetworkBytesPerSecond > 0 ? o.NetworkBytesPerSecond : 0,
+                Remaining = o.SecondsRemaining > 0 ? TimeSpan.FromSeconds(o.SecondsRemaining) : (TimeSpan?)null,
+                Phase = SteamPhase(o.State)
+            };
+        }
+
+        /// <summary>Этап загрузки по-русски, как в Steam.</summary>
+        private static string SteamPhase(string state) => (state ?? "").ToLowerInvariant() switch
+        {
+            var x when x.Contains("download") => "Загрузка",
+            var x when x.Contains("install") || x.Contains("commit") => "Установка",
+            var x when x.Contains("verif") || x.Contains("valid") => "Проверка файлов",
+            var x when x.Contains("stag") => "Распаковка",
+            var x when x.Contains("start") || x.Contains("prealloc") || x.Contains("reconfig") => "Подготовка",
+            _ => "Steam"
+        };
+
+        /// <summary>Скорость как в Steam: мегабайт = 1 000 000 байт, один знак после запятой («8,3 МБ/с»).</summary>
+        private static string SteamSpeed(double bytesPerSecond) => bytesPerSecond <= 0 ? ""
+            : bytesPerSecond >= 1_000_000 ? (bytesPerSecond / 1_000_000).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " МБ/с"
+            : Math.Max(1, bytesPerSecond / 1000).ToString("0", System.Globalization.CultureInfo.CurrentCulture) + " КБ/с";
+
+        /// <summary>Остаток как в Steam: 1:16 или 1:02:03.</summary>
+        private static string SteamEta(TimeSpan? t) => t is not TimeSpan v ? null
+            : v.TotalHours >= 1 ? ((int)v.TotalHours) + ":" + v.Minutes.ToString("00") + ":" + v.Seconds.ToString("00")
+            : v.Minutes + ":" + v.Seconds.ToString("00");
+
+        private bool _steamLiveShown;
+        private DateTime _lastShownLog;
+
+        /// <summary>Живая сводка от Steam — сразу в чёлку, без ожидания таймера.</summary>
+        private void OnSteamOverview(SteamClientApi.Overview o)
+        {
+            if (!AppSettings.Current.SteamExactSpeed || _dlDone != null) return;
+            var s = FromOverview(o);
+            if (s == null)
+            {
+                if (_steamLiveShown) { _steamLiveShown = false; RefreshSteamDownload(); } // загрузка Steam закончилась — пусть решит общий опрос
+                return;
+            }
+            _steamLiveShown = true;
+            var state = new DownloadState(s.Name, s.Phase ?? "Steam", s.Progress, SteamSpeed(s.BytesPerSecond), SteamEta(s.Remaining), s.Icon, s.Got, s.Total);
+            SetDownload(state);
+            if (DateTime.Now - _lastShownLog >= TimeSpan.FromSeconds(1))
+            {
+                _lastShownLog = DateTime.Now;
+                Diag.Write("показано: «" + state.Name + "» " + (state.Progress is double p ? (int)Math.Floor(p * 100) + "%" : "—")
+                    + " · " + DlSpeed.Text + DlSub.Text);
+            }
+        }
+
         /// <summary>Текущая загрузка для пилюли: название, источник, доля 0..1 (null — размер неизвестен), скорость, остаток, обложка.</summary>
         private readonly Dictionary<string, DateTime> _recentDone = new(StringComparer.OrdinalIgnoreCase);
+        private BrowserDownloadSnapshot _browserLast;
+        private DateTime _browserReadAt = DateTime.MinValue;
 
-        private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art);
+        private sealed record DownloadState(string Name, string Source, double? Progress, string Speed, string Eta, ImageSource Art,
+            long Got = 0, long Total = 0, bool Done = false, string Folder = null);
         private DownloadState _download;
         private double _dlShown;      // плавно догоняет настоящий прогресс
         private double _dlSpin;       // вращение «неизвестного» прогресса
+        private DownloadState _dlDone; // «Установлена» держится в пилюле 8 с
+        private readonly DispatcherTimer _dlDoneTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+        private bool _dlArrowPulse;
+        private static readonly Color DlWhite = Color.FromRgb(0xEC, 0xEC, 0xF1), DlGreen = Color.FromRgb(0x4A, 0xDE, 0x80);
+
+        /// <summary>Пилюля загрузки видна, только когда чёлка свёрнута и не занята музыкой или таймером.</summary>
+        private bool CanShowDownloadPill()
+        {
+            if (State != IslandState.Collapsed) return false;
+            var m = AppHost.Media?.Current;
+            bool media = AppSettings.Current.MediaEnabled && m != null && m.HasSession && m.IsPlaying && !string.IsNullOrEmpty(m.Title);
+            bool timer = AppHost.Timer != null && (AppHost.Timer.Running || AppHost.Timer.Paused);
+            return !media && !timer;
+        }
+
+        private void ShowDownloadDone(DownloadState d)
+        {
+            _dlDone = d;
+            _dlDoneTimer.Stop();
+            _dlDoneTimer.Start();
+            SetDownload(d);
+        }
+
+        private void ClearDownloadDone()
+        {
+            _dlDoneTimer.Stop();
+            if (_dlDone == null) return;
+            _dlDone = null;
+            SetDownload(null);
+            RefreshSteamDownload(); // если качается что-то ещё — вернётся на следующем опросе
+        }
+
+        private void OnDownloadFolder(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            var folder = _download?.Folder;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true });
+            }
+            catch (Exception ex) { App.Trace("не удалось открыть папку: " + ex.Message); }
+            ClearDownloadDone(); // клик — открыть папку и свернуть пилюлю
+        }
+
+        private static (double div, string unit) SizeUnit(double v) =>
+            v >= 1073741824 ? (1073741824d, "ГБ") : v >= 1048576 ? (1048576d, "МБ") : (1024d, "КБ");
+
+        private static string SizeText(double v)
+        {
+            var (div, unit) = SizeUnit(v);
+            return (v / div).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + " " + unit;
+        }
+
+        /// <summary>«5,1 из 12,4 ГБ» — обе цифры в единицах полного размера.</summary>
+        private static string SizePair(long got, long total)
+        {
+            var (div, unit) = SizeUnit(total);
+            var c = System.Globalization.CultureInfo.CurrentCulture;
+            return (got / div).ToString("0.#", c) + " из " + (total / div).ToString("0.#", c) + " " + unit;
+        }
 
         /// <summary>Для съёмки README: показать загрузку (без опроса Steam, который бы её сбросил).</summary>
         internal void ShowDemoDownload(string name, string source, double? progress, string speed, string eta, ImageSource art)
@@ -1572,30 +2154,85 @@ namespace Isle
 
         private void SetDownload(DownloadState d)
         {
+            // пока висит «Установлена» — новые опросы её не перебивают
+            if (_dlDone != null && !ReferenceEquals(d, _dlDone)) d = _dlDone;
             bool had = _download != null;
+            bool wasDone = _download?.Done == true;
             _download = d;
             // пока идёт загрузка — частые обновления (скорость, остаток); в простое — редкие, новости придут по событиям
-            var interval = TimeSpan.FromSeconds(d != null ? 1 : 8);
+            var interval = d != null && !d.Done ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(8); // скорость и остаток — дважды в секунду
             if (_steamTimer.Interval != interval) _steamTimer.Interval = interval;
             if (d == null)
             {
                 MediaDownload.Visibility = Visibility.Collapsed;
+                PulseDownloadArrow(false);
                 if (had && State == IslandState.Collapsed) ShowCollapsedContent(false);
                 return;
             }
-            if (!had) _dlShown = 0;
+            if (!had || wasDone) _dlShown = 0;
             DlName.Text = d.Name;
-            var parts = new List<string> { d.Source };
-            if (!string.IsNullOrEmpty(d.Speed)) parts.Add(d.Speed);
-            if (!string.IsNullOrEmpty(d.Eta)) parts.Add(d.Eta);
-            DlSub.Text = string.Join(" · ", parts);
             DlArt.Source = d.Art;
             DlIcon.Visibility = d.Art == null ? Visibility.Visible : Visibility.Collapsed;
-            string pct = d.Progress.HasValue ? (int)Math.Floor(Math.Clamp(d.Progress.Value, 0, 1) * 100) + "%" : "";
-            DlPercent.Text = pct;
-            DlPercent.Visibility = pct.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            MediaDownload.Text = "↓ " + (pct.Length > 0 ? pct : "…");
+
+            if (d.Done)
+            {
+                DlSpeed.Text = "";
+                DlArrow.Visibility = Visibility.Collapsed;
+                PulseDownloadArrow(false);
+                DlSub.Text = (d.Source == "Steam" ? "Установлена" : "Загружено") + (d.Total > 0 ? " · " + SizeText(d.Total) : "");
+                DlPercent.Visibility = Visibility.Collapsed;
+                DlDonePanel.Visibility = Visibility.Visible;
+                DlFolderButton.Visibility = !string.IsNullOrWhiteSpace(d.Folder) ? Visibility.Visible : Visibility.Collapsed;
+                MediaDownload.Text = "✓";
+                if (!wasDone) PlayDownloadDone();
+            }
+            else
+            {
+                if (wasDone) DlRing.Stroke = new SolidColorBrush(DlWhite);
+                DlDonePanel.Visibility = Visibility.Collapsed;
+                string speed = d.Speed ?? "";
+                DlSpeed.Text = speed;
+                DlArrow.Visibility = speed.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                PulseDownloadArrow(speed.Length > 0);
+                var rest = new List<string>();
+                if (speed.Length == 0) rest.Add(d.Source);
+                if (d.Total > 0) rest.Add(SizePair(Math.Min(d.Got, d.Total), d.Total));
+                else if (d.Got > 0) rest.Add(SizeText(d.Got));
+                if (!string.IsNullOrEmpty(d.Eta)) rest.Add("осталось " + d.Eta.TrimStart('~'));
+                DlSub.Text = rest.Count == 0 ? "" : (speed.Length > 0 ? " · " : "") + string.Join(" · ", rest);
+                string pct = d.Progress.HasValue ? (int)Math.Floor(Math.Clamp(d.Progress.Value, 0, 1) * 100) + "%" : "";
+                DlPercent.Text = pct;
+                DlPercent.Visibility = pct.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                MediaDownload.Text = "↓ " + (pct.Length > 0 ? pct : "…");
+            }
             if (State == IslandState.Collapsed) ShowCollapsedContent(had);
+        }
+
+        /// <summary>Стрелка у скорости «дышит», пока идёт загрузка.</summary>
+        private void PulseDownloadArrow(bool on)
+        {
+            if (on == _dlArrowPulse) return;
+            _dlArrowPulse = on;
+            DlArrow.BeginAnimation(OpacityProperty, on
+                ? new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(800)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } }
+                : null);
+        }
+
+        /// <summary>Загрузка завершена: кольцо зеленеет, рисуется галочка, справа выезжает кнопка папки.</summary>
+        private void PlayDownloadDone()
+        {
+            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
+            var ring = new SolidColorBrush(DlWhite);
+            DlRing.Stroke = ring;
+            ring.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(DlGreen, TimeSpan.FromMilliseconds(300)));
+
+            const double checkLen = 11; // длина галочки в толщинах штриха (≈ 27 px / 2,5)
+            DlCheck.StrokeDashArray = new DoubleCollection { checkLen, checkLen };
+            DlCheck.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty,
+                new DoubleAnimation(checkLen, 0, TimeSpan.FromMilliseconds(500)) { BeginTime = TimeSpan.FromMilliseconds(150), EasingFunction = ease });
+
+            DlFolderShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            DlFolderButton.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)));
         }
 
         /// <summary>Кольцо прогресса загрузки: плавно догоняет реальное значение; без размера — крутится.</summary>
@@ -1609,15 +2246,15 @@ namespace Isle
                 if (Math.Abs(_dlShown - before) > 0.0005 || DlRing.Data == null)
                 {
                     DlRing.RenderTransform = null;
-                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 17, 17, 15.75);
+                    DlRing.Data = ProgressArc(Math.Max(0.01, _dlShown), 19, 19, 17.75);
                 }
             }
             else
             {
                 _dlSpin = (_dlSpin + dt * 300) % 360;
-                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 17, 17);
+                if (DlRing.RenderTransform is not RotateTransform rt) DlRing.RenderTransform = rt = new RotateTransform(0, 19, 19);
                 rt.Angle = _dlSpin;
-                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 17, 17, 15.75); DlRing.Tag = "spin"; }
+                if (DlRing.Tag as string != "spin") { DlRing.Data = ProgressArc(0.28, 19, 19, 17.75); DlRing.Tag = "spin"; }
                 return;
             }
             DlRing.Tag = null;
@@ -1886,12 +2523,16 @@ namespace Isle
             }
         }
 
+        /// <summary>Последняя ошибка загрузки погоды (null — всё хорошо) — вкладка «Погода» показывает её вместо вечного «Загружаю…».</summary>
+        public string WeatherError { get; private set; }
+
         public async Task RefreshWeather()
         {
             try
             {
                 var s = AppSettings.Current;
                 var weather = await WeatherService.LoadAsync(s.Latitude, s.Longitude, s.City);
+                WeatherError = null;
                 AppHost.SetWeather(weather);
                 // Предупреждаем заранее: о грозе, граде и гололёде — за 2 часа, об остальном (дождь, снег, туман, ветер, мороз, жара) — за час.
                 if (weather.NextAlert is { } alert && alert.At > weather.ForecastNow)
@@ -1911,7 +2552,7 @@ namespace Isle
                     }
                 }
             }
-            catch (Exception ex) { App.Log("weather: " + ex.Message); }
+            catch (Exception ex) { WeatherError = ex.Message; App.Log("weather: " + ex.Message); }
         }
 
         private void UpdateWeatherMini()

@@ -114,7 +114,7 @@ namespace Isle.Services
                 {
                     var t = Tracks[gone];
                     Tracks.Remove(gone);
-                    var final = FinalFile(gone, t.Folder, now);
+                    var final = FinalFile(gone, t.Folder, now, t.Bytes);
                     if (final != null) Finished.Enqueue(new FinishedDownload(Path.GetFileName(final), t.Browser, t.Folder));
                 }
 
@@ -125,7 +125,7 @@ namespace Isle.Services
             }
         }
 
-        private static string FinalFile(string partial, string folder, DateTime now)
+        private static string FinalFile(string partial, string folder, DateTime now, long bytes)
         {
             var direct = partial.Substring(0, partial.Length - Path.GetExtension(partial).Length);
             if (File.Exists(direct)) return direct;
@@ -136,6 +136,8 @@ namespace Isle.Services
                     .Where(f => !Extensions.Any(e => f.EndsWith(e, StringComparison.OrdinalIgnoreCase)))
                     .Select(f => new FileInfo(f))
                     .Where(i => now - i.LastWriteTime < TimeSpan.FromSeconds(20))
+                    // загрузку отменили — не выдаём за «готовый файл» случайный свежий файл другого размера
+                    .Where(i => i.Length >= bytes * 0.9)
                     .OrderByDescending(i => i.LastWriteTime)
                     .FirstOrDefault()?.FullName;
             }

@@ -22,15 +22,34 @@ namespace Isle
             _capturing = true;
             try
             {
-                AppHost.Window.Collapse();
-                AppHost.Window.Visibility = Visibility.Hidden;
-                // Если остров и так скрыт от захвата экрана (настройка по умолчанию), ждать не нужно — снимок мгновенный.
-                // Иначе даём чёлке исчезнуть с экрана, чтобы не попала на снимок.
-                if (AppSettings.Current.ShowInCaptures) await Task.Delay(150); else await Task.Yield();
-                try { return await CaptureOverlay.Run(mode); }
+                // «Показывать остров на скриншотах»: снимаем экран вместе со свёрнутой чёлкой, и только потом прячем её под слоем выделения
+                BitmapSource shot = null;
+                if (AppSettings.Current.ShowInCaptures && mode == CaptureMode.Region)
+                {
+                    shot = await ShotWithIslandAsync();
+                    App.Trace("снимок: остров попадёт в снимок (настройка «видно на скриншотах»)");
+                }
+                await HideIslandAsync();
+                try { return await CaptureOverlay.Run(mode, shot); }
                 finally { AppHost.Window.Visibility = Visibility.Visible; }
             }
             finally { _capturing = false; }
+        }
+
+        /// <summary>
+        /// Убрать чёлку с экрана перед снимком. Раскрытая панель (кнопки «Текст», «QR» на Главной) успевала попасть
+        /// в «замороженный» снимок под выделением и закрывала то, что под ней, — поэтому ждём, пока Windows
+        /// действительно перерисует экран без неё (DwmFlush — до конца кадра).
+        /// </summary>
+        private static async Task HideIslandAsync()
+        {
+            var w = AppHost.Window;
+            bool wasOpen = w.State != IslandState.Collapsed;
+            w.Collapse();
+            w.Visibility = Visibility.Hidden;
+            await w.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            if (wasOpen || AppSettings.Current.ShowInCaptures) await Task.Delay(200);
+            try { Win32.DwmFlush(); Win32.DwmFlush(); } catch { }
         }
 
         public static async Task RegionShot()
@@ -40,13 +59,24 @@ namespace Isle
 
         public static async Task FullShot()
         {
-            AppHost.Window.Collapse();
-            AppHost.Window.Visibility = Visibility.Hidden;
-            await Task.Delay(220);
             BitmapSource bmp;
+            if (AppSettings.Current.ShowInCaptures) { bmp = await ShotWithIslandAsync(); Done(bmp); return; }
+            await HideIslandAsync();
             try { bmp = ScreenTools.CaptureAll(); }
             finally { AppHost.Window.Visibility = Visibility.Visible; }
             Done(bmp);
+        }
+
+        /// <summary>Снимок всего экрана со свёрнутой чёлкой: сворачиваем, ждём конец анимации и кадр DWM, снимаем.</summary>
+        private static async Task<BitmapSource> ShotWithIslandAsync()
+        {
+            var w = AppHost.Window;
+            bool wasOpen = w.State != IslandState.Collapsed;
+            w.Collapse();
+            await w.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(wasOpen ? 380 : 60); // сворачивание — пружина ~0,35 с
+            try { Win32.DwmFlush(); Win32.DwmFlush(); } catch { }
+            return ScreenTools.CaptureAll();
         }
 
         private static void Done(BitmapSource bmp)
@@ -58,7 +88,8 @@ namespace Isle
             {
                 Kind = ToastKind.Success, Title = "Снимок скопирован",
                 Subtitle = path != null ? "Сохранён в Изображения\\Isle" : "В буфере обмена",
-                Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(3)
+                Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
+                FilePath = path, EditImage = bmp
             });
         }
 
@@ -72,7 +103,7 @@ namespace Isle
             {
                 ToastBus.Show(new Toast
                 {
-                    Title = "Текст не найден", Subtitle = "Проверь, что в Windows установлен язык с распознаванием текста",
+                    Kind = ToastKind.Error, Title = "Текст не найден", Subtitle = "Проверь, что в Windows установлен язык с распознаванием текста",
                     Icon = Icons.Scan, Important = true, Duration = TimeSpan.FromSeconds(4)
                 });
                 return;
@@ -80,8 +111,8 @@ namespace Isle
             ClipboardService.SetText(text);
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = "Текст распознан · " + text.Length + " симв.",
-                Subtitle = text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Check, Accent = Green, Important = true,
+                Kind = ToastKind.Success, Title = "Текст распознан",
+                Subtitle = "Скопировано · " + text.Length + " симв. · " + text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Scan, Accent = Green, Important = true,
                 Duration = TimeSpan.FromSeconds(3.5)
             });
         }
@@ -92,7 +123,7 @@ namespace Isle
             var text = ScreenTools.ReadQr(bmp);
             if (string.IsNullOrEmpty(text))
             {
-                ToastBus.Show(new Toast { Title = "QR-код не найден", Subtitle = "Выдели код целиком, с небольшим полем", Icon = Icons.Qr, Important = true, Duration = TimeSpan.FromSeconds(3) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "QR-код не найден", Subtitle = "Выдели код целиком, с небольшим полем", Icon = Icons.Qr, Important = true, Duration = TimeSpan.FromSeconds(3) });
                 return;
             }
             ClipboardService.SetText(text);
@@ -111,7 +142,7 @@ namespace Isle
             ClipboardService.SetText(hex);
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = hex, Subtitle = "rgb(" + c.R + ", " + c.G + ", " + c.B + ") · скопирован",
+                Kind = ToastKind.Success, Title = hex, Subtitle = "rgb(" + c.R + ", " + c.G + ", " + c.B + ")",
                 Icon = Icons.Pipette, Accent = c, Swatch = c, Important = true, Duration = TimeSpan.FromSeconds(3.5)
             });
         }
@@ -126,7 +157,7 @@ namespace Isle
             {
                 ToastBus.Show(new Toast
                 {
-                    Title = image ? "В буфере картинка" : "В буфере нет текста",
+                    Kind = ToastKind.Error, Title = image ? "В буфере картинка" : "В буфере нет текста",
                     Subtitle = "«Чистый текст» убирает шрифты и цвета у скопированного текста — скопируй текст и нажми снова",
                     Icon = Icons.Eraser, Important = true, Duration = TimeSpan.FromSeconds(4)
                 });
@@ -144,18 +175,20 @@ namespace Isle
             {
                 try
                 {
-                    bool on = await ObsService.ToggleRecordAsync();
-                    ToastBus.Show(new Toast
-                    {
-                        Title = on ? "OBS: запись идёт" : "OBS: запись сохранена", Subtitle = on ? "Нажми «Запись экрана» ещё раз, чтобы остановить" : "Файл в папке записей OBS",
-                        Icon = Icons.Record, Accent = on ? Color.FromRgb(0xF8, 0x71, 0x71) : Green, Important = true, Duration = TimeSpan.FromSeconds(3)
-                    });
+                    var (on, file) = await ObsService.ToggleRecordAsync();
+                    if (on)
+                        ToastBus.Show(new Toast
+                        {
+                            Title = "OBS: запись идёт", Subtitle = "Нажми «Запись экрана» ещё раз, чтобы остановить",
+                            Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(3)
+                        });
+                    else ObsService.ShowSaved(file); // с кнопкой «папка» — откроет Проводник с выделенным видео
                 }
                 catch (Exception ex)
                 {
                     ToastBus.Show(new Toast
                     {
-                        Title = "OBS не отвечает", Subtitle = "Включи в OBS: Инструменты → Настройки сервера WebSocket. " + ex.Message,
+                        Kind = ToastKind.Error, Title = "OBS не отвечает", Subtitle = "Включи в OBS: Инструменты → Настройки сервера WebSocket. " + ex.Message,
                         Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(6)
                     });
                 }
@@ -172,7 +205,7 @@ namespace Isle
                 });
                 return;
             }
-            ToastBus.Show(new Toast { Title = "OBS не установлен — открываю «Ножницы»", Subtitle = "Поставь OBS Studio, и кнопка будет писать через него", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
+            ToastBus.Show(new Toast { Warning = true, Title = "OBS не установлен — открываю «Ножницы»", Subtitle = "Поставь OBS Studio, и кнопка будет писать через него", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
             await Task.Delay(300);
             Win32.SendKeyCombo(Win32.VK_LWIN, 0x10 /*Shift*/, 0x52 /*R*/);
         }

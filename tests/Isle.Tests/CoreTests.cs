@@ -126,6 +126,8 @@ namespace Isle.Tests
         [InlineData("Сделай этот текст более официальным", true)]
         [InlineData("исправь ошибки в сообщении", true)]
         [InlineData("переведи текст на английский", true)]
+        [InlineData("преобразуй то, что я написал, в официальную форму", true)]
+        [InlineData("чтобы текст был преобразован в официальной форме", true)]
         [InlineData("открой телеграм", false)]
         [InlineData("сделай таймер на 5 минут", false)]
         public void VoiceEditRequests(string command, bool edit) =>
@@ -299,7 +301,25 @@ namespace Isle.Tests
                 Assert.NotEmpty(download.SpeedText);
                 Assert.NotNull(download.Remaining);
                 Assert.NotNull(download.Icon);
+                Assert.True(download.Icon.IsFrozen); // иначе показ обложки в окне падает с «другим потоком»
                 Assert.Equal(installFolder, download.FolderPath);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void FreshInstallShowsDownloadedDataNotInstalledFiles()
+        {
+            var appId = 900000 + Random.Shared.Next(1, 99999);
+            var root = CreateSteamRoot(appId);
+            try
+            {
+                // новая установка: в логе нет «Fully Installed» — главное «Загрузка данных» (220 из 1000), а не установка (160)
+                File.WriteAllText(Path.Combine(root, "logs", "content_log.txt"), ActiveLog(appId).Replace("Update Required,Fully Installed,", "Update Required,"));
+                var download = SteamDownloadService.ReadCurrent(root, new DateTime(2026, 11, 6, 16, 43, 36, DateTimeKind.Local));
+                Assert.NotNull(download);
+                Assert.Equal("22%", download.ProgressText);
+                Assert.Equal(1000, download.Total);
             }
             finally { Directory.Delete(root, true); }
         }
@@ -482,8 +502,8 @@ namespace Isle.Tests
             var rnd = new Random(1);
             for (int i = 0; i < 200; i++)
             {
-                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0 }); // быстро и плотно
-                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6 }); // медленно
+                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10 }); // быстро и плотно
+                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9 }); // медленно
                 Assert.NotEqual(3, Isle.Helpers.Character.PickDance(110, 0.4, 3, rnd));                      // не повторяет текущий
             }
         }
@@ -573,5 +593,144 @@ namespace Isle.Tests
         public void PreviouslyObservedDownloadNotifiesEvenWithoutEndTimestamp() =>
             Assert.True(BrowserDownloadService.ShouldNotifyCompletion(true, DateTime.MinValue,
                 new DateTime(2026, 11, 6, 12, 0, 0)));
+    }
+}
+
+namespace Isle.Tests
+{
+    /// <summary>Разбор живой сводки Steam — на настоящей сводке из журнала пользователя (загрузка «112 Operator»).</summary>
+    public class SteamOverviewTests
+    {
+        private const string Real = @"{""remote_client_id"":""0"",""update_appid"":793460,""update_is_upload"":false,""update_network_bytes_per_second"":13705941,""update_peak_network_bytes_per_second"":21849331,""update_disc_bytes_per_second"":13218838,""update_state"":""Downloading"",""update_state_flags"":97,""progress"":[{""bytes_in_progress"":0,""bytes_total"":0,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":3747178867,""bytes_total"":3747178867,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":1032054096,""bytes_total"":1502001728,""estimated_time_remaining_sec"":37},{""bytes_in_progress"":1619544710,""bytes_total"":3747178867,""estimated_time_remaining_sec"":169},{""bytes_in_progress"":0,""bytes_total"":0,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":0,""bytes_total"":0,""estimated_time_remaining_sec"":0},{""bytes_in_progress"":0,""bytes_total"":3747178867,""estimated_time_remaining_sec"":0}],""overall_percent_complete"":43,""overall_estimated_time_remaining_sec"":169,""update_start_time"":1794151722,""update_is_install"":true,""update_is_workshop"":false,""update_is_shader"":false,""update_is_prefetch_estimate"":false,""paused"":false,""throttling_suspended"":false,""lan_peer_hostname"":"""",""download_throttle_rate"":0,""restrict_auto_updates"":false,""restrict_auto_updates_start"":0,""restrict_auto_updates_end"":0}";
+
+        [Fact]
+        public void ParsesRealSteamOverview()
+        {
+            var o = SteamClientApi.Parse(Real);
+            Assert.NotNull(o);
+            Assert.Equal(793460, o.AppId);
+            Assert.Equal("Downloading", o.State);
+            Assert.False(o.Paused);
+            Assert.True(o.IsInstall);
+            Assert.Equal(1032054096, o.Downloaded);   // progress[2] — загрузка данных
+            Assert.Equal(1502001728, o.ToDownload);
+            Assert.Equal(1619544710, o.Written);      // progress[3] — запись на диск
+            Assert.Equal(3747178867, o.ToWrite);
+            Assert.Equal(43, o.OverallPercent);       // общий процент Steam
+            Assert.Equal(169, o.SecondsRemaining);    // общий остаток Steam
+            Assert.Equal(13705941, o.NetworkBytesPerSecond);
+        }
+
+        [Fact]
+        public void SkipsDownloadsOfAnotherComputer()
+        {
+            var remote = Real.Replace("\"remote_client_id\":\"0\"", "\"remote_client_id\":\"76561198000000001\"");
+            Assert.NotEqual(Real, remote);
+            Assert.Null(SteamClientApi.Parse(remote));
+        }
+
+        [Fact]
+        public void IdleOverviewHasNoApp()
+        {
+            var o = SteamClientApi.Parse("{\"remote_client_id\":\"0\",\"update_state\":\"None\",\"update_appid\":0,\"paused\":true,\"overall_percent_complete\":0,\"overall_estimated_time_remaining_sec\":-1}");
+            Assert.NotNull(o);
+            Assert.Equal(0, o.AppId);
+            Assert.True(o.Paused);
+        }
+    }
+}
+
+namespace Isle.Tests
+{
+    public class WifiTests
+    {
+        private const string NetshRu = @"
+Имя интерфейса : Беспроводная сеть
+В данный момент видно 3 сети.
+
+SSID 1 : HomeNet
+    Тип сети                : Инфраструктура
+    Проверка подлинности    : WPA2-Personal
+    Шифрование              : CCMP
+    BSSID 1                 : aa:bb:cc:dd:ee:01
+         Сигнал             : 62%
+    BSSID 2                 : aa:bb:cc:dd:ee:02
+         Сигнал             : 91%
+
+SSID 2 : Кафе & <Гости>
+    Тип сети                : Инфраструктура
+    Проверка подлинности    : Открытая
+    Шифрование              : Нет
+    BSSID 1                 : aa:bb:cc:dd:ee:03
+         Сигнал             : 40%
+
+SSID 3 : Office
+    Проверка подлинности    : WPA2-Enterprise
+    Шифрование              : CCMP
+    BSSID 1                 : aa:bb:cc:dd:ee:04
+         Сигнал             : 20%
+";
+
+        [Fact]
+        public void NetworksParsedWithBestSignalAndSecurity()
+        {
+            var nets = SystemControls.ParseNetworks(NetshRu);
+            Assert.Equal(3, nets.Count);
+            Assert.Equal("HomeNet", nets[0].Ssid);
+            Assert.Equal(91, nets[0].Signal);
+            Assert.True(nets[0].Secured);
+            Assert.Equal("WPA2-Personal", nets[0].Auth);
+            Assert.True(nets[0].PasswordSupported);
+            var cafe = nets.Single(n => n.Ssid == "Кафе & <Гости>");
+            Assert.False(cafe.Secured);
+            var office = nets.Single(n => n.Ssid == "Office");
+            Assert.False(office.PasswordSupported);
+        }
+
+        [Fact]
+        public void ProfileXmlEscapesNameAndPassword()
+        {
+            var net = new SystemControls.WifiNet { Ssid = "A&B <x>", Secured = true, Auth = "WPA2-Personal", Cipher = "CCMP" };
+            var xml = SystemControls.BuildProfileXml(net, "p&ss<word>");
+            var doc = System.Xml.Linq.XDocument.Parse(xml); // корректный XML
+            System.Xml.Linq.XNamespace ns = "http://www.microsoft.com/networking/WLAN/profile/v1";
+            Assert.Equal("A&B <x>", doc.Root.Element(ns + "name").Value);
+            Assert.Equal("WPA2PSK", doc.Descendants(ns + "authentication").Single().Value);
+            Assert.Equal("AES", doc.Descendants(ns + "encryption").Single().Value);
+            Assert.Equal("p&ss<word>", doc.Descendants(ns + "keyMaterial").Single().Value);
+            Assert.Equal(Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes("A&B <x>")), doc.Descendants(ns + "hex").Single().Value);
+            Assert.Equal("WPA3SAE", SystemControls.ProfileAuth("WPA3-Personal"));
+            Assert.Null(SystemControls.ProfileAuth("WPA2-Enterprise"));
+            Assert.Null(SystemControls.BuildProfileXml(new SystemControls.WifiNet { Ssid = "x", Secured = true, Auth = "WPA2-Enterprise" }, "12345678"));
+        }
+    }
+}
+
+namespace Isle.Tests
+{
+    public class LiveMosaicTests
+    {
+        [Fact]
+        public void MovingFrameRestoresPixelsOutsideAndCancelRestoresAll()
+        {
+            int w = 64, h = 32;
+            var px = new byte[w * h * 4];
+            for (int i = 0; i < px.Length; i += 4) { px[i] = (byte)(i % 251); px[i + 1] = (byte)(i % 199); px[i + 2] = (byte)(i % 97); px[i + 3] = 255; }
+            var bmp = new System.Windows.Media.Imaging.WriteableBitmap(w, h, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null);
+            bmp.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), px, w * 4, 0);
+            byte[] Now() { var b = new byte[w * h * 4]; bmp.CopyPixels(b, w * 4, 0); return b; }
+
+            var live = new LiveMosaic(bmp);
+            live.Show(live.Clamp(0, 0, 40, 20));
+            Assert.NotEqual(px, Now());
+            // рамка уехала вправо — левая часть снова исходная
+            live.Show(live.Clamp(40, 0, 24, 32));
+            var now = Now();
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < 40; x++)
+                    Assert.Equal(px[(y * w + x) * 4], now[(y * w + x) * 4]);
+            live.Cancel();
+            Assert.Equal(px, Now());
+        }
     }
 }

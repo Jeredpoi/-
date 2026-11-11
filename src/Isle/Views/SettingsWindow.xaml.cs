@@ -161,6 +161,7 @@ namespace Isle.Views
             ChPixel.IsChecked = S.Character == "pixel";
             ChEyes.IsChecked = S.Character == "eyes";
             ChNone.IsChecked = S.Character == "none";
+            foreach (var rb in Outfits.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.BuddyOutfit ?? "auto");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
             OpacitySlider.Value = Math.Round(S.IslandOpacity * 100);
@@ -209,6 +210,8 @@ namespace Isle.Views
             Notif.IsChecked = S.NotificationToasts;
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
             Vpn.IsChecked = S.VpnStatus;
+            SteamExact.IsChecked = S.SteamExactSpeed;
+            UpdateSteamActivate();
             ClipHist.IsChecked = S.ClipboardHistory;
             ClipImg.IsChecked = S.ClipboardImages;
             AutoUpdate.IsChecked = S.AutoUpdateCheck;
@@ -234,6 +237,57 @@ namespace Isle.Views
             S.AutoUpdateCheck = AutoUpdate.IsChecked == true;
             S.ObsStatus = ObsStatus.IsChecked == true;
             S.Save();
+        }
+
+        private void OnSteamLog(object s, RoutedEventArgs e)
+        {
+            var path = Services.Diag.PathToLog;
+            try
+            {
+                if (System.IO.File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                else System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Services.Storage.Dir) { UseShellExecute = true });
+            }
+            catch { }
+        }
+
+        /// <summary>Кнопка видна, только пока точная скорость ни разу не заработала (и включена).</summary>
+        private async void UpdateSteamActivate()
+        {
+            SteamActivateRow.Visibility = Visibility.Collapsed;
+            if (!S.SteamExactSpeed || S.SteamExactActivated) return;
+            if (Services.SteamDownloadService.SteamRoot() == null) return; // Steam не установлен
+            if (await Services.SteamClientApi.IsWorkingAsync())
+            {
+                S.SteamExactActivated = true;
+                S.Save();
+                return;
+            }
+            SteamActivateRow.Visibility = Visibility.Visible;
+        }
+
+        private async void OnSteamActivate(object s, RoutedEventArgs e)
+        {
+            SteamActivateBtn.IsEnabled = false;
+            var progress = new Progress<string>(t => SteamExactStatus.Text = t);
+            bool ok = await Services.SteamClientApi.ActivateAsync(progress);
+            if (ok)
+            {
+                S.SteamExactActivated = true;
+                S.Save();
+                await System.Threading.Tasks.Task.Delay(2500); // дать прочитать «Готово»
+                SteamActivateRow.Visibility = Visibility.Collapsed;
+            }
+            else SteamActivateBtn.IsEnabled = true;
+        }
+
+        private void OnSteamExact(object s, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            S.SteamExactSpeed = SteamExact.IsChecked == true;
+            S.Save();
+            bool on = S.SteamExactSpeed;
+            System.Threading.Tasks.Task.Run(() => Services.SteamClientApi.Apply(on));
+            UpdateSteamActivate();
         }
 
         private void OnMusicToggle(object s, RoutedEventArgs e)
@@ -271,7 +325,7 @@ namespace Isle.Views
                 ToastBus.Show(new Toast
                 {
                     Kind = ToastKind.Success,
-                    Title = Autostart.IsChecked == true ? "Автозапуск включён" : "Автозапуск выключен",
+                    Title = Autostart.IsChecked == true ? "Автозапуск включён" : "Автозапуск выключен", On = Autostart.IsChecked == true,
                     Icon = Icons.Check
                 });
             }
@@ -333,6 +387,14 @@ namespace Isle.Views
             S.Save();
             UpdatePreview();
             AppHost.Window.ApplyAppearance();
+        }
+
+        private void OnOutfit(object s, RoutedEventArgs e)
+        {
+            S.BuddyOutfit = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            UpdatePreview();
+            AppHost.Window.ApplyAppearance(); // Клоди в чёлке переодевается сразу
         }
 
         private void OnScale(object s, RoutedPropertyChangedEventArgs<double> e)

@@ -36,7 +36,15 @@ namespace Isle.Views
             AppHost.Lyrics.Changed += OnLyricsChanged;
             AppHost.Audio.VolumeChanged += (_, __) => SyncVolume();
             AppHost.Audio.DeviceChanged += () => { SyncVolume(); FillDevices(); };
-            _tick.Tick += (_, __) => { TickPosition(); if (++_appVolTicks % 10 == 0) SyncAppVolume(); };
+            _tick.Tick += (_, __) =>
+            {
+                TickPosition();
+                if (++_appVolTicks % 10 != 0) return;
+                SyncAppVolume();
+                // раз в секунду: пауза затянулась — пора спрятать плеер (событий от плеера в это время нет)
+                bool idleNow = _pausedSince.HasValue && DateTime.Now - _pausedSince.Value > PlayerIdleTimeout;
+                if (idleNow != _shownIdle) Refresh();
+            };
             AppVol.ValueChanged += OnAppVolume;
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
             IsVisibleChanged += (_, __) => { if (IsVisible) _tick.Start(); else _tick.Stop(); };
@@ -143,6 +151,7 @@ namespace Isle.Views
 
         public void OnShown()
         {
+            SyncAppVolume();
             ApplyPlayerStyle();
             Refresh();
             SyncVolume();
@@ -169,10 +178,19 @@ namespace Isle.Views
 
         // ---------- Медиа ----------
 
+        private static readonly TimeSpan PlayerIdleTimeout = TimeSpan.FromMinutes(3);
+        private DateTime? _pausedSince;
+        private bool _shownIdle;
+
         private void Refresh()
         {
             var m = AppHost.Media.Current;
-            bool nothing = !m.HasSession || string.IsNullOrEmpty(m.Title);
+            // музыка на паузе дольше 3 минут — вместо плеера показываем «Недавно скопировано»
+            if (m.HasSession && m.IsPlaying) _pausedSince = null;
+            else if (_pausedSince == null) _pausedSince = DateTime.Now;
+            bool idle = _pausedSince.HasValue && DateTime.Now - _pausedSince.Value > PlayerIdleTimeout;
+            bool nothing = !m.HasSession || string.IsNullOrEmpty(m.Title) || idle;
+            _shownIdle = idle;
             RecentPanel.Visibility = nothing ? Visibility.Visible : Visibility.Collapsed;
             PlayerPanel.Visibility = nothing ? Visibility.Collapsed : Visibility.Visible;
             SourceCount.Text = Math.Max(1, AppHost.Media.SourceCount).ToString();
@@ -374,6 +392,7 @@ namespace Isle.Views
         /// </summary>
         private void SyncAppVolume()
         {
+            if (!IsVisible) return; // вкладка скрыта — не опрашиваем звуковые сессии зря (обновится при показе)
             var m = AppHost.Media.Current;
             if (!m.HasSession || string.IsNullOrEmpty(m.SourceAppId)) { AppVol.Visibility = Visibility.Collapsed; return; }
             if (AppVol.IsMouseCaptured || DateTime.Now - _appVolSetAt < TimeSpan.FromSeconds(1)) return; // крутят сейчас — не перебиваем

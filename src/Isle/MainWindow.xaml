@@ -38,7 +38,7 @@
                     <Grid x:Name="CollapsedView" Margin="16,0">
                         <!-- покой: «глаза», время, погода -->
                         <StackPanel x:Name="IdleRow" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <h:Character x:Name="Buddy" Width="30" Height="22" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <h:Character x:Name="Buddy" Width="36" Height="26" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <StackPanel x:Name="Eyes" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border x:Name="EyeL" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" VerticalAlignment="Center"/>
                                 <Border x:Name="EyeR" Width="7" Height="14" CornerRadius="3.5" Background="{StaticResource Fg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
@@ -62,7 +62,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <h:Character x:Name="BuddyMedia" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
+                            <h:Character x:Name="BuddyMedia" Width="36" Height="26" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                             <Border x:Name="MiniCoverBox" Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True" VerticalAlignment="Center">
                                 <Image x:Name="MiniCover" Stretch="UniformToFill"/>
                             </Border>
@@ -79,11 +79,11 @@
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <!-- кнопки мини-плеера -->
                             <StackPanel x:Name="MiniButtons" Orientation="Horizontal" Margin="0,0,10,0" Visibility="Collapsed">
-                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
-                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay">
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev" ToolTip="Предыдущий"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay" ToolTip="Пауза / играть">
                                     <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Fg}"><h:Icon x:Name="MiniPlayIcon" Kind="Pause" Width="12" Height="12" StrokeWidth="2.4" Foreground="Black"/></Border>
                                 </Button>
-                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
+                                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext" ToolTip="Следующий"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
                             </StackPanel>
                             <TextBlock x:Name="MediaTimer" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <TextBlock x:Name="MediaDownload" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Идёт загрузка"/>
@@ -101,7 +101,7 @@
                         <!-- таймер -->
                         <Grid x:Name="TimerRow" Visibility="Collapsed" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                <h:Character x:Name="BuddyTimer" Width="30" Height="22" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
+                                <h:Character x:Name="BuddyTimer" Width="36" Height="26" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                                 <h:Icon Kind="Timer" Width="15" Height="15" Foreground="{DynamicResource Accent}"/>
                                 <TextBlock Text="Таймер" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="7,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
@@ -113,27 +113,56 @@
                         </Grid>
 
                         <!-- загрузка (Steam / браузер): обложка в кольце прогресса, название, скорость, проценты -->
-                        <Grid x:Name="DownloadRow" Visibility="Collapsed" VerticalAlignment="Center" Background="Transparent">
+                        <Grid x:Name="DownloadRow" Visibility="Collapsed" VerticalAlignment="Center" Background="Transparent" Margin="-8,0,-6,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <!-- миниатюра игры в кружке, вокруг — кольцо прогресса скачивания -->
-                            <Grid Width="34" Height="34" VerticalAlignment="Center">
-                                <Ellipse Stroke="#2A2A32" StrokeThickness="2.5"/>
-                                <Path x:Name="DlRing" Stroke="{DynamicResource Accent}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                <Ellipse Width="26" Height="26" Fill="#16161A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image x:Name="DlArt" Width="26" Height="26" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image.Clip><EllipseGeometry Center="13,13" RadiusX="13" RadiusY="13"/></Image.Clip>
+                            <!-- обложка игры в кружке, вокруг — кольцо прогресса (52 px, старт сверху по часовой) -->
+                            <Grid Width="38" Height="38" VerticalAlignment="Center">
+                                <Ellipse Stroke="#1C1C20" StrokeThickness="2.5"/>
+                                <Path x:Name="DlRing" Stroke="#ECECF1" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Ellipse Width="29" Height="29" Fill="#0E0E10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image x:Name="DlArt" Width="29" Height="29" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Image.Clip><EllipseGeometry Center="14.5,14.5" RadiusX="14.5" RadiusY="14.5"/></Image.Clip>
                                 </Image>
-                                <h:Icon x:Name="DlIcon" Kind="Download" Width="13" Height="13" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <h:Icon x:Name="DlIcon" Kind="Download" Width="15" Height="15" Foreground="#ECECF1" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Grid>
                             <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
-                                <TextBlock x:Name="DlName" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="DlSub" FontSize="10.5" Foreground="#9A9AA4" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                                <TextBlock x:Name="DlName" FontSize="13" FontWeight="SemiBold" Foreground="#ECECF1" TextTrimming="CharacterEllipsis"/>
+                                <!-- главная строка — скорость; дальше серым «5,1 из 12,4 ГБ · осталось 25 с» -->
+                                <DockPanel Margin="0,1,0,0" LastChildFill="True">
+                                    <h:Icon x:Name="DlArrow" DockPanel.Dock="Left" Kind="Download" Width="11" Height="11" StrokeWidth="2" Foreground="#ECECF1" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="DlSpeed" DockPanel.Dock="Left" FontSize="11" FontWeight="SemiBold" Foreground="#ECECF1" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                                    <TextBlock x:Name="DlSub" FontSize="11" Foreground="#8B8B95" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                                </DockPanel>
                             </StackPanel>
-                            <TextBlock x:Name="DlPercent" Grid.Column="2" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                            <Grid Grid.Column="2" VerticalAlignment="Center">
+                                <TextBlock x:Name="DlPercent" Width="44" TextAlignment="Right" FontSize="18" FontWeight="Light" Foreground="#ECECF1" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                                <!-- загрузка завершена: зелёная галочка + белая кнопка папки -->
+                                <StackPanel x:Name="DlDonePanel" Orientation="Horizontal" Visibility="Collapsed" VerticalAlignment="Center">
+                                    <Path x:Name="DlCheck" Data="M3 12.5l6 6L21 6.5" Stroke="#4ADE80" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          Width="24" Height="24" Stretch="None" Margin="0,0,6,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                        <Path.RenderTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.RenderTransform>
+                                    </Path>
+                                    <Button x:Name="DlFolderButton" Width="32" Height="32" Padding="0" Click="OnDownloadFolder" ToolTip="Открыть папку" Cursor="Hand">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="Bg" Background="#ECECF1" CornerRadius="16">
+                                                    <h:Icon Kind="Folder" Width="16" Height="16" Foreground="#0B0B0D" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#FFFFFF"/></Trigger>
+                                                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bg" Property="Background" Value="#C9C9D1"/></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                        <Button.RenderTransform><TranslateTransform x:Name="DlFolderShift"/></Button.RenderTransform>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
                         </Grid>
 
                         <!-- всплывашка -->
@@ -143,14 +172,20 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Border x:Name="ToastIconBox" Width="34" Height="34" CornerRadius="17" Background="#141417" VerticalAlignment="Center">
+                            <Border x:Name="ToastIconBox" Width="36" Height="36" CornerRadius="12" Background="#0E0E10" VerticalAlignment="Center">
                                 <Grid>
                                     <Image x:Name="ToastImage" Stretch="Uniform"/>
                                     <!-- пипетка: квадратик выбранного цвета с окантовкой -->
-                                    <Border x:Name="ToastSwatch" CornerRadius="8" BorderBrush="#4A4A55" BorderThickness="1.5" Visibility="Collapsed">
-                                        <Border CornerRadius="6" BorderBrush="#40000000" BorderThickness="1"/>
+                                    <Border x:Name="ToastSwatch" CornerRadius="14" BorderBrush="#1C1C20" BorderThickness="2.5" Visibility="Collapsed">
+                                        <Border x:Name="ToastSwatchFill" Margin="5.5" CornerRadius="9"/>
                                     </Border>
+                                    <!-- пипетка: зелёная «змейка» обегает плитку и замыкается — цвет скопирован -->
+                                    <Rectangle x:Name="ToastSnake" RadiusX="14" RadiusY="14" Stroke="#4ADE80" StrokeThickness="2.5" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <h:Icon x:Name="ToastIcon" Kind="Info" Width="17" Height="17"/>
+                                    <!-- «выключено»: косая черта поверх значка -->
+                                    <Line x:Name="ToastOffSlash" X1="9" Y1="9" X2="25" Y2="25" Stroke="#F87171" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
+                                    <TextBlock x:Name="ToastBadge" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     <h:WeatherGlyph x:Name="ToastWeather" Margin="2" Visibility="Collapsed"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
                                     <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>
@@ -160,24 +195,43 @@
                                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                 <Grid Grid.Row="0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="ToastTitle" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ToastTitle" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"/>
                                     <TextBlock x:Name="ToastSpeed" Grid.Column="1" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="10,0,0,0"/>
                                 </Grid>
                                 <Grid Grid.Row="1" Margin="0,2,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="ToastSub" FontSize="12" Foreground="#B9B9C3" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="ToastSub" FontSize="13" Foreground="#8B8B95" TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"/>
                                     <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="#B9B9C3" Margin="10,0,0,0"/>
                                 </Grid>
                                 <!-- волна голоса во время диктовки (Ctrl+Alt+D / Ctrl+Alt+A / микрофон в чате) -->
                                 <h:VoiceWave x:Name="VoiceWave" Grid.Row="2" Height="20" Margin="0,5,0,0" Visibility="Collapsed"/>
-                                <Grid x:Name="ToastBar" Grid.Row="2" Height="4" Margin="0,4,0,0" Visibility="Collapsed">
-                                    <Border CornerRadius="2" Background="{StaticResource Track}"/>
+                                <Grid x:Name="ToastBar" Grid.Row="2" Height="4" Margin="0,8,0,0" Visibility="Collapsed">
+                                    <Border CornerRadius="2" Background="#1C1C20"/>
                                     <Border x:Name="ToastBarFill" CornerRadius="2" Background="{StaticResource Fg}" HorizontalAlignment="Left" Width="0"/>
                                 </Grid>
                             </Grid>
-                            <Button x:Name="ToastFolderButton" Grid.Column="2" Width="30" Height="30" Margin="8,0,0,0" Padding="0" Style="{StaticResource Ghost}" Click="OnToastFolder" ToolTip="Открыть папку игры" Visibility="Collapsed">
-                                <h:Icon Kind="Folder" Width="15" Height="15"/>
-                            </Button>
+                            <!-- таймер вышел: «Ещё раз» и ✓ -->
+                            <StackPanel x:Name="ToastAlarmButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="Collapsed">
+                                <Button x:Name="ToastRepeatButton" Style="{StaticResource Bare}" Click="OnToastRepeat" ToolTip="Запустить таймер заново">
+                                    <Border Height="32" CornerRadius="16" Background="#2C2C33" Padding="14,0">
+                                        <TextBlock Text="Ещё раз" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource Fg}"/>
+                                    </Border>
+                                </Button>
+                                <Button x:Name="ToastDoneButton" Style="{StaticResource Bare}" Margin="6,0,0,0" Click="OnToastDone" ToolTip="Выключить">
+                                    <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Fg}">
+                                        <h:Icon Kind="Check" Width="16" Height="16" StrokeWidth="2.4" Foreground="#08080A"/>
+                                    </Border>
+                                </Button>
+                            </StackPanel>
+                            <!-- справа: карандаш (пометки на снимке) над папкой -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <Button x:Name="ToastEditButton" Width="28" Height="28" Margin="0,0,0,2" Padding="0" Style="{StaticResource Ghost}" Click="OnToastEdit" ToolTip="Пометки: замазать текст, рамка, стрелка" Visibility="Collapsed">
+                                    <h:Icon Kind="Note" Width="14" Height="14"/>
+                                </Button>
+                                <Button x:Name="ToastFolderButton" Width="28" Height="28" Padding="0" Style="{StaticResource Ghost}" Click="OnToastFolder" ToolTip="Открыть папку" Visibility="Collapsed">
+                                    <h:Icon Kind="Folder" Width="14" Height="14"/>
+                                </Button>
+                            </StackPanel>
                         </Grid>
                     </Grid>
 
@@ -191,28 +245,28 @@
                             </Border>
                             <StackPanel x:Name="TabBar" Orientation="Horizontal">
                                 <RadioButton Style="{StaticResource Tab}" Content="Главная" x:Name="TabHome" IsChecked="True" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Home" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Home" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Буфер" x:Name="TabClip" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Clipboard" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Clipboard" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Полка" x:Name="TabShelf" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Tray" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Tray" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Текст" x:Name="TabText" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Text" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Text" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Чат" x:Name="TabChat" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Chat" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Chat" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Заметка" x:Name="TabNotes" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Note" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Note" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Погода" x:Name="TabWeather" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Sun" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Sun" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Управление" x:Name="TabControls" Checked="OnTab">
-                                    <RadioButton.Tag><h:Icon Kind="Sliders" Width="15" Height="15"/></RadioButton.Tag>
+                                    <RadioButton.Tag><h:Icon Kind="Sliders" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
                             </StackPanel>
 

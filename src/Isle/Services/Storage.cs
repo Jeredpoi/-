@@ -127,10 +127,22 @@ namespace Isle.Services
         /// <summary>Частота анимаций, кадров/с: 30, 60, 120 или 0 — как у монитора.</summary>
         public int MaxFps { get; set; } = 60;
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
+        /// <summary>Одежда Клоди: auto — по погоде, иначе имя наряда (Cowboy, Crown, Wizard, Pirate, Chef, Frost, Autumn, Storm, Heat, Winter, Sunny, Summer, None).</summary>
+        public string BuddyOutfit { get; set; } = "auto";
         public bool FirstRunDone { get; set; } = false;
+        /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
+        public bool WelcomeShown { get; set; }
+        /// <summary>Настроек ещё не было на диске — это самый первый запуск Isle на этом компьютере.</summary>
+        [System.Text.Json.Serialization.JsonIgnore] public static bool IsFreshInstall { get; private set; }
+        /// <summary>Подсказка из трея «Isle запущен» уже показывалась.</summary>
+        public bool TrayHintShown { get; set; } = false;
         public bool AutoUpdateCheck { get; set; } = true;
         public bool ScaleFixV2 { get; set; } = false;
         public bool ObsStatus { get; set; } = true;
+        /// <summary>Брать скорость, объём и остаток загрузки прямо из Steam (Isle сам включает это в Steam).</summary>
+        public bool SteamExactSpeed { get; set; } = true;
+        /// <summary>Точная скорость хоть раз заработала — кнопку «Включить точную скорость» больше не показываем.</summary>
+        public bool SteamExactActivated { get; set; } = false;
         public bool VoiceDefaultsV2 { get; set; } = false;
 
         // Музыка
@@ -176,7 +188,15 @@ namespace Isle.Services
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;
-        public static AppSettings Current => _current ??= Migrate(Storage.Load<AppSettings>("settings.json"));
+        public static AppSettings Current
+        {
+            get
+            {
+                if (_current != null) return _current;
+                try { IsFreshInstall = !File.Exists(Path.Combine(Storage.Dir, "settings.json")); } catch { }
+                return _current = Migrate(Storage.Load<AppSettings>("settings.json"));
+            }
+        }
 
         /// <summary>Старые значения по умолчанию → новые (облегчённый turbo хуже ставит знаки препинания).</summary>
         private static AppSettings Migrate(AppSettings s)
@@ -186,7 +206,41 @@ namespace Isle.Services
             if (s != null && s.VoicePreset == "pollinations") s.VoicePreset = "custom";
             return s;
         }
-        public void Save() => Storage.Save("settings.json", this);
+        private static Dictionary<string, string> _lastSaved;
+
+        private Dictionary<string, string> SnapshotForLog()
+        {
+            var now = new Dictionary<string, string>();
+            foreach (var p in GetType().GetProperties())
+            {
+                if (!p.CanRead || p.GetIndexParameters().Length > 0 || p.GetMethod.IsStatic) continue;
+                object v;
+                try { v = p.GetValue(this); } catch { continue; }
+                var str = v is System.Collections.IEnumerable && v is not string ? JsonSerializer.Serialize(v) : v?.ToString() ?? "null";
+                if (System.Text.RegularExpressions.Regex.IsMatch(p.Name, "Key|Password|Token|Protected")) str = string.IsNullOrEmpty(str) || str == "null" ? "(пусто)" : "***";
+                now[p.Name] = str;
+            }
+            return now;
+        }
+
+        /// <summary>Запомнить настройки как исходные — следующие сохранения пишут в журнал только отличия.</summary>
+        public void LogBaseline() { try { _lastSaved = SnapshotForLog(); } catch { } }
+
+        public void Save()
+        {
+            // в подробный журнал — что именно поменялось (ключи и пароли — звёздочками)
+            try
+            {
+                var now = SnapshotForLog();
+                if (_lastSaved != null)
+                    foreach (var kv in now)
+                        if (!_lastSaved.TryGetValue(kv.Key, out var old) || old != kv.Value)
+                            Journal.Info("settings", kv.Key + ": " + Journal.Short(old, 80) + " → " + Journal.Short(kv.Value, 80));
+                _lastSaved = now;
+            }
+            catch { }
+            Storage.Save("settings.json", this);
+        }
     }
 
     public class Note

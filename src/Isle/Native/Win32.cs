@@ -50,6 +50,8 @@ namespace Isle.Native
 
         /// <summary>0x11 = WDA_EXCLUDEFROMCAPTURE: окно не видно на скриншотах и в записи экрана (Win10 2004+).</summary>
         [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
+        /// <summary>Дождаться, пока DWM выведет следующий кадр (окно действительно исчезло с экрана).</summary>
+        [DllImport("dwmapi.dll")] public static extern int DwmFlush();
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
         [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
         [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
@@ -121,6 +123,8 @@ namespace Isle.Native
         /// Просит окно (точнее, его поле с фокусом) включить следующую установленную раскладку.
         /// Возвращает раскладку, которую попросили, или IntPtr.Zero.
         /// </summary>
+        [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+
         public static IntPtr RequestNextLayout(IntPtr target)
         {
             try
@@ -131,7 +135,10 @@ namespace Isle.Native
                 var list = new IntPtr[n];
                 GetKeyboardLayoutList(n, list);
                 var focus = FocusWindowOf(target);
-                int i = Array.IndexOf(list, LayoutOf(focus));
+                // сравниваем по языку (младшие 16 бит): у окон старшая часть HKL бывает другой, и полный код
+                // в списке не находился — Isle «переключал» на ту же раскладку, и ничего не происходило
+                int cur = (int)((long)LayoutOf(focus) & 0xFFFF);
+                int i = Array.FindIndex(list, h => (int)((long)h & 0xFFFF) == cur);
                 var next = list[(i + 1 + n) % n];
                 PostMessage(focus, 0x0050, new IntPtr(1), next); // WM_INPUTLANGCHANGEREQUEST, INPUTLANGCHANGE_SYSCHARSET
                 if (focus != target) PostMessage(target, 0x0050, new IntPtr(1), next);

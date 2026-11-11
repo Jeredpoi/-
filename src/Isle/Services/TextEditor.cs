@@ -15,11 +15,11 @@ namespace Isle.Services
     {
         // что сделать…
         private static readonly Regex Verb = new(
-            @"\b(сделай|перепиши|переделай|исправь|поправь|оформи|переведи|сократи|расширь|улучши|перефразируй|отредактируй|смягчи|допиши|убери|замени|дополни|вежливее|официальн|короче|грамотн)",
+            @"\b(сделай|перепиши|переделай|исправь|поправь|оформи|переведи|сократи|расширь|улучши|перефразируй|отредактируй|смягчи|допиши|убери|замени|дополни|вежливее|официальн|короче|грамотн|преобраз|переформулир|оформ)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
         // …и с чем: с текстом / сообщением в поле
         private static readonly Regex Target = new(
-            @"(текст|сообщени|написанн|набранн|напечатанн|абзац|предложени|письм|фраз|пост|комментари|в поле|выделенн)",
+            @"(текст|сообщени|написанн|набранн|напечатанн|абзац|предложени|письм|фраз|пост|комментари|в поле|выделенн|написал|напечатал|набрал)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static bool IsEditRequest(string command) =>
@@ -110,7 +110,7 @@ namespace Isle.Services
         private static void Show(string title, string sub, double seconds, bool failed = false) =>
             ToastBus.Show(new Toast
             {
-                Kind = failed ? ToastKind.Info : ToastKind.Success, Title = title, Subtitle = sub,
+                Kind = failed ? ToastKind.Error : ToastKind.Success, Title = title, Subtitle = sub,
                 Icon = failed ? Icons.Info : Icons.Chat, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(seconds)
             });
     }

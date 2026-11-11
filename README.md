@@ -72,9 +72,45 @@ Steam и браузеры прямо в чёлке: картинка игры, �
 
 ---
 
-<!--
-  Скриншоты: положи настоящие снимки в docs/screenshots и верни сюда блок «Как выглядит».
--->
+## 🖼 Как выглядит
+
+<p align="center">
+  <img src="docs/screenshots/collapsed.png" width="290" alt="Свёрнутая чёлка">
+  &nbsp;
+  <img src="docs/screenshots/toast.png" width="420" alt="Всплывашка пипетки">
+</p>
+<p align="center"><sub>Свёрнутая чёлка · всплывашка пипетки</sub></p>
+
+<p align="center">
+  <img src="docs/screenshots/download.png" width="410" alt="Загрузка игры в Steam">
+  &nbsp;
+  <img src="docs/screenshots/volume.png" width="360" alt="Громкость">
+</p>
+<p align="center">
+  <img src="docs/screenshots/caps.png" width="326" alt="Caps Lock">
+  &nbsp;
+  <img src="docs/screenshots/layout.png" width="304" alt="Раскладка">
+</p>
+<p align="center"><sub>Загрузка игры в Steam · громкость · Caps Lock · смена раскладки</sub></p>
+
+<p align="center"><img src="docs/screenshots/home.png" width="820" alt="Главная"></p>
+<p align="center"><sub>Главная: инструменты, громкость, полка ярлыков</sub></p>
+
+<details>
+<summary><b>Ещё вкладки: погода, чат, заметки, текст, управление</b></summary>
+<br>
+
+<p align="center"><img src="docs/screenshots/weather.png" width="820" alt="Погода"><br><sub>Погода</sub></p>
+<p align="center"><img src="docs/screenshots/chat.png" width="820" alt="Чат с ИИ"><br><sub>Чат с ИИ</sub></p>
+<p align="center"><img src="docs/screenshots/notes.png" width="820" alt="Заметки и таймер"><br><sub>Заметки, таймер и напоминания</sub></p>
+<p align="center"><img src="docs/screenshots/text.png" width="820" alt="Текст"><br><sub>Инструменты для текста</sub></p>
+<p align="center"><img src="docs/screenshots/controls.png" width="820" alt="Управление"><br><sub>Управление</sub></p>
+
+</details>
+
+<sub>Снимки сделаны самой программой. Музыка в момент съёмки не играла — поэтому на «Главной» нет плеера.</sub>
+
+---
 
 ## ✨ Что умеет
 
@@ -244,7 +280,7 @@ dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true 
 
 <br>
 
-<img src="docs/icon.png" width="220" alt="Клоди">
+<img src="docs/screenshots/clawd-headphones.png" width="420" alt="Клоди в наушниках">
 
 # Клоди
 
@@ -252,6 +288,12 @@ dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true 
 
 Танцует под музыку — танец подбирается под ритм песни, спит ночью,<br>
 думает вместе с ИИ, радуется ответу и переодевается по погоде.
+
+<br><br>
+
+<img src="docs/screenshots/clawd-dance.gif" width="520" alt="Клоди танцует">
+
+<sub>прыжки · диско · кружится · брейк-данс</sub>
 
 <br>
 

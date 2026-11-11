@@ -12,7 +12,8 @@ namespace Isle.Helpers
     /// — под музыку показывает спектр: басы слева, высокие справа, кончики всплесков — цвета обложки;
     /// — тянется к курсору, когда тот рядом;
     /// — провисает, когда пользователь отошёл;
-    /// — роняет каплю, когда что-то получилось, и капает в дождь.
+    /// — роняет каплю, когда что-то получилось, и капает в дождь;
+    /// — «ощетинивается» дрожащими шипами, пока звенит будильник/таймер.
     /// Рисуется под островом, клики пропускает.
     /// </summary>
     public class LiquidEdge : FrameworkElement
@@ -35,6 +36,10 @@ namespace Isle.Helpers
         public bool Raining { get; set; }
         public bool Away { get; set; }
         public bool Active { get; set; } = true;
+        /// <summary>Звенит будильник: край выпускает острые дрожащие шипы с красным свечением.</summary>
+        public bool Bristle { get; set; }
+        private double _bristle;
+        private static readonly Color AlarmGlow = Color.FromRgb(0xFF, 0x5A, 0x5A);
 
         public LiquidEdge()
         {
@@ -75,7 +80,9 @@ namespace Isle.Helpers
                     {
                         double dist = Math.Max(0, dy) + dxOut;
                         targetAmp = 13 * Math.Max(0, 1 - dist / 140.0);
-                        targetX = Math.Clamp(local.X, CornerRadius, w - CornerRadius);
+                        // центр выпуклости держим подальше от углов: у самого угла кривая уходила вниз почти отвесно
+                        double margin = CornerRadius + 26;
+                        targetX = margin < w / 2 ? Math.Clamp(local.X, margin, w - margin) : w / 2;
                     }
                 }
                 catch { }
@@ -100,15 +107,22 @@ namespace Isle.Helpers
                 if (d.Life <= 0 || d.Y > ActualHeight) _drops.RemoveAt(i);
             }
 
+            // шипы будильника: вырастают быстро, втягиваются мягче
+            _bristle += ((Bristle && Active ? 1 : 0) - _bristle) * FrameClock.Lerp(Bristle ? 0.12 : 0.08);
+            if (_bristle < 0.002) _bristle = 0;
+            double now = Environment.TickCount64 / 1000.0;
+
             // профиль края
-            bool any = _bulgeAmp > 0.05 || _sag > 0.05 || _drops.Count > 0;
+            bool any = _bulgeAmp > 0.05 || _sag > 0.05 || _drops.Count > 0 || _bristle > 0;
             double r = CornerRadius;
             double span = Math.Max(1, w - 2 * r);
             for (int i = 0; i < Samples; i++)
             {
                 double t = i / (double)(Samples - 1);
                 double x = r + t * span;
-                double taper = Math.Sin(Math.PI * t); // к углам — ноль
+                // к углам — ноль, и так же плавно, как скругление угла: без излома в месте стыка
+                double s0 = Math.Sin(Math.PI * t);
+                double taper = s0 * s0 * (3 - 2 * s0);
                 double fb = t * (_spec.Length - 1);
                 int b0 = (int)fb; int b1 = Math.Min(_spec.Length - 1, b0 + 1);
                 double k = fb - b0; k = (1 - Math.Cos(k * Math.PI)) / 2;
@@ -116,7 +130,15 @@ namespace Isle.Helpers
                 double music = Math.Pow(band, 1.35) * 15;
                 double bulge = _bulgeAmp * Math.Exp(-Math.Pow((x - _bulgeX) / 34.0, 2));
                 double sag = _sag * Math.Exp(-Math.Pow((t - 0.5) / 0.28, 2));
-                _depth[i] = (music + bulge + sag) * Math.Pow(taper, 0.6);
+                double spike = 0;
+                if (_bristle > 0)
+                {
+                    // нечётные точки — острия, чётные — впадины между ними; шипы растут от центра к краям и дрожат
+                    double reach = Math.Clamp(_bristle * 1.6 - Math.Abs(t - 0.5) * 1.2, 0, 1);
+                    double jitter = 0.6 + 0.4 * Math.Sin(now * 19 + i * 1.7) * Math.Sin(now * 7.3 + i * 0.9);
+                    spike = (i % 2 == 1 ? 10 * jitter : 1.2) * reach;
+                }
+                _depth[i] = (music + bulge + sag + spike) * taper;
                 if (_depth[i] > 0.05) any = true;
             }
             if (any || _wasAny) InvalidateVisual();
@@ -144,9 +166,10 @@ namespace Isle.Helpers
                     c.BeginFigure(new Point(r - 2, -1), true, true);
                     var pts = _pts;
                     for (int i = 0; i < Samples; i++) pts[i] = new Point(r + i / (double)(Samples - 1) * span, _depth[i] - 0.5);
-                    // гладкая кривая через точки (Катмулл-Ром → Безье)
+                    // гладкая кривая через точки (Катмулл-Ром → Безье); когда шипы — острые ломаные
                     for (int i = 0; i < pts.Length - 1; i++)
                     {
+                        if (_bristle > 0.3) { c.LineTo(pts[i + 1], true, true); continue; }
                         var p0 = pts[Math.Max(0, i - 1)]; var p1 = pts[i]; var p2 = pts[i + 1]; var p3 = pts[Math.Min(pts.Length - 1, i + 2)];
                         var c1 = new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6);
                         var c2 = new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6);
@@ -165,6 +188,7 @@ namespace Isle.Helpers
                     c.LineTo(_pts[0], true, true);
                     for (int i = 0; i < _pts.Length - 1; i++)
                     {
+                        if (_bristle > 0.3) { c.LineTo(_pts[i + 1], true, true); continue; }
                         var p0 = _pts[Math.Max(0, i - 1)]; var p1 = _pts[i]; var p2 = _pts[i + 1]; var p3 = _pts[Math.Min(_pts.Length - 1, i + 2)];
                         c.BezierTo(new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6),
                                    new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6), p2, true, true);
@@ -179,13 +203,15 @@ namespace Isle.Helpers
                 // кончики всплесков светятся цветом обложки
                 double musicLevel = 0;
                 foreach (var v in _spec) musicLevel = Math.Max(musicLevel, v);
+                var tipColor = _bristle > musicLevel ? AlarmGlow : SpikeColor;
+                musicLevel = Math.Max(musicLevel, _bristle);
                 if (musicLevel > 0.05)
                 {
                     var tip = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.Absolute };
                     tip.StartPoint = new Point(0, 2);
                     tip.EndPoint = new Point(0, Math.Max(4, maxDepth));
-                    tip.GradientStops.Add(new GradientStop(Color.FromArgb(0, SpikeColor.R, SpikeColor.G, SpikeColor.B), 0));
-                    tip.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(230 * Math.Min(1, musicLevel * 1.4)), SpikeColor.R, SpikeColor.G, SpikeColor.B), 1));
+                    tip.GradientStops.Add(new GradientStop(Color.FromArgb(0, tipColor.R, tipColor.G, tipColor.B), 0));
+                    tip.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(230 * Math.Min(1, musicLevel * 1.4)), tipColor.R, tipColor.G, tipColor.B), 1));
                     dc.DrawGeometry(tip, null, g);
                 }
             }

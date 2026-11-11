@@ -35,6 +35,7 @@ namespace Isle.Services
         public void Start(string hint = null)
         {
             if (Recording) return;
+            Journal.Info("voice", "запись голоса: старт" + (hint != null ? " (" + hint + ")" : ""));
             try
             {
                 var dev = new MMDeviceEnumerator().GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
@@ -55,7 +56,7 @@ namespace Isle.Services
             catch (Exception ex)
             {
                 _capture = null;
-                ToastBus.Show(new Toast { Title = "Микрофон недоступен", Subtitle = ex.Message, Icon = Icons.Mic, Important = true, Duration = TimeSpan.FromSeconds(4) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Микрофон недоступен", Subtitle = ex.Message, Icon = Icons.Mic, Important = true, Duration = TimeSpan.FromSeconds(4) });
             }
         }
 
@@ -97,42 +98,45 @@ namespace Isle.Services
                 System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => _ = StopAsync(null));
         }
 
-        public async Task StopAsync(Action<string> onText)
+        /// <param name="command">Голосовая команда ИИ (Ctrl+Alt+A): распознаём бесплатным Groq, если есть его ключ.</param>
+        public async Task StopAsync(Action<string> onText, bool command = false)
         {
             if (!Recording) return;
+            Journal.Info("voice", "запись голоса: стоп, " + (command ? "команда" : "в текст"));
             var cap = _capture;
+            var buffer = _pcm; // своя запись: новая, начатая за эти 150 мс, сюда не попадёт и не потеряется
             _capture = null;
             try { cap.StopRecording(); } catch { }
             await Task.Delay(150); // последние куски звука
             cap.DataAvailable -= OnData;
             cap.Dispose();
             RecordingChanged?.Invoke(false);
-            var pcm = TrimSilence(_pcm.ToArray());
-            _pcm = null;
+            var pcm = TrimSilence(buffer.ToArray());
+            if (ReferenceEquals(_pcm, buffer)) _pcm = null;
             if (pcm == null)
             {
-                ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
             if (pcm.Length < 16000) // меньше половины секунды
             {
-                ToastBus.Show(new Toast { Title = "Слишком коротко", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Слишком коротко", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
             ToastBus.Show(new Toast { Title = "Распознаю…", Icon = Icons.Mic, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(30) });
             string text;
-            try { text = await TranscribeAsync(Wav(pcm)); }
+            try { text = await TranscribeAsync(Wav(pcm), command); }
             catch (Exception ex)
             {
-                ToastBus.Show(new Toast { Title = "Не удалось распознать", Subtitle = ex.Message, Icon = Icons.Mic, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(6) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Не удалось распознать", Subtitle = ex.Message, Icon = Icons.Mic, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(6) });
                 return;
             }
             if (string.IsNullOrWhiteSpace(text))
             {
-                ToastBus.Show(new Toast { Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Тишина — ничего не услышал", Icon = Icons.Mic, ReplaceKey = "voice", Important = true });
                 return;
             }
-            if (AppSettings.Current.VoicePunctuate) text = await AiService.PunctuateAsync(text);
+            if (AppSettings.Current.VoicePunctuate && !command) text = await AiService.PunctuateAsync(text); // команде знаки не нужны — экономим запрос
             if (onText != null)
             {
                 // текст нужен программе (чат, голосовая команда) — буфер не трогаем
@@ -172,16 +176,33 @@ namespace Isle.Services
             return "";
         }
 
-        public static async Task<string> TranscribeAsync(byte[] wav)
+        private const string GroqBase = "https://api.groq.com/openai/v1";
+
+        /// <summary>Ключ Groq: из раздела «ИИ» (если там Groq) или из «Голос в текст» (если там Groq). Пусто — ключа нет.</summary>
+        public static string GroqKey(AppSettings s)
+        {
+            static bool IsGroq(string url) { try { return new Uri(url).Host.EndsWith("groq.com", StringComparison.OrdinalIgnoreCase); } catch { return false; } }
+            if (IsGroq(s.AiBaseUrl) && !string.IsNullOrWhiteSpace(s.AiKey)) return s.AiKey;
+            if (IsGroq(s.VoiceBaseUrl)) return KeyFor(s);
+            return "";
+        }
+
+        public static async Task<string> TranscribeAsync(byte[] wav, bool command = false)
         {
             var s = AppSettings.Current;
             var key = KeyFor(s);
+            string baseUrl = s.VoiceBaseUrl, model = string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3" : s.VoiceModel;
+            // Голосовые команды — всегда через бесплатный Groq (платный сервис из настроек — только для диктовки Ctrl+Alt+D)
+            if (command && GroqKey(s) is { Length: > 0 } groq)
+            {
+                key = groq; baseUrl = GroqBase; model = "whisper-large-v3";
+            }
             if (string.IsNullOrWhiteSpace(key)) throw new Exception("нужен ключ: Настройки → Голос в текст");
             using var form = new MultipartFormDataContent();
             var file = new ByteArrayContent(wav);
             file.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             form.Add(file, "file", "voice.wav");
-            form.Add(new StringContent(string.IsNullOrWhiteSpace(s.VoiceModel) ? "whisper-large-v3" : s.VoiceModel), "model");
+            form.Add(new StringContent(model), "model");
             if (!string.IsNullOrEmpty(s.VoiceLanguage)) form.Add(new StringContent(s.VoiceLanguage), "language");
             form.Add(new StringContent("json"), "response_format");
             // подсказка-образец с пунктуацией: Whisper подстраивается под стиль и сам ставит точки, запятые и вопросы
@@ -189,7 +210,7 @@ namespace Isle.Services
                 ? "Hello! How are you? I'm fine, thanks. Let's meet tomorrow at nine, okay?"
                 : "Привет! Как дела? У меня всё хорошо, спасибо. Давай встретимся завтра в девять, хорошо?";
             form.Add(new StringContent(hint), "prompt");
-            using var req = new HttpRequestMessage(HttpMethod.Post, s.VoiceBaseUrl.TrimEnd('/') + "/audio/transcriptions") { Content = form };
+            using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/audio/transcriptions") { Content = form };
             req.Headers.Add("Authorization", "Bearer " + key.Trim());
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();

@@ -15,6 +15,9 @@ namespace Isle.Services
 {
     public sealed class SteamDownload
     {
+        public int AppId { get; init; }
+        /// <summary>Этап по сводке Steam («Загрузка», «Установка»…), null — неизвестно.</summary>
+        public string Phase { get; init; }
         public string Name { get; init; }
         public double Progress { get; init; }
         public double BytesPerSecond { get; init; }
@@ -23,6 +26,9 @@ namespace Isle.Services
         public string FolderPath { get; init; }
         public bool IsPaused { get; init; }
         public bool IsEstimatedSpeed { get; init; }
+        /// <summary>Скачано / всего байт (0 — неизвестно).</summary>
+        public long Got { get; init; }
+        public long Total { get; init; }
         // Steam presents completed percent as an integer floor, so don't round 10.6% up to 11%.
         public string ProgressText => (int)Math.Floor(Math.Clamp(Progress, 0, 1) * 100) + "%";
         public string SpeedText => BytesPerSecond > 0 ? (IsEstimatedSpeed ? "~" : "") + FormatBytes(BytesPerSecond) + "/с" : "";
@@ -46,8 +52,8 @@ namespace Isle.Services
         private static readonly Regex AppLine = new(@"AppID\s+(\d+)\s+(?:(?:App|Workshop)\s+)?(?<kind>update|state)\s+(?<action>started|changed|canceled|finished|paused)\s*:?\s*(?<detail>.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BytesLine = new(@"download\s+([\d,]+)\s*/\s*([\d,]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex RateLine = new(@"Current download rate:\s*([\d.,]+)\s*Mbps", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Dictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly Dictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, ImageSource> IconCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, string> NameCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<int, (long Bytes, DateTime At, double Rate)> DownloadSamples = new();
         private static readonly Dictionary<string, (long Bytes, DateTime At)> NetworkSamples = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<int> ObservedActive = new();
@@ -63,6 +69,7 @@ namespace Isle.Services
             public bool Finished;
             public bool Downloading;
             public bool Staging;
+            public bool Installed; // игра уже стоит — это обновление, а не новая установка
             public long Done, Total;
             public DateTime Updated;
             public DateTime StartedAt;
@@ -124,7 +131,7 @@ namespace Isle.Services
                         StartedAt = prior?.StartedAt ?? DateTime.MinValue,
                         Active = prior?.Active ?? false, Paused = prior?.Paused ?? false,
                         Cancelled = prior?.Cancelled ?? false, Finished = prior?.Finished ?? false,
-                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false
+                        Downloading = prior?.Downloading ?? false, Staging = prior?.Staging ?? false, Installed = prior?.Installed ?? false
                     };
                     var bytes = BytesLine.Match(detail);
                     if (bytes.Success && long.TryParse(bytes.Groups[1].Value.Replace(",", ""), out var done) && long.TryParse(bytes.Groups[2].Value.Replace(",", ""), out var total))
@@ -170,6 +177,7 @@ namespace Isle.Services
                     }
                     else if (kind == "state" && action == "changed")
                     {
+                        state.Installed = normalized.Contains("fully installed");
                         if (normalized.Contains("update paused") || normalized.Contains("suspended"))
                         { state.Active = false; state.Paused = true; }
                         else if (state.Cancelled)
@@ -210,6 +218,7 @@ namespace Isle.Services
                             Name = !string.IsNullOrWhiteSpace(finished?.Name) ? finished.Name : FindAppName(root, state.Id) ?? "Steam · App " + state.Id,
                             Icon = FindAppIcon(root, state.Id),
                             FolderPath = finished == null ? null : GetInstallFolder(finished),
+                            Total = finished?.DownloadTotal ?? 0,
                             Progress = 1
                         });
                     }
@@ -226,33 +235,59 @@ namespace Isle.Services
                 // Главная скорость — входящий трафик сети: это ровно то, что Steam показывает как «Сеть».
                 // «Current download rate» в логе Steam пишет редко и усреднённо, поэтому он занижал скорость в 2–3 раза.
                 // Лог и appmanifest — запасные варианты, если трафик измерить не удалось.
-                double netRate = !current.Paused && !current.Staging ? SmoothNetRate(GetSystemReceiveRate(now)) : 0;
+                // Счётчики сетевой карты считают пакеты целиком, с заголовками IP/TCP (52 байта на 1500-байтный пакет ≈ 3,5 %),
+                // а Steam показывает только полезные данные — убираем заголовки, иначе скорость выходит выше, чем в Steam.
+                double netRate = !current.Paused ? SmoothNetRate(GetSystemReceiveRate(now)) * PayloadShare : 0;
                 double rateBytes = netRate;
                 bool estimatedSpeed = false;
                 var fresh = samples.Where(x => now - x.At < TimeSpan.FromSeconds(20)).TakeLast(3).ToList();
                 if (rateBytes <= 0 && current.Downloading && fresh.Count > 0) rateBytes = fresh.Average(x => x.BytesPerSecond);
                 if (rateBytes <= 0) rateBytes = manifestRate;
+
                 if (rateBytes <= 0 && samples.Count > 0 && now - samples[^1].At < TimeSpan.FromSeconds(90))
                 {
                     rateBytes = samples[^1].BytesPerSecond; // последняя известная скорость из лога — как оценка
                     estimatedSpeed = rateBytes > 0;
                 }
-                var useStage = current.Staging || (!current.Downloading && manifest?.Staged > 0);
-                long progressDone = useStage ? manifest?.Staged ?? 0 : manifest?.Downloaded ?? current.Done;
-                long progressTotal = useStage ? manifest?.StageTotal ?? 0 : manifest?.DownloadTotal ?? current.Total;
+                // Steam качает и распаковывает одновременно: «Загрузка данных 3,3 / 97,3 ГБ» и «Установка файлов 3%».
+                // Пока данные ещё качаются, показываем именно загрузку (как главная строка в Steam);
+                // установку (BytesStaged / BytesToStage) — только когда скачивать уже нечего.
+                long dlDone = manifest?.Downloaded ?? current.Done, dlTotal = manifest?.DownloadTotal ?? current.Total;
+                if (dlTotal <= 0 && current.Total > 0) { dlDone = current.Done; dlTotal = current.Total; }
+                bool downloadLeft = dlTotal > 0 && dlDone < dlTotal;
+                // Обновление установленной игры: почти всё берётся с диска, и главный процент в Steam — установка файлов.
+                // Новая установка: главное — «Загрузка данных», установка показывается, только когда скачивать уже нечего.
+                var useStage = current.Installed
+                    ? current.Staging || (!current.Downloading && manifest?.Staged > 0)
+                    : !downloadLeft && manifest?.StageTotal > 0 && manifest.Staged < manifest.StageTotal;
+                long progressDone = useStage ? manifest?.Staged ?? 0 : dlDone;
+                long progressTotal = useStage ? manifest?.StageTotal ?? 0 : dlTotal;
+                if (useStage && !downloadLeft) { rateBytes = 0; estimatedSpeed = false; } // данные скачаны, идёт только установка — сеть не при чём
                 // Steam пишет байты в appmanifest редко (раз в десятки секунд), поэтому проценты «прыгали».
-                // Между записями досчитываем по скорости, как это делает сам клиент Steam.
-                if (!useStage) progressDone = Smooth(current.Id, progressDone, progressTotal, rateBytes, now);
+                // Между записями досчитываем по реальной скорости записи данных (не по сети — та чуть выше из-за заголовков).
+                double fillRate = manifestRate > 0 ? manifestRate : rateBytes;
+                if (!useStage) progressDone = Smooth(current.Id, progressDone, progressTotal, fillRate, now);
                 var progress = progressTotal > 0 ? Math.Clamp((double)progressDone / progressTotal, 0, 1) : 0;
+                // Новая установка: Steam пишет скачанные байты в appmanifest редко, а «Установка файлов» растёт заметно —
+                // процент берём больший из двух (сжатые данные скачиваются раньше, чем распаковываются)
+                if (!useStage && !current.Installed && manifest?.StageTotal > 0)
+                    progress = Math.Max(progress, Math.Clamp((double)manifest.Staged / manifest.StageTotal, 0, 1));
                 var remainingBytes = Math.Max(0, progressTotal - progressDone);
-                var downloadRemaining = Math.Max(0, (manifest?.DownloadTotal ?? current.Total) - (manifest?.Downloaded ?? current.Done));
-                var remaining = rateBytes > 0 && (!useStage || downloadRemaining > 0)
-                    ? TimeSpan.FromSeconds((useStage ? downloadRemaining : remainingBytes) / rateBytes)
+                // Остаток времени Steam считает по тому, как быстро реально растут скачанные данные
+                // (у него это ближе к «использованию диска», чем к скорости сети) — делаем так же.
+                double etaRate = manifestRate > 0 ? manifestRate : rateBytes;
+                // при обновлении время зависит от того, сколько ещё качать (установка с диска идёт параллельно)
+                long etaBytes = useStage ? (downloadLeft ? dlTotal - dlDone : 0) : remainingBytes;
+                var remaining = etaRate > 0 && etaBytes > 0
+                    ? TimeSpan.FromSeconds(SmoothEta(current.Id, etaBytes / etaRate, now))
                     : (TimeSpan?)null;
                 return new SteamDownload
                 {
+                    AppId = current.Id,
                     Name = !string.IsNullOrWhiteSpace(manifest?.Name) ? manifest.Name : FindAppName(root, current.Id) ?? "Steam · App " + current.Id,
                     Progress = progress,
+                    Got = progressDone,
+                    Total = progressTotal,
                     BytesPerSecond = rateBytes,
                     IsEstimatedSpeed = estimatedSpeed,
                     Remaining = remaining,
@@ -265,6 +300,28 @@ namespace Isle.Services
         }
 
         private static readonly Dictionary<int, (long Real, double Est, DateTime At)> Estimates = new();
+        private static readonly Dictionary<int, (double Sec, DateTime At)> Etas = new();
+
+        /// <summary>
+        /// Остаток времени без рывков: между опросами он просто тикает вниз, а к новой оценке
+        /// подтягивается понемногу (раньше прыгал на минуты при каждой записи Steam).
+        /// </summary>
+        internal static double SmoothEta(int appId, double target, DateTime now)
+        {
+            if (Etas.TryGetValue(appId, out var e))
+            {
+                double dt = (now - e.At).TotalSeconds;
+                if (dt >= 0 && dt < 15)
+                {
+                    double ticked = Math.Max(0, e.Sec - dt);
+                    double sec = ticked + (target - ticked) * Math.Min(1, 0.08 * Math.Max(dt, 0.25) / 0.5);
+                    Etas[appId] = (sec, now);
+                    return sec;
+                }
+            }
+            Etas[appId] = (target, now);
+            return target;
+        }
 
         /// <summary>
         /// Плавный прогресс между редкими записями Steam: растёт со скоростью загрузки, никогда не идёт назад,
@@ -297,6 +354,30 @@ namespace Isle.Services
                 if (Directory.Exists(apps)) yield return (apps, "appmanifest_*.acf");
             }
         }
+
+        private static readonly ConcurrentDictionary<int, (string Name, ImageSource Icon, string Folder)> InfoCache = new();
+
+        /// <summary>Название, обложка и папка игры по её номеру в Steam (для живой сводки Steam).</summary>
+        public static (string Name, ImageSource Icon, string Folder) AppInfo(int appId)
+        {
+            if (InfoCache.TryGetValue(appId, out var cached)) return cached;
+            // неполные сведения (игра только начала ставиться: нет appmanifest или обложки) держим 5 с и пробуем снова —
+            // иначе файлы Steam перечитывались бы на каждую сводку, то есть каждую секунду
+            if (InfoPending.TryGetValue(appId, out var pending) && DateTime.Now - pending.At < TimeSpan.FromSeconds(5)) return pending.Info;
+            var root = FindSteamRoot();
+            if (root == null) return ("Steam · App " + appId, null, null);
+            var m = ReadManifestProgress(root, appId);
+            var info = (!string.IsNullOrWhiteSpace(m?.Name) ? m.Name : FindAppName(root, appId) ?? "Steam · App " + appId,
+                        FindAppIcon(root, appId), m == null ? null : GetInstallFolder(m));
+            if (m != null && info.Item2 != null) { InfoCache[appId] = info; InfoPending.TryRemove(appId, out _); }
+            else InfoPending[appId] = (info, DateTime.Now);
+            return info;
+        }
+
+        private static readonly ConcurrentDictionary<int, ((string Name, ImageSource Icon, string Folder) Info, DateTime At)> InfoPending = new();
+
+        /// <summary>Папка Steam (null — Steam не найден).</summary>
+        public static string SteamRoot() => FindSteamRoot();
 
         private static string FindSteamRoot()
         {
@@ -417,12 +498,13 @@ namespace Isle.Services
 
         /// <summary>При отсутствии свежей Steam-выборки оценивает входящий трафик активного скачивания по сетевым счётчикам Windows.</summary>
         private static double _netEma;
+        private const double PayloadShare = 1448.0 / 1500.0;
 
         /// <summary>Сглаживание скорости сети (без скачков от секунды к секунде), как на графике Steam.</summary>
         private static double SmoothNetRate(double rate)
         {
             if (rate <= 0) return _netEma *= 0.6; // пауза в трафике — плавно вниз, а не сразу в ноль
-            _netEma = _netEma <= 0 ? rate : _netEma * 0.55 + rate * 0.45;
+            _netEma = _netEma <= 0 ? rate : _netEma * 0.85 + rate * 0.15; // опрос раз в 0,5 с — сглаживаем сильнее
             return _netEma;
         }
 
@@ -459,7 +541,7 @@ namespace Isle.Services
                     // миниатюра для кружка в чёлке: декодируем маленькой, чтобы не держать в памяти обложки 600×900
                     var image = new BitmapImage();
                     image.BeginInit(); image.UriSource = new Uri(path); image.CacheOption = BitmapCacheOption.OnLoad;
-                    image.DecodePixelHeight = 96; image.EndInit(); image.Freeze();
+                    image.DecodePixelHeight = 192; image.EndInit(); image.Freeze(); // 192 — запас под масштаб экрана 150–200 %
                     return IconCache[cacheKey] = image;
                 }
                 catch { }
@@ -486,13 +568,13 @@ namespace Isle.Services
                     List<string> files;
                     try { files = Directory.EnumerateFiles(appDir, "*.*", SearchOption.AllDirectories).ToList(); }
                     catch { files = new List<string>(); }
-                    // квадратная иконка игры: файл с именем-хэшем (40 шестнадцатеричных символов) прямо в папке игры
-                    foreach (var f in files.Where(f => Path.GetDirectoryName(f) == appDir
-                                 && Regex.IsMatch(Path.GetFileNameWithoutExtension(f), "^[0-9a-f]{40}$") && f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
-                        yield return f;
+                    // сначала большие обложки — квадратная иконка игры всего 32×32 и в кружке выходила размытой
                     foreach (var name in names)
                         foreach (var f in files.Where(f => Path.GetFileName(f).Equals(name, StringComparison.OrdinalIgnoreCase)))
                             yield return f;
+                    foreach (var f in files.Where(f => Path.GetDirectoryName(f) == appDir
+                                 && Regex.IsMatch(Path.GetFileNameWithoutExtension(f), "^[0-9a-f]{40}$") && f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+                        yield return f;
                 }
                 foreach (var name in new[] { id + "_icon.jpg", id + "_library_600x900.jpg", id + "_header.jpg", id + "_logo.png" })
                 {

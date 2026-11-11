@@ -14,13 +14,13 @@ namespace Isle.Overlays
     public enum CaptureMode { Region, Ocr, Qr, Pipette }
 
     /// <summary>Полноэкранный слой поверх «замороженного» снимка экрана: выделение области или пипетка.</summary>
-    public class CaptureOverlay : Window
+    public partial class CaptureOverlay : Window
     {
         private readonly BitmapSource _shot;
         private readonly CaptureMode _mode;
         private readonly Int32Rect _vs;
         private readonly Canvas _canvas = new();
-        private readonly Rectangle _sel = new() { Stroke = Brushes.White, StrokeThickness = 1.5, Fill = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), Visibility = Visibility.Collapsed };
+        private readonly Rectangle _sel = new() { Stroke = Brushes.White, StrokeThickness = 1.5, Fill = null, Visibility = Visibility.Collapsed }; // без заливки — снимок внутри не высветляется
         private readonly Path _dim = new() { Fill = new SolidColorBrush(Color.FromArgb(110, 0, 0, 0)) };
         private readonly Border _hint;
         private readonly TextBlock _hintText;
@@ -35,6 +35,7 @@ namespace Isle.Overlays
         private CaptureOverlay(BitmapSource shot, Int32Rect vs, CaptureMode mode)
         {
             _shot = shot; _vs = vs; _mode = mode;
+            Journal.Info("capture", mode + ": слой открыт, экран " + vs.X + "," + vs.Y + " " + vs.Width + "×" + vs.Height + ", снимок " + shot.PixelWidth + "×" + shot.PixelHeight + " " + shot.Format);
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
@@ -70,7 +71,7 @@ namespace Isle.Overlays
 
             _hintText.Text = mode switch
             {
-                CaptureMode.Region => "Выдели область — снимок попадёт в буфер · Esc — отмена",
+                CaptureMode.Region => "Выдели область — дальше можно скрыть текст и порисовать · Esc — отмена",
                 CaptureMode.Ocr => "Выдели текст для распознавания · Esc — отмена",
                 CaptureMode.Qr => "Выдели QR-код · Esc — отмена",
                 _ => "Наведи и кликни, чтобы скопировать цвет · Esc — отмена"
@@ -88,20 +89,22 @@ namespace Isle.Overlays
                 UpdateDim(Rect.Empty);
                 _escPoll.Start();
             };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) Finish(null); };
+            KeyDown += (_, e) => { if (e.Key == Key.Escape) { OnEscape(); e.Handled = true; } else OnMarkupKey(e); };
             // Подстраховка: Esc ловим напрямую с клавиатуры, даже если окно так и не получило фокус
             _escPoll.Tick += (_, __) =>
             {
                 bool down = (Isle.Native.Win32.GetAsyncKeyState(0x1B) & 0x8000) != 0;
-                if (down && !_escWasDown && _escArmed) Finish(null);
+                // своё окно в фокусе — Esc уже обработан в KeyDown (там он сначала отменяет набираемый текст)
+                if (down && !_escWasDown && _escArmed && !IsKeyboardFocusWithin) OnEscape();
                 _escWasDown = down;
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
-            Closed += (_, __) => _escPoll.Stop();
+            // окно закрыли не через Finish (Alt+F4 и т. п.) — всё равно завершаем, иначе чёлка останется скрытой, а снимки — заблокированы
+            Closed += (_, __) => { _escPoll.Stop(); _tcs.TrySetResult(null); };
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
-            MouseRightButtonDown += (_, __) => Finish(null);
+            MouseRightButtonDown += (_, __) => { if (!_markup) Finish(null); };
             if (mode == CaptureMode.Pipette)
             {
                 // пиксели готовим в фоне — слой появляется сразу, без подвисания
@@ -113,18 +116,34 @@ namespace Isle.Overlays
             }
         }
 
-        public static Task<object> Run(CaptureMode mode)
+        private static CaptureOverlay _open;
+        private static int _openCount;
+
+        public static Task<object> Run(CaptureMode mode, BitmapSource shot = null)
         {
+            // прошлый слой почему-то остался на экране — закрываем, иначе он попадёт в новый снимок второй панелью
+            if (_open != null) { try { _open.Finish(null); } catch { } _open = null; }
             var vs = ScreenTools.VirtualScreen();
-            var shot = ScreenTools.Capture(vs);
+            shot ??= ScreenTools.Capture(vs);
             var w = new CaptureOverlay(shot, vs, mode);
+            _open = w; _openCount++;
+            w.Closed += (_, __) => { _openCount--; if (ReferenceEquals(_open, w)) _open = null; };
             w.Show();
             return w._tcs.Task;
         }
 
+        private readonly System.Diagnostics.Stopwatch _openedFor = System.Diagnostics.Stopwatch.StartNew();
+
         private void Finish(object result)
         {
             if (_tcs.Task.IsCompleted) return;
+            Journal.Info("capture", _mode + ": " + (result switch
+            {
+                null => "отменено",
+                BitmapSource b => "готово " + b.PixelWidth + "×" + b.PixelHeight + (_markup ? " (с пометками)" : ""),
+                Color c => "цвет " + Hex(c),
+                _ => result.GetType().Name
+            }) + " через " + _openedFor.ElapsedMilliseconds + " мс");
             _tcs.TrySetResult(result);
             Close();
         }
@@ -134,8 +153,10 @@ namespace Isle.Overlays
 
         private void OnDown(object s, MouseButtonEventArgs e)
         {
+            if (_markup) { CommitMarkText(); return; }
             if (_mode == CaptureMode.Pipette)
             {
+                if (_px == null) return; // пиксели ещё готовятся (4K, несколько мониторов) — иначе скопировался бы чёрный
                 var c = ColorAt(e.GetPosition(this));
                 Finish(c);
                 return;
@@ -147,6 +168,7 @@ namespace Isle.Overlays
 
         private void OnMove(object s, MouseEventArgs e)
         {
+            if (_markup) return;
             var p = e.GetPosition(_canvas);
             if (_mode == CaptureMode.Pipette)
             {
@@ -165,10 +187,12 @@ namespace Isle.Overlays
 
         private void OnUp(object s, MouseButtonEventArgs e)
         {
-            if (_mode == CaptureMode.Pipette || _start == null) return;
+            if (_markup || _mode == CaptureMode.Pipette || _start == null) return;
             ReleaseMouseCapture();
             var r = new Rect(_start.Value, e.GetPosition(_canvas));
+            r.Intersect(new Rect(0, 0, ActualWidth, ActualHeight));
             _start = null;
+            if (r.IsEmpty) { Finish(null); return; }
             if (r.Width < 4 || r.Height < 4) { Finish(null); return; }
             var crop = new Int32Rect(
                 (int)Math.Max(0, r.X * Kx), (int)Math.Max(0, r.Y * Ky),
@@ -177,6 +201,8 @@ namespace Isle.Overlays
             if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
+            // обычный снимок области — сначала пометки прямо на месте (мозаика, стрелки…), «Сохранить» — в чёлку
+            if (_mode == CaptureMode.Region) { EnterMarkup(r, cb); return; }
             Finish(cb);
         }
 

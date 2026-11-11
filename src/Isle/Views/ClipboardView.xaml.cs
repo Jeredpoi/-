@@ -32,9 +32,15 @@ namespace Isle.Views
 
         public void FocusSearch() => Dispatcher.InvokeAsync(() => { Search.Focus(); Search.SelectAll(); }, DispatcherPriority.Input);
 
-        private void UpdateEmpty() => Empty.Visibility = AppHost.Clipboard.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        private void UpdateEmpty()
+        {
+            bool none = AppHost.Clipboard.Items.Count == 0;
+            bool notFound = !none && _view != null && _view.IsEmpty;
+            Empty.Text = none ? "Пока пусто — скопируй что-нибудь (Ctrl+C)" : "Ничего не найдено по «" + Search.Text.Trim() + "»";
+            Empty.Visibility = none || notFound ? Visibility.Visible : Visibility.Collapsed;
+        }
 
-        private void OnSearch(object s, TextChangedEventArgs e) => _view?.Refresh();
+        private void OnSearch(object s, TextChangedEventArgs e) { _view?.Refresh(); UpdateEmpty(); }
 
         private void OnItemClick(object sender, MouseButtonEventArgs e)
         {

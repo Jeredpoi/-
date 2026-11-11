@@ -26,7 +26,7 @@
                         <TextBlock.Effect><DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="0" Opacity="0.6"/></TextBlock.Effect>
                     </TextBlock>
                 </StackPanel>
-                <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium">
+                <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium" TextWrapping="Wrap">
                     <TextBlock.Effect><DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="0" Opacity="0.55"/></TextBlock.Effect>
                 </TextBlock>
                 <TextBlock DockPanel.Dock="Top" x:Name="Snow" FontSize="11" Foreground="{DynamicResource Accent}" Margin="0,3,0,0"/>

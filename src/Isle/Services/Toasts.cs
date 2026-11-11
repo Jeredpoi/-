@@ -3,7 +3,7 @@ using System.Windows.Media;
 
 namespace Isle.Services
 {
-    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Download, Timer, Reminder, Success, Alarm }
+    public enum ToastKind { Info, Layout, Caps, Volume, Battery, Notification, Download, Timer, Reminder, Success, Alarm, Error }
 
     public class Toast
     {
@@ -16,9 +16,20 @@ namespace Isle.Services
         public string Icon { get; set; } = Icons.Info;
         public Color Accent { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public ImageSource Image { get; set; }
+        /// <summary>
+        /// Переключатель (Caps Lock, микрофон, VPN…): true — значок белый на белом круге, false — тусклый и перечёркнут.
+        /// Сразу видно, включилось или выключилось, не читая текст.
+        /// </summary>
+        public bool? On { get; set; }
+        /// <summary>Короткая надпись вместо значка (раскладка: «RU», «EN»).</summary>
+        public string Badge { get; set; }
         /// <summary>Пипетка: слева квадратик с этим цветом в окантовке вместо иконки.</summary>
         public Color? Swatch { get; set; }
         public string FolderPath { get; set; }
+        /// <summary>Файл (снимок): кнопка папки откроет Проводник с выделенным файлом.</summary>
+        public string FilePath { get; set; }
+        /// <summary>Снимок, который можно разметить: справа появляется карандаш — открывает редактор пометок.</summary>
+        public System.Windows.Media.Imaging.BitmapSource EditImage { get; set; }
         /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
         public bool RoundImage { get; set; }
         /// <summary>Уведомление другого приложения: его AppUserModelId — по клику открываем это приложение.</summary>
@@ -30,6 +41,10 @@ namespace Isle.Services
         /// <summary>Тосты с ключом заменяют друг друга без мигания (громкость, раскладка).</summary>
         public string ReplaceKey { get; set; }
         public bool Important { get; set; }
+        /// <summary>Таймер вышел: справа кнопки «Ещё раз» (заново на это время) и ✓ (выключить).</summary>
+        public TimeSpan? RepeatTimer { get; set; }
+        /// <summary>«Внимание» (не ошибка): янтарная плитка — загрузка на паузе и т. п.</summary>
+        public bool Warning { get; set; }
     }
 
     public static class ToastBus
@@ -38,6 +53,10 @@ namespace Isle.Services
 
         public static void Show(Toast t)
         {
+            Journal.Info("toast", t.Kind + (t.Warning ? "/внимание" : "") + (t.On.HasValue ? "/" + (t.On.Value ? "вкл" : "выкл") : "") + " " + Journal.Short(t.Title, 80)
+                + (string.IsNullOrEmpty(t.Subtitle) ? "" : " · " + Journal.Short(t.Subtitle, 120)) + (t.ReplaceKey != null ? " key=" + t.ReplaceKey : "")
+                + (t.Progress.HasValue ? " " + (t.Progress.Value * 100).ToString("0") + "%" : "")
+                + (AppSettings.Current.DoNotDisturb && !t.Important ? " — скрыто («Не беспокоить»)" : ""));
             if (AppSettings.Current.DoNotDisturb && !t.Important) return;
             Raised?.Invoke(t);
         }

@@ -1,6 +1,7 @@
 using System;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
+using Isle.Services;
 
 namespace Isle
 {
@@ -23,13 +24,19 @@ namespace Isle
             _icon = new Forms.NotifyIcon
             {
                 Icon = _img,
-                Text = "Isle — чёлка работает. Ctrl+Alt+Space — открыть",
+                Text = "Isle — чёлка работает. " + AppSettings.Current.Hotkey + " — открыть",
                 ContextMenuStrip = menu,
                 Visible = true
             };
             _icon.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) AppHost.Window?.BringUp(); };
-            _icon.ShowBalloonTip(3000, "Isle запущен",
-                "Чёлка сверху по центру экрана. Наведи курсор на верхний край или нажми Ctrl+Alt+Space.", Forms.ToolTipIcon.None);
+            // подсказка «где чёлка» — только при первом запуске, а не при каждом включении компьютера
+            if (!AppSettings.Current.TrayHintShown)
+            {
+                _icon.ShowBalloonTip(3000, "Isle запущен",
+                    "Чёлка сверху по центру экрана. Наведи курсор на верхний край или нажми " + AppSettings.Current.Hotkey + ".", Forms.ToolTipIcon.None);
+                AppSettings.Current.TrayHintShown = true;
+                AppSettings.Current.Save();
+            }
         }
 
         /// <summary>Значок приложения (Клоди) из ресурсов — тот же, что у exe и ярлыка.</summary>
