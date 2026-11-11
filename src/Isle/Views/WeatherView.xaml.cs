@@ -32,10 +32,15 @@ namespace Isle.Views
             Render();
         }
 
-        public void OnShown() => Render();
+        public void OnShown() => Render(animate: true); // открыли вкладку — цифры «набегают», строки поднимаются
 
-        private void Render()
+        private void Render() => Render(false);
+
+        private void Render(bool animate)
         {
+            // погода обновилась посреди «набегания» цифр — старые счётчики не должны перезаписать свежие значения
+            foreach (var t in _counters.Values) t.Stop();
+            _counters.Clear();
             var w = AppHost.Weather;
             if (w == null)
             {
@@ -59,6 +64,98 @@ namespace Isle.Views
             Hours.ItemsSource = w.Hours;
             Days.ItemsSource = w.Days;
             DrawWeatherBackdrop(w);
+            if (animate) Animate(w);
+        }
+
+        // ===================== оживление при открытии вкладки =====================
+
+        private readonly System.Collections.Generic.Dictionary<TextBlock, System.Windows.Threading.DispatcherTimer> _counters = new();
+
+        /// <summary>
+        /// Открыли «Погоду»: градусы, ветер, влажность и осадки отсчитываются от нуля до настоящих значений,
+        /// значок «выпрыгивает», часы и дни поднимаются по очереди, полоски температур дней вырастают слева направо.
+        /// </summary>
+        private void Animate(WeatherNow w)
+        {
+            var c = CultureInfo.CurrentCulture;
+            CountUp(Temp, w.Temp, 0, v => Math.Round(v) + "°", 750);
+            CountUp(Wind, w.Wind, 0, v => v.ToString("0.#", c) + " м/с " + w.WindFrom, 650);
+            CountUp(Hum, w.Humidity, 0, v => Math.Round(v) + "%", 650);
+            CountUp(Prec, w.Precip, 0, v => v.ToString("0.#", c) + " мм", 650);
+            CountUp(Feels, w.TodayMax, 0, v => "Сегодня " + Math.Round(w.TodayMin) + "°…" + Math.Round(v) + "°", 650);
+
+            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
+            if (GlyphAnim.RenderTransform is not ScaleTransform gs)
+            {
+                GlyphAnim.RenderTransform = gs = new ScaleTransform(1, 1);
+                GlyphAnim.RenderTransformOrigin = new Point(0.5, 0.5);
+            }
+            var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520) };
+            pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.55, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
+            pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            gs.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+            gs.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+
+            // строки появляются, когда WPF создаст их элементы
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Rise(Hours, 10, 35, ease);
+                Rise(Days, 12, 55, ease);
+                // полоски «от мин. до макс.» у дней вырастают слева направо
+                for (int i = 0; i < Days.Items.Count; i++)
+                    if (Days.ItemContainerGenerator.ContainerFromIndex(i) is DependencyObject row && FindBar(row) is Border bar)
+                    {
+                        if (bar.RenderTransform is not ScaleTransform bs) { bar.RenderTransform = bs = new ScaleTransform(1, 1); bar.RenderTransformOrigin = new Point(0, 0.5); }
+                        bs.BeginAnimation(ScaleTransform.ScaleXProperty,
+                            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(600)) { BeginTime = TimeSpan.FromMilliseconds(120 + i * 55), EasingFunction = ease });
+                    }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Число «набегает» от start до target за ms миллисекунд (с замедлением к концу).</summary>
+        private void CountUp(TextBlock tb, double target, double start, Func<double, string> format, int ms)
+        {
+            if (_counters.TryGetValue(tb, out var old)) old.Stop();
+            var began = DateTime.Now;
+            var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+            _counters[tb] = timer;
+            tb.Text = format(start);
+            timer.Tick += (_, __) =>
+            {
+                double k = Math.Min(1, (DateTime.Now - began).TotalMilliseconds / ms);
+                double eased = 1 - Math.Pow(1 - k, 3);
+                tb.Text = format(k >= 1 ? target : start + (target - start) * eased);
+                if (k >= 1) { timer.Stop(); _counters.Remove(tb); }
+            };
+            timer.Start();
+        }
+
+        /// <summary>Элементы списка поднимаются на offset пикселей и проявляются по очереди (шаг stepMs).</summary>
+        private static void Rise(ItemsControl list, double offset, int stepMs, IEasingFunction ease)
+        {
+            for (int i = 0; i < list.Items.Count; i++)
+            {
+                if (list.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement el) continue;
+                var begin = TimeSpan.FromMilliseconds(60 + i * stepMs);
+                if (el.RenderTransform is not TranslateTransform tt) el.RenderTransform = tt = new TranslateTransform();
+                tt.Y = offset; el.Opacity = 0; // до своей очереди — внизу и прозрачный
+                tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offset, 0, TimeSpan.FromMilliseconds(480)) { BeginTime = begin, EasingFunction = ease });
+                el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(360)) { BeginTime = begin });
+            }
+        }
+
+        /// <summary>Полоска температур дня: Border внутри Canvas в шаблоне строки.</summary>
+        private static Border FindBar(DependencyObject root)
+        {
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is Border b && VisualTreeHelper.GetParent(b) is Canvas) return b;
+                if (FindBar(child) is Border found) return found;
+            }
+            return null;
         }
 
         private void OnWeatherFxSizeChanged(object sender, SizeChangedEventArgs e)
