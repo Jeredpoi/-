@@ -45,7 +45,7 @@
                         <DataTemplate>
                             <DockPanel x:Name="row" HorizontalAlignment="Left" Margin="0,0,0,8">
                             <!-- у ответа ИИ — маленький Клоди -->
-                            <Image x:Name="avatar" DockPanel.Dock="Left" Source="{x:Static h:Character.Avatar}" Width="26" Height="24" Stretch="Uniform"
+                            <Image x:Name="avatar" DockPanel.Dock="Left" Source="{Binding Avatar}" Width="26" Height="24" Stretch="Uniform"
                                    VerticalAlignment="Top" Margin="0,6,8,0" RenderOptions.EdgeMode="Aliased"/>
                             <Border x:Name="bubble" CornerRadius="14" Padding="12,9" MaxWidth="680"
                                     HorizontalAlignment="Left" Background="{StaticResource Card}">
