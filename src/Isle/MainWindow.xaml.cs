@@ -586,6 +586,7 @@ namespace Isle
             }
             if (AlarmService.Ringing && State != IslandState.Expanded)
             {
+                if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return; // «Ещё раз» / ✓ — пусть сработает кнопка
                 AlarmService.Stop(); // клик по звенящей чёлке (в любом виде) — выключить будильник
                 e.Handled = true;
                 return;
@@ -1273,12 +1274,14 @@ namespace Isle
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
             ToastIcon.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(260)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
             foreach (var b in _characters) b.Mood = Helpers.Mood.Attention;
+            Edge.Bristle = true; // край «ощетинивается» острыми дрожащими шипами
         }
 
         private void StopAlarmPulse()
         {
             if (!_pulsing) return;
             _pulsing = false;
+            Edge.Bristle = false;
             ToastIcon.BeginAnimation(OpacityProperty, null);
             ToastIcon.Opacity = 1;
             ApplyAppearance(); // вернуть обычный чёрный фон
@@ -1493,12 +1496,16 @@ namespace Isle
             ToastFolderButton.Visibility = hasFolder ? Visibility.Visible : Visibility.Collapsed;
             ToastEditButton.Tag = t;
             ToastEditButton.Visibility = t.EditImage != null ? Visibility.Visible : Visibility.Collapsed;
+            bool alarmButtons = t.Kind == ToastKind.Alarm && t.RepeatTimer.HasValue;
+            if (alarmButtons && ToastAlarmButtons.Visibility != Visibility.Visible) PopAlarmButtons();
+            ToastAlarmButtons.Visibility = alarmButtons ? Visibility.Visible : Visibility.Collapsed;
             PlayToastStatus(t);
 
             double textLen = Math.Max(t.Title.Length + (t.SpeedText?.Length ?? 0) + 2, (t.Subtitle ?? "").Length * 0.86);
             double w = Math.Clamp(tile + 64 + textLen * 8.3, compact ? 230 : 280, 600);
             if (t.Progress.HasValue) w = Math.Max(w, 360);
             if (ToastFolderButton.Visibility == Visibility.Visible || ToastEditButton.Visibility == Visibility.Visible) w += 38;
+            if (alarmButtons) w = Math.Max(w, 250) + 128;
             double h = swatch ? 72 : compact ? 56 : 64;
             if (ToastFolderButton.Visibility == Visibility.Visible && ToastEditButton.Visibility == Visibility.Visible) h = Math.Max(h, 70);
             // запись голоса — вместо полоски волна, как в ChatGPT
@@ -1625,6 +1632,45 @@ namespace Isle
             a.KeyFrames.Add(new EasingDoubleKeyFrame(-degrees, KeyTime.FromPercent(0.75), ease));
             a.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1), ease));
             rot.BeginAnimation(RotateTransform.AngleProperty, a);
+        }
+
+        /// <summary>Таймер вышел → «Ещё раз»: выключить звонок и запустить таймер на то же время.</summary>
+        private void OnToastRepeat(object sender, RoutedEventArgs e)
+        {
+            var total = _currentToast?.RepeatTimer;
+            AlarmService.Stop();
+            if (total is TimeSpan t && t > TimeSpan.Zero) AppHost.Timer.StartNew(t);
+            e.Handled = true;
+        }
+
+        /// <summary>Таймер вышел → ✓: просто выключить.</summary>
+        private void OnToastDone(object sender, RoutedEventArgs e)
+        {
+            AlarmService.Stop();
+            e.Handled = true;
+        }
+
+        /// <summary>Кнопки выезжают справа с лёгкой пружиной — по очереди.</summary>
+        private void PopAlarmButtons()
+        {
+            int k = 0;
+            foreach (FrameworkElement b in new FrameworkElement[] { ToastRepeatButton, ToastDoneButton })
+            {
+                var st = new ScaleTransform(0.6, 0.6);
+                var tt = new TranslateTransform(14, 0);
+                b.RenderTransformOrigin = new Point(0.5, 0.5);
+                var group = new TransformGroup();
+                group.Children.Add(st); group.Children.Add(tt);
+                b.RenderTransform = group;
+                var delay = TimeSpan.FromMilliseconds(120 + 70 * k++);
+                var ease = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut };
+                var dur = TimeSpan.FromMilliseconds(380);
+                st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.6, 1, dur) { BeginTime = delay, EasingFunction = ease });
+                st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.6, 1, dur) { BeginTime = delay, EasingFunction = ease });
+                tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(14, 0, dur) { BeginTime = delay, EasingFunction = ease });
+                b.Opacity = 0;
+                b.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)) { BeginTime = delay });
+            }
         }
 
         private void OnToastFolder(object sender, RoutedEventArgs e)

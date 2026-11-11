@@ -18,14 +18,17 @@ namespace Isle.Services
 
         static AlarmService() { AutoStop.Tick += (_, __) => Stop(); }
 
-        public static void Ring(string title, string subtitle)
+        /// <param name="repeat">Для таймера: его длительность — в уведомлении появятся «Ещё раз» и ✓.</param>
+        public static void Ring(string title, string subtitle, TimeSpan? repeat = null)
         {
             Ringing = true;
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Alarm, Title = title, Subtitle = (string.IsNullOrEmpty(subtitle) ? "" : subtitle + " · ") + "нажми, чтобы выключить",
+                Kind = ToastKind.Alarm, Title = title,
+                // с кнопками подсказка «нажми» не нужна — и так видно, что жать
+                Subtitle = repeat.HasValue ? subtitle ?? "" : (string.IsNullOrEmpty(subtitle) ? "" : subtitle + " · ") + "нажми, чтобы выключить",
                 Icon = Icons.Bell, Accent = System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71),
-                Duration = TimeSpan.FromSeconds(60), Important = true, ReplaceKey = "alarm"
+                Duration = TimeSpan.FromSeconds(60), Important = true, ReplaceKey = "alarm", RepeatTimer = repeat
             });
             try
             {
