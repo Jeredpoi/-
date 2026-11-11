@@ -14,7 +14,7 @@ namespace Isle.Overlays
     public enum CaptureMode { Region, Ocr, Qr, Pipette }
 
     /// <summary>Полноэкранный слой поверх «замороженного» снимка экрана: выделение области или пипетка.</summary>
-    public class CaptureOverlay : Window
+    public partial class CaptureOverlay : Window
     {
         private readonly BitmapSource _shot;
         private readonly CaptureMode _mode;
@@ -70,7 +70,7 @@ namespace Isle.Overlays
 
             _hintText.Text = mode switch
             {
-                CaptureMode.Region => "Выдели область — снимок попадёт в буфер · Esc — отмена",
+                CaptureMode.Region => "Выдели область — дальше можно скрыть текст и порисовать · Esc — отмена",
                 CaptureMode.Ocr => "Выдели текст для распознавания · Esc — отмена",
                 CaptureMode.Qr => "Выдели QR-код · Esc — отмена",
                 _ => "Наведи и кликни, чтобы скопировать цвет · Esc — отмена"
@@ -88,12 +88,13 @@ namespace Isle.Overlays
                 UpdateDim(Rect.Empty);
                 _escPoll.Start();
             };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) Finish(null); };
+            KeyDown += (_, e) => { if (e.Key == Key.Escape) { OnEscape(); e.Handled = true; } else OnMarkupKey(e); };
             // Подстраховка: Esc ловим напрямую с клавиатуры, даже если окно так и не получило фокус
             _escPoll.Tick += (_, __) =>
             {
                 bool down = (Isle.Native.Win32.GetAsyncKeyState(0x1B) & 0x8000) != 0;
-                if (down && !_escWasDown && _escArmed) Finish(null);
+                // своё окно в фокусе — Esc уже обработан в KeyDown (там он сначала отменяет набираемый текст)
+                if (down && !_escWasDown && _escArmed && !IsKeyboardFocusWithin) OnEscape();
                 _escWasDown = down;
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
@@ -102,7 +103,7 @@ namespace Isle.Overlays
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
-            MouseRightButtonDown += (_, __) => Finish(null);
+            MouseRightButtonDown += (_, __) => { if (!_markup) Finish(null); };
             if (mode == CaptureMode.Pipette)
             {
                 // пиксели готовим в фоне — слой появляется сразу, без подвисания
@@ -135,6 +136,7 @@ namespace Isle.Overlays
 
         private void OnDown(object s, MouseButtonEventArgs e)
         {
+            if (_markup) { CommitMarkText(); return; }
             if (_mode == CaptureMode.Pipette)
             {
                 if (_px == null) return; // пиксели ещё готовятся (4K, несколько мониторов) — иначе скопировался бы чёрный
@@ -149,6 +151,7 @@ namespace Isle.Overlays
 
         private void OnMove(object s, MouseEventArgs e)
         {
+            if (_markup) return;
             var p = e.GetPosition(_canvas);
             if (_mode == CaptureMode.Pipette)
             {
@@ -167,10 +170,12 @@ namespace Isle.Overlays
 
         private void OnUp(object s, MouseButtonEventArgs e)
         {
-            if (_mode == CaptureMode.Pipette || _start == null) return;
+            if (_markup || _mode == CaptureMode.Pipette || _start == null) return;
             ReleaseMouseCapture();
             var r = new Rect(_start.Value, e.GetPosition(_canvas));
+            r.Intersect(new Rect(0, 0, ActualWidth, ActualHeight));
             _start = null;
+            if (r.IsEmpty) { Finish(null); return; }
             if (r.Width < 4 || r.Height < 4) { Finish(null); return; }
             var crop = new Int32Rect(
                 (int)Math.Max(0, r.X * Kx), (int)Math.Max(0, r.Y * Ky),
@@ -179,6 +184,8 @@ namespace Isle.Overlays
             if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
+            // обычный снимок области — сначала пометки прямо на месте (мозаика, стрелки…), «Сохранить» — в чёлку
+            if (_mode == CaptureMode.Region) { EnterMarkup(r, cb); return; }
             Finish(cb);
         }
 
