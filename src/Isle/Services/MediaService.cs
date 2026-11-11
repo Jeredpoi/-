@@ -194,7 +194,11 @@ namespace Isle.Services
                 _lastKey = newKey;
                 Current = info;
                 Changed?.Invoke();
-                if (changedTrack) TrackChanged?.Invoke(info);
+                if (changedTrack)
+                {
+                    Journal.Info("media", "трек: " + Journal.Short(info.Artist + " — " + info.Title, 120) + ", плеер " + info.SourceApp + (info.IsPlaying ? ", играет" : ", пауза"));
+                    TrackChanged?.Invoke(info);
+                }
             });
 
             // 2) догружаем обложку и показываем ещё раз

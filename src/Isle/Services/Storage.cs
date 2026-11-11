@@ -194,7 +194,41 @@ namespace Isle.Services
             if (s != null && s.VoicePreset == "pollinations") s.VoicePreset = "custom";
             return s;
         }
-        public void Save() => Storage.Save("settings.json", this);
+        private static Dictionary<string, string> _lastSaved;
+
+        private Dictionary<string, string> SnapshotForLog()
+        {
+            var now = new Dictionary<string, string>();
+            foreach (var p in GetType().GetProperties())
+            {
+                if (!p.CanRead || p.GetIndexParameters().Length > 0 || p.GetMethod.IsStatic) continue;
+                object v;
+                try { v = p.GetValue(this); } catch { continue; }
+                var str = v is System.Collections.IEnumerable && v is not string ? JsonSerializer.Serialize(v) : v?.ToString() ?? "null";
+                if (System.Text.RegularExpressions.Regex.IsMatch(p.Name, "Key|Password|Token|Protected")) str = string.IsNullOrEmpty(str) || str == "null" ? "(пусто)" : "***";
+                now[p.Name] = str;
+            }
+            return now;
+        }
+
+        /// <summary>Запомнить настройки как исходные — следующие сохранения пишут в журнал только отличия.</summary>
+        public void LogBaseline() { try { _lastSaved = SnapshotForLog(); } catch { } }
+
+        public void Save()
+        {
+            // в подробный журнал — что именно поменялось (ключи и пароли — звёздочками)
+            try
+            {
+                var now = SnapshotForLog();
+                if (_lastSaved != null)
+                    foreach (var kv in now)
+                        if (!_lastSaved.TryGetValue(kv.Key, out var old) || old != kv.Value)
+                            Journal.Info("settings", kv.Key + ": " + Journal.Short(old, 80) + " → " + Journal.Short(kv.Value, 80));
+                _lastSaved = now;
+            }
+            catch { }
+            Storage.Save("settings.json", this);
+        }
     }
 
     public class Note

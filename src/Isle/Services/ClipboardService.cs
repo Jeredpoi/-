@@ -233,6 +233,11 @@ namespace Isle.Services
         /// <summary>Добавляет новый элемент наверх (или поднимает уже существующий).</summary>
         private void Insert(ClipItem existing, ClipItem fresh)
         {
+            // содержимое буфера в журнал не пишем (там бывают пароли) — только тип, длину и откуда
+            var it = existing ?? fresh;
+            Journal.Info("clipboard", (existing != null ? "повтор — поднят наверх" : "новое") + ": "
+                + (it == null ? "?" : it.IsImage ? "картинка" : "текст, " + (it.Text?.Length ?? 0) + " симв.")
+                + (it?.Source is string src && src.Length > 0 ? ", из " + src : ""));
             if (existing != null)
             {
                 Items.Remove(existing);

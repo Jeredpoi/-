@@ -35,6 +35,7 @@ namespace Isle.Services
         public void Start(string hint = null)
         {
             if (Recording) return;
+            Journal.Info("voice", "запись голоса: старт" + (hint != null ? " (" + hint + ")" : ""));
             try
             {
                 var dev = new MMDeviceEnumerator().GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
@@ -101,6 +102,7 @@ namespace Isle.Services
         public async Task StopAsync(Action<string> onText, bool command = false)
         {
             if (!Recording) return;
+            Journal.Info("voice", "запись голоса: стоп, " + (command ? "команда" : "в текст"));
             var cap = _capture;
             var buffer = _pcm; // своя запись: новая, начатая за эти 150 мс, сюда не попадёт и не потеряется
             _capture = null;
