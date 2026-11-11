@@ -125,15 +125,47 @@ namespace Isle.Services
 
             ReadLanguage(s.LayoutToasts);
 
-            // Caps Lock
+            // Caps Lock — страховка для случаев без перехвата клавиатуры (кнопка на экранной клавиатуре, программа).
+            // GetKeyState у фоновой программы отстаёт: сразу после нажатия ему не верим, состояние уже знает OnCapsKey.
             bool caps = (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
-            if (_lastCaps.HasValue && caps != _lastCaps.Value && s.CapsToasts)
-                ToastBus.Show(new Toast
-                {
-                    Kind = ToastKind.Caps, Title = caps ? "Caps Lock включён" : "Caps Lock выключен",
-                    Icon = Icons.Caps, On = caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4)
-                });
+            if (DateTime.Now - _capsKeyAt < TimeSpan.FromMilliseconds(700)) return;
+            // расхождение должно продержаться 3 опроса подряд (~0,6 с) — иначе это просто запаздывание GetKeyState
+            if (_lastCaps.HasValue && caps != _lastCaps.Value && ++_capsMismatch < 3) return;
+            _capsMismatch = 0;
+            if (_lastCaps.HasValue && caps != _lastCaps.Value)
+            {
+                Journal.Info("caps", "опрос: Caps Lock " + (caps ? "вкл" : "выкл") + (DateTime.Now - _capsKeyAt < TimeSpan.FromSeconds(3) ? " (поправка после нажатия)" : ""));
+                ShowCaps(caps);
+            }
             _lastCaps = caps;
+        }
+
+        private DateTime _capsKeyAt = DateTime.MinValue;
+        private int _capsMismatch;
+
+        /// <summary>
+        /// Нажали Caps Lock (из перехвата клавиатуры): переключаем плашку сразу, без ожидания опроса.
+        /// Если состояние на самом деле не сменилось (клавиша переназначена), опрос через 0,7 с поправит.
+        /// </summary>
+        public void OnCapsKey()
+        {
+            if (!_lastCaps.HasValue) _lastCaps = (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
+            bool caps = !_lastCaps.Value;
+            _lastCaps = caps;
+            _capsKeyAt = DateTime.Now;
+            _capsMismatch = 0;
+            Journal.Info("caps", "нажатие: Caps Lock " + (caps ? "вкл" : "выкл"));
+            ShowCaps(caps);
+        }
+
+        private static void ShowCaps(bool caps)
+        {
+            if (!AppSettings.Current.CapsToasts) return;
+            ToastBus.Show(new Toast
+            {
+                Kind = ToastKind.Caps, Title = caps ? "Caps Lock включён" : "Caps Lock выключен",
+                Icon = Icons.Caps, On = caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4)
+            });
         }
 
         private void Slow()
