@@ -24,6 +24,7 @@ namespace Isle
             Directory.CreateDirectory(dir);
             try
             {
+                AppSettings.Current.WelcomeShown = true; // приветствие первого запуска снимаем отдельно, а не поверх всего
                 await Task.Delay(4000); // сервисы, погода, раскладка успевают загрузиться
                 var island = (FrameworkElement)w.FindName("Island");
 
@@ -40,6 +41,7 @@ namespace Isle
                 await ToastShot(new Toast { Kind = ToastKind.Caps, Title = "Caps Lock включён", Icon = Icons.Caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(2) }, "caps.png");
                 await ToastShot(new Toast { Kind = ToastKind.Layout, Title = "RU  ·  Русский", Icon = Icons.Keyboard, ReplaceKey = "layout", Duration = TimeSpan.FromSeconds(2) }, "layout.png");
                 await ToastShot(new Toast { Kind = ToastKind.Volume, Title = "Громкость 64", Icon = Icons.Volume, Progress = 0.64, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(2) }, "volume.png");
+                await ToastShot(new Toast { Kind = ToastKind.Success, Title = "Загрузка завершена", Subtitle = "Counter-Strike 2 · Steam", Icon = Icons.Check, Important = true, Duration = TimeSpan.FromSeconds(2.4) }, "success.png", 1500);
 
                 // загрузка игры в Steam: обложка игры (если workflow её скачал) с кольцом прогресса
                 ImageSource art = null;
@@ -77,6 +79,8 @@ namespace Isle
                 await Task.Delay(800);
 
                 await ClawdAsync(Path.Combine(dir, "clawd"));
+                await WelcomeAsync(Path.Combine(dir, "welcome.png"));
+                await ClawdLifeAsync(Path.Combine(dir, "life"));
             }
             catch (Exception ex)
             {
@@ -115,6 +119,67 @@ namespace Isle
             enc.Frames.Add(BitmapFrame.Create(bmp));
             using var fs = File.Create(path);
             enc.Save(fs);
+        }
+
+        /// <summary>Окно приветствия первого запуска — за краем экрана, после анимации появления.</summary>
+        private static async Task WelcomeAsync(string path)
+        {
+            var win = new Views.WelcomeWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -4000, Top = -4000, ShowActivated = false };
+            win.Show();
+            await Task.Delay(2600);
+            if (win.Content is FrameworkElement card) Save(card, path, 30);
+            win.Close();
+            await Task.Delay(300);
+        }
+
+        /// <summary>
+        /// «Жизнь Клоди»: занятия в покое по очереди и разная одежда, в конце засыпает в кровати. Кадры каждые 70 мс.
+        /// </summary>
+        private static async Task ClawdLifeAsync(string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var buddy = new Character { Mood = Mood.Idle, FollowCursor = false };
+            var stage = new Border
+            {
+                Width = 460, Height = 320, Background = new SolidColorBrush(Backdrop),
+                Child = new Viewbox { Child = buddy, Margin = new Thickness(130, 90, 130, 60) }
+            };
+            var win = new Window
+            {
+                Content = stage, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None,
+                ShowInTaskbar = false, ShowActivated = false, Left = -4000, Top = -4000, Topmost = false
+            };
+            win.Show();
+            // жонглирует → змей → гитара → фото → гантели → поливает цветок → мороженое → кубик
+            var plan = new (int activity, Outfit outfit)[]
+            {
+                (18, Outfit.None), (21, Outfit.Viking), (14, Outfit.Cowboy), (23, Outfit.Detective),
+                (30, Outfit.Ninja), (26, Outfit.Flowers), (28, Outfit.Party), (29, Outfit.Graduate),
+            };
+            int frame = 0;
+            async Task Capture(double seconds)
+            {
+                var until = DateTime.Now.AddSeconds(seconds);
+                while (DateTime.Now < until)
+                {
+                    await Task.Delay(70);
+                    stage.UpdateLayout();
+                    var bmp = new RenderTargetBitmap(460, 320, 96, 96, PixelFormats.Pbgra32);
+                    bmp.Render(stage);
+                    WritePng(bmp, Path.Combine(dir, "frame_" + (frame++).ToString("0000") + ".png"));
+                }
+            }
+            foreach (var (activity, outfit) in plan)
+            {
+                buddy.Outfit = outfit;
+                buddy.ForceActivity(activity, 3);
+                await Capture(2.6);
+            }
+            // устал — засыпает в кровати
+            buddy.Outfit = Outfit.None;
+            buddy.Mood = Mood.Sleep;
+            await Capture(4.5);
+            win.Close();
         }
 
         /// <summary>
