@@ -134,7 +134,6 @@ namespace Isle.Views
                 old.BeginAnimation(OpacityProperty, fade);
                 old.IsHitTestVisible = false;
             }
-            if (_buddy.Parent is Panel p) p.Children.Remove(_buddy);
             var tt = new TranslateTransform(40 * dir, 0);
             view.RenderTransform = tt;
             view.Opacity = 0;
@@ -145,8 +144,13 @@ namespace Isle.Views
 
         private StackPanel Page(string title, string text, bool buddy = true)
         {
-            var sp = new StackPanel { Margin = new Thickness(40, buddy ? 30 : 34, 40, 10) };
-            if (buddy) sp.Children.Add(_buddy);
+            var sp = new StackPanel { Margin = new Thickness(40, 20, 40, 10), VerticalAlignment = VerticalAlignment.Center };
+            if (buddy)
+            {
+                // Клоди один на всё окно: переносим его со старого шага на новый
+                if (_buddy.Parent is Panel old) old.Children.Remove(_buddy);
+                sp.Children.Add(_buddy);
+            }
             sp.Children.Add(new TextBlock { Text = title, FontSize = 24, FontWeight = FontWeights.SemiBold, Foreground = Fg, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, buddy ? 10 : 0, 0, 0) });
             if (!string.IsNullOrEmpty(text))
                 sp.Children.Add(new TextBlock { Text = text, FontSize = 14, Foreground = Muted, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 8, 0, 0) });
