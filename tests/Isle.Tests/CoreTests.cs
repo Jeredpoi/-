@@ -563,6 +563,7 @@ namespace Isle.Tests
         [InlineData("2м", 120)]
         [InlineData("1ч 20м", 4800)]
         [InlineData("1.5ч", 5400)]
+        [InlineData("4h40m", 16800)] // так присылает ИИ: [[timer: 4h40m]]
         public void Parses(string text, int seconds) => Assert.Equal(TimeSpan.FromSeconds(seconds), TimerService.ParseDuration(text));
 
         [Theory]
