@@ -745,9 +745,9 @@ namespace Isle.Tests
         {
             int small = Mosaic.BlockForPatch(300, 40);   // одна строка сообщения
             int big = Mosaic.BlockForPatch(1600, 900);   // большой блок
-            Assert.InRange(small, 5, 8);
-            Assert.True(big > small * 4);
-            Assert.InRange(big, 5, 56);
+            Assert.InRange(small, 6, 8);
+            Assert.True(big >= small * 3);
+            Assert.InRange(big, 6, 24);
         }
 
         [Fact]
