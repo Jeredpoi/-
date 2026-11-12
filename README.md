@@ -74,41 +74,67 @@ Steam и браузеры прямо в чёлке: картинка игры, �
 
 ## 🖼 Как выглядит
 
-<p align="center">
-  <img src="docs/screenshots/collapsed.png" width="290" alt="Свёрнутая чёлка">
-  &nbsp;
-  <img src="docs/screenshots/toast.png" width="420" alt="Всплывашка пипетки">
-</p>
-<p align="center"><sub>Свёрнутая чёлка · всплывашка пипетки</sub></p>
-
-<p align="center">
-  <img src="docs/screenshots/download.png" width="410" alt="Загрузка игры в Steam">
-  &nbsp;
-  <img src="docs/screenshots/volume.png" width="360" alt="Громкость">
-</p>
-<p align="center">
-  <img src="docs/screenshots/caps.png" width="326" alt="Caps Lock">
-  &nbsp;
-  <img src="docs/screenshots/layout.png" width="304" alt="Раскладка">
-</p>
-<p align="center"><sub>Загрузка игры в Steam · громкость · Caps Lock · смена раскладки</sub></p>
-
-<p align="center"><img src="docs/screenshots/home.png" width="820" alt="Главная"></p>
+<p align="center"><img src="docs/screenshots/home.png" width="860" alt="Главная"></p>
 <p align="center"><sub>Главная: инструменты, громкость, полка ярлыков</sub></p>
 
-<details>
-<summary><b>Ещё вкладки: погода, чат, заметки, текст, управление</b></summary>
-<br>
+### Всплывашки
 
-<p align="center"><img src="docs/screenshots/weather.png" width="820" alt="Погода"><br><sub>Погода</sub></p>
-<p align="center"><img src="docs/screenshots/chat.png" width="820" alt="Чат с ИИ"><br><sub>Чат с ИИ</sub></p>
-<p align="center"><img src="docs/screenshots/notes.png" width="820" alt="Заметки и таймер"><br><sub>Заметки, таймер и напоминания</sub></p>
-<p align="center"><img src="docs/screenshots/text.png" width="820" alt="Текст"><br><sub>Инструменты для текста</sub></p>
-<p align="center"><img src="docs/screenshots/controls.png" width="820" alt="Управление"><br><sub>Управление</sub></p>
+Чёлка коротко показывает, что произошло, и сама прячется. Цвет значка говорит о результате: зелёный — получилось, красный — ошибка.
 
-</details>
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/screenshots/collapsed.png" width="300" alt="Свёрнутая чёлка"><br><sub>Свёрнутая чёлка</sub></td>
+<td align="center" width="50%"><img src="docs/screenshots/download.png" width="380" alt="Загрузка в Steam"><br><sub>Загрузка игры в Steam</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/success.png" width="380" alt="Загрузка завершена"><br><sub>Загрузка завершена</sub></td>
+<td align="center"><img src="docs/screenshots/toast.png" width="380" alt="Пипетка"><br><sub>Пипетка скопировала цвет</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/volume.png" width="340" alt="Громкость"><br><sub>Громкость</sub></td>
+<td align="center"><img src="docs/screenshots/caps.png" width="320" alt="Caps Lock"><br><sub>Caps Lock</sub></td>
+</tr>
+<tr>
+<td align="center" colspan="2"><img src="docs/screenshots/layout.png" width="300" alt="Раскладка"><br><sub>Смена раскладки</sub></td>
+</tr>
+</table>
 
-<sub>Снимки сделаны самой программой. Музыка в момент съёмки не играла — поэтому на «Главной» нет плеера.</sub>
+### Вкладки
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/screenshots/weather.png" alt="Погода"><br><sub>Погода</sub></td>
+<td align="center" width="50%"><img src="docs/screenshots/chat.png" alt="Чат с ИИ"><br><sub>Чат с ИИ</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/notes.png" alt="Заметки"><br><sub>Заметки, таймер, напоминания</sub></td>
+<td align="center"><img src="docs/screenshots/text.png" alt="Текст"><br><sub>Инструменты для текста</sub></td>
+</tr>
+<tr>
+<td align="center" colspan="2"><img src="docs/screenshots/controls.png" width="560" alt="Управление"><br><sub>Управление: сеть, Bluetooth, тема, питание</sub></td>
+</tr>
+</table>
+
+### Первый запуск
+
+<table>
+<tr>
+<td width="55%"><img src="docs/screenshots/welcome.png" alt="Приветствие"></td>
+<td valign="middle">
+
+При первом запуске Isle показывает короткое приветствие:
+
+- что умеет чёлка;
+- включить **точную скорость Steam** (Steam перезапустится — только с твоего согласия);
+- снимать экран по **PrintScreen** через Isle.
+
+Всё можно поменять потом в настройках, а приветствие открыть снова: **Настройки → Обновления → «Показать»**.
+
+</td>
+</tr>
+</table>
+
+<sub>Все снимки сделаны самой программой. Музыка в момент съёмки не играла — поэтому на «Главной» нет плеера.</sub>
 
 ---
 
@@ -286,14 +312,23 @@ dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true 
 
 **ваш маленький друг, который живёт в чёлке**
 
-Танцует под музыку — танец подбирается под ритм песни, спит ночью,<br>
-думает вместе с ИИ, радуется ответу и переодевается по погоде.
+Танцует под музыку, думает вместе с ИИ, переодевается по погоде и настроению,<br>
+а когда скучно — находит себе занятие. Ночью ложится спать в кровать.
 
-<br><br>
+<br>
 
-<img src="docs/screenshots/clawd-dance.gif" width="520" alt="Клоди танцует">
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/screenshots/clawd-life.gif" width="400" alt="Чем занят Клоди"><br><sub>жонглирует · воздушный змей · гитара · фотоаппарат · гантели · лейка · мороженое · кубик · спит</sub></td>
+<td align="center" width="50%"><img src="docs/screenshots/clawd-dance.gif" width="400" alt="Клоди танцует"><br><sub>прыжки · диско · кружится · брейк-данс</sub></td>
+</tr>
+</table>
 
-<sub>прыжки · диско · кружится · брейк-данс</sub>
+<br>
+
+| 🎯 Занятия | 👕 Одежда | 💤 Настроение |
+|:---|:---|:---|
+| воздушный змей, шарик, фотоаппарат, барабан, метла, лейка, бинокль, мороженое, кубик Рубика, гантели, гитара, жонглирование | викинг, ковбой, детектив, ниндзя, пират, волшебник, повар, корона, венок из цветов, шапочка выпускника, праздничный колпак — и сам одевается по погоде: шарф, панама, ушанка, дождевик | танцует под музыку, думает и радуется ответу ИИ, в чате меняет позу под ответ, ночью спит в кровати под одеялом |
 
 <br>
 
