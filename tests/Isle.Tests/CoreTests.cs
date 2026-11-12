@@ -735,3 +735,43 @@ namespace Isle.Tests
         }
     }
 }
+
+namespace Isle.Tests
+{
+    public class PatchMosaicTests
+    {
+        [Fact]
+        public void SmallFrameGetsSmallBlocksAndBigFrameGetsBigOnes()
+        {
+            int small = Mosaic.BlockForPatch(300, 40);   // одна строка сообщения
+            int big = Mosaic.BlockForPatch(1600, 900);   // большой блок
+            Assert.InRange(small, 5, 8);
+            Assert.True(big > small * 4);
+            Assert.InRange(big, 5, 56);
+        }
+
+        [Fact]
+        public void CellsAverageEachBlockAndCoverTheWholeFrame()
+        {
+            int w = 40, h = 20;
+            var px = new byte[w * h * 4];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = (y * w + x) * 4;
+                    px[i] = (byte)(x < 20 ? 10 : 200); px[i + 1] = 50; px[i + 2] = 90; px[i + 3] = 255;
+                }
+            var cells = Mosaic.Cells(px, w, h, 0, 0, 40, 20, 10, out int cw, out int ch);
+            Assert.Equal(4, cw);
+            Assert.Equal(2, ch);
+            Assert.Equal(10, cells[0]);                 // левая половина — тёмная
+            Assert.Equal(200, cells[(0 * cw + 3) * 4]); // правая — светлая
+            Assert.Equal(50, cells[1]);
+            Assert.Equal(255, cells[3]);
+            // неровный край: 25×15 при квадрате 10 → 3×2 квадрата, последний ряд частичный
+            Mosaic.Cells(px, w, h, 15, 5, 25, 15, 10, out cw, out ch);
+            Assert.Equal(3, cw);
+            Assert.Equal(2, ch);
+        }
+    }
+}
