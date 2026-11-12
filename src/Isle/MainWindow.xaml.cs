@@ -31,7 +31,6 @@ namespace Isle
         private Toast _currentToast;
         private readonly DispatcherTimer _toastTimer = new();
         private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
-        private readonly DispatcherTimer _hoverOpen = new() { Interval = TimeSpan.FromMilliseconds(220) };
         private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
@@ -172,7 +171,6 @@ namespace Isle
                 _hoverGrown = false;
                 if (State == IslandState.Collapsed) ShowCollapsedContent(false);
             };
-            _hoverOpen.Tick += (_, __) => { _hoverOpen.Stop(); if (State != IslandState.Expanded && Island.IsMouseOver && !TimerRow.IsMouseOver) Expand(null); };
             _leaveClose.Tick += (_, __) =>
             {
                 if (CursorNearIsland(14) || SuppressAutoCollapse || CursorOverOurPopup()) return; // ещё рядом или в нашем меню — ждём
@@ -196,14 +194,13 @@ namespace Isle
                 _oledHide.Stop();
                 _ungrow.Stop();
                 if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
-                bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
                 // навёл на всплывашку — она не исчезает, пока курсор на ней (и не превращается в панель)
-                if (State == IslandState.Toast) { _toastTimer.Stop(); return; }
-                if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer && !TimerRow.IsMouseOver) _hoverOpen.Start();
+                if (State == IslandState.Toast) _toastTimer.Stop();
+                // По наведению на саму чёлку панель НЕ открывается: на ней кнопки (папка загрузки, мини-плеер, таймер),
+                // и курсор просто «проходит» по ней. Открывается, когда курсор упирается в верхний край экрана — см. CheckTopPush.
             };
             Island.MouseLeave += (_, __) =>
             {
-                _hoverOpen.Stop();
                 // ушёл со всплывашки — она ещё немного побудет и закроется
                 if (State == IslandState.Toast && _currentToast != null && !AlarmService.Ringing)
                 { _toastTimer.Stop(); _toastTimer.Interval = TimeSpan.FromSeconds(2.5); _toastTimer.Start(); }
@@ -730,7 +727,6 @@ namespace Isle
             Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
             if (_welcomeHidden) return; // идёт знакомство — чёлка появится в его конце
-            _hoverOpen.Stop();
             _leaveClose.Stop();
             _oledHide.Stop();
             if (_oledHidden) OledReveal(false);
@@ -2476,22 +2472,28 @@ namespace Isle
 
         private double _pushTicks; // сколько секунд курсор упирается в верх над островом
 
-        /// <summary>Курсор упёрся в самый верх экрана над островом — открываем (как в оригинале).</summary>
+        /// <summary>
+        /// Курсор упёрся в самый верх экрана над островом и подержался там ~0,2 с — открываем панель.
+        /// Это единственный способ открыть «наведением»: просто водить мышью по чёлке можно спокойно.
+        /// </summary>
         private void CheckTopPush()
         {
             if (State == IslandState.Expanded || !Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
             bool atTop = false;
             try
             {
-                var tl = Island.PointToScreen(new Point(0, 0));
-                var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
-                atTop = p.Y <= tl.Y + 1 && p.X >= tl.X && p.X <= br.X; // строго над островом
+                // чуть шире самой чёлки: в свёрнутом виде она узкая, по краю легко промахнуться
+                var tl = Island.PointToScreen(new Point(-12, 0));
+                var br = Island.PointToScreen(new Point(Island.ActualWidth + 12, Island.ActualHeight));
+                var screenTop = PointToScreen(new Point(0, 0)).Y; // окно стоит у самого верха экрана
+                atTop = p.Y <= Math.Max(screenTop, tl.Y) + 1 && p.X >= tl.X && p.X <= br.X;
             }
             catch { }
             if (!atTop) { _pushTicks = 0; return; }
             if (_oledHidden) { OledReveal(); return; }
+            if (!AppSettings.Current.ExpandOnHover) return; // выключено — открывается только кликом и клавишами
             double was = _pushTicks; _pushTicks += _frameDt;
-            if (was < 0.2 && _pushTicks >= 0.2 && Scaler.Visibility == Visibility.Visible) Expand(null);
+            if (was < 0.2 && _pushTicks >= 0.2 && Scaler.Visibility == Visibility.Visible) { Journal.Info("island", "открыта: курсор у верхнего края"); Expand(null); }
         }
 
         private void Animate()

@@ -193,8 +193,8 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Открывать при наведении"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Если выключить — остров открывается кликом или Ctrl+Alt+Space."/></StackPanel>
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Открывать у края экрана"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Подведи курсор к самому верху экрана над чёлкой. Просто водить по чёлке можно — она не откроется. Если выключить — только кликом или Ctrl+Alt+Space."/></StackPanel>
                                 <CheckBox x:Name="Hover" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>

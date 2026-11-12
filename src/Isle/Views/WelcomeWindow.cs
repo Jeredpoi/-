@@ -197,7 +197,7 @@ namespace Isle.Views
         private FrameworkElement Intro()
         {
             _buddy.Mood = Mood.Idle;
-            var sp = Page("Привет! Это Isle", "Чёлка как у iPhone — только для Windows. Чёрная капсула сверху по центру экрана: показывает главное, а по наведению раскрывается в панель с плеером, инструментами и ИИ.");
+            var sp = Page("Привет! Это Isle", "Чёлка как у iPhone — только для Windows. Чёрная капсула сверху по центру экрана: показывает главное, а если упереть курсор в верх экрана — раскрывается в панель с плеером, инструментами и ИИ.");
             var grid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 18, 0, 0) };
             (string icon, string text)[] feats =
             {
@@ -341,7 +341,7 @@ namespace Isle.Views
             {
                 InfoRow(Icons.Monitor, "Свёрнута", "Время, погода, музыка и Клоди. Не мешает работать, прячется в полноэкранных играх."),
                 InfoRow(Icons.Bell, "Всплывашки", "Громкость, раскладка, Caps Lock, загрузки, уведомления. Зелёный — получилось, красный — ошибка."),
-                InfoRow(Icons.Home, "Раскрыта", "Наведи мышь на чёлку или нажми " + KeyText(AppSettings.Current.Hotkey) + " — откроется панель с вкладками."),
+                InfoRow(Icons.Home, "Раскрыта", "Упри курсор в самый верх экрана над чёлкой или нажми " + KeyText(AppSettings.Current.Hotkey) + ". Просто водить по чёлке можно — не откроется."),
             };
             foreach (var r in rows) legend.Children.Add(r);
             sp.Children.Add(legend);
@@ -561,7 +561,7 @@ namespace Isle.Views
         {
             _buddy.Mood = Mood.Done;
             _buddy.Cheer();
-            var sp = Page("Всё готово!", "Наведи мышь на чёлку сверху экрана или нажми " + KeyText(AppSettings.Current.Hotkey) + ". Правый клик по чёлке — меню. Это знакомство можно открыть снова: Настройки → Обновления.");
+            var sp = Page("Всё готово!", "Упри курсор в самый верх экрана над чёлкой, кликни по ней или нажми " + KeyText(AppSettings.Current.Hotkey) + ". Правый клик по чёлке — меню. Это знакомство можно открыть снова: Настройки → Обновления.");
             sp.Children.Add(Buttons(Pill("Начать", true, FlyToIsland)));
             return sp;
         }
