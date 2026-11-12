@@ -182,7 +182,7 @@
         <!-- Питание: первое нажатие краснеет и запускает полоску, второе — выполняет -->
         <UniformGrid x:Name="PowerRow" Grid.Row="4" Columns="4">
             <Button x:Name="LockBtn" Style="{StaticResource Power}" Margin="0,0,5,0" Click="OnPower" Tag="lock">
-                <Grid>
+                <Grid Height="50"> <!-- кнопка центрирует содержимое: без высоты полоска подтверждения шла по тексту -->
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Lock" Width="17" Height="17" VerticalAlignment="Center"/>
@@ -194,7 +194,7 @@
                 </Grid>
             </Button>
             <Button x:Name="SleepBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="sleep">
-                <Grid>
+                <Grid Height="50"> <!-- кнопка центрирует содержимое: без высоты полоска подтверждения шла по тексту -->
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Moon" Width="17" Height="17" VerticalAlignment="Center"/>
@@ -206,7 +206,7 @@
                 </Grid>
             </Button>
             <Button x:Name="RestartBtn" Style="{StaticResource Power}" Margin="5,0" Click="OnPower" Tag="restart">
-                <Grid>
+                <Grid Height="50"> <!-- кнопка центрирует содержимое: без высоты полоска подтверждения шла по тексту -->
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Restart" Width="17" Height="17" VerticalAlignment="Center"/>
@@ -218,7 +218,7 @@
                 </Grid>
             </Button>
             <Button x:Name="ShutdownBtn" Style="{StaticResource Power}" Margin="5,0,0,0" Click="OnPower" Tag="shutdown">
-                <Grid>
+                <Grid Height="50"> <!-- кнопка центрирует содержимое: без высоты полоска подтверждения шла по тексту -->
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <h:Icon Kind="Power" Width="17" Height="17" VerticalAlignment="Center"/>

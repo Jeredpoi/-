@@ -30,8 +30,7 @@ namespace Isle.Services
             {
                 BitBlt(mem, 0, 0, r.Width, r.Height, screen, r.X, r.Y, 0x00CC0020 | 0x40000000);
                 var src = Imaging.CreateBitmapSourceFromHBitmap(bmp, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                src.Freeze();
-                return src;
+                return Opaque(src);
             }
             finally
             {
@@ -43,6 +42,24 @@ namespace Isle.Services
         }
 
         public static BitmapSource CaptureAll() => Capture(VirtualScreen());
+
+        /// <summary>
+        /// Снимок экрана без «дыр». BitBlt при включённом DWM не заполняет альфа-канал: у окон на Chromium/Electron
+        /// (Claude, браузеры, Discord) там нули. WPF рисовал такие места прозрачными — сквозь них было видно чёрный фон
+        /// слоя выделения (чёрные прямоугольники, «пелена», чёрные квадраты при рисовании), а PNG сохранялся с дырами.
+        /// Делаем каждый пиксель непрозрачным и отдаём Bgr32 — формат без альфы.
+        /// </summary>
+        public static BitmapSource Opaque(BitmapSource src)
+        {
+            int w = src.PixelWidth, h = src.PixelHeight;
+            var px = new byte[w * h * 4];
+            if (src.Format == PixelFormats.Bgra32 || src.Format == PixelFormats.Bgr32 || src.Format == PixelFormats.Pbgra32) src.CopyPixels(px, w * 4, 0);
+            else new FormatConvertedBitmap(src, PixelFormats.Bgr32, null, 0).CopyPixels(px, w * 4, 0);
+            for (int i = 3; i < px.Length; i += 4) px[i] = 255;
+            var opaque = BitmapSource.Create(w, h, src.DpiX > 0 ? src.DpiX : 96, src.DpiY > 0 ? src.DpiY : 96, PixelFormats.Bgr32, null, px, w * 4);
+            opaque.Freeze();
+            return opaque;
+        }
 
         public static string SavePng(BitmapSource bmp)
         {

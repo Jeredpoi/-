@@ -625,6 +625,12 @@
                                     <TextBlock Style="{StaticResource RowNote}" Text="Список изменений и установщики на GitHub"/></StackPanel>
                                 <Button Style="{StaticResource SFlat}" Content="Открыть" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnReleases"/>
                             </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Приветствие"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="То, что показывается при первом запуске: возможности Isle, точная скорость Steam и PrintScreen"/></StackPanel>
+                                <Button Style="{StaticResource SFlat}" Content="Показать" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnShowWelcome"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

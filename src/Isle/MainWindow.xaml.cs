@@ -363,7 +363,9 @@ namespace Isle
 
         private void ApplyPrintScreenHook()
         {
-            bool want = AppSettings.Current.PrintScreenIsle;
+            // Перехват клавиатуры нужен всегда: по нему Caps Lock переключает плашку мгновенно.
+            // PrintScreen он забирает себе, только если это включено в Настройках.
+            bool want = true;
             if (want && _kbThread == null)
             {
                 _kbProc = KeyboardHook;
@@ -391,14 +393,24 @@ namespace Isle
             }
         }
 
+        private volatile bool _capsKeyDown;
+
         private IntPtr KeyboardHook(int code, IntPtr wParam, IntPtr lParam)
         {
             if (code >= 0)
             {
                 var k = System.Runtime.InteropServices.Marshal.PtrToStructure<Win32.KBDLLHOOKSTRUCT>(lParam);
+                if (k.vkCode == 0x14)                                                          // VK_CAPITAL
+                {
+                    int m = wParam.ToInt32();
+                    bool down = m == 0x0100 || m == 0x0104;
+                    // нажатие (не автоповтор при удержании) — сообщаем сразу, не дожидаясь опроса
+                    if (down && !_capsKeyDown) Dispatcher.BeginInvoke(new Action(() => AppHost.Watchers?.OnCapsKey()));
+                    _capsKeyDown = down;
+                }
                 bool alt = (k.flags & 0x20) != 0;                                             // LLKHF_ALTDOWN
                 bool win = (Win32.GetAsyncKeyState(0x5B) & 0x8000) != 0 || (Win32.GetAsyncKeyState(0x5C) & 0x8000) != 0;
-                if (k.vkCode == 0x2C && !alt && !win)                                          // VK_SNAPSHOT
+                if (k.vkCode == 0x2C && !alt && !win && AppSettings.Current.PrintScreenIsle)  // VK_SNAPSHOT
                 {
                     int msg = wParam.ToInt32();
                     if (msg == 0x0100 || msg == 0x0104) Dispatcher.BeginInvoke(new Action(() => _ = Tools.RegionShot())); // WM_KEYDOWN / WM_SYSKEYDOWN

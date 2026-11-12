@@ -389,6 +389,13 @@ namespace Isle.Views
             AppHost.Window.ApplyAppearance();
         }
 
+        /// <summary>Показать приветствие первого запуска ещё раз (из «Обновлений»).</summary>
+        private void OnShowWelcome(object s, RoutedEventArgs e)
+        {
+            Services.Journal.Info("welcome", "открыто вручную из Настроек");
+            try { new WelcomeWindow { Owner = null }.Show(); } catch (System.Exception ex) { App.Log("welcome: " + ex); }
+        }
+
         private void OnOutfit(object s, RoutedEventArgs e)
         {
             S.BuddyOutfit = (string)((FrameworkElement)s).Tag;

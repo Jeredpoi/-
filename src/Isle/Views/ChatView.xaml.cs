@@ -186,6 +186,7 @@ namespace Isle.Views
             var shown = clean + (reports.Count > 0 ? (clean.Length > 0 ? "\n\n" : "") + string.Join("\n", reports) : "");
             var idx = _msgs.IndexOf(thinking);
             if (idx >= 0) _msgs[idx] = new ChatMessage { Role = "assistant", Text = string.IsNullOrWhiteSpace(shown) ? "(пустой ответ)" : shown };
+            NameChatAsync(text, shown);
             foreach (var a in confirm) _msgs.Add(new ChatMessage { Role = "action", Text = "Нужно подтверждение", Pending = a });
             Scroll.ScrollToEnd();
             _busy = false;
@@ -233,13 +234,29 @@ namespace Isle.Views
 
         private ChatSession _session = new();
 
+        /// <summary>После первого ответа ИИ придумывает разговору короткое красивое название (в фоне, не мешая чату).</summary>
+        private async void NameChatAsync(string question, string answer)
+        {
+            var session = _session;
+            if (session == null || session.AiTitle || IsServiceError(answer ?? "")) return;
+            if (_msgs.Count(m => m.IsUser) != 1) return; // только по первому вопросу разговора
+            var title = await AiService.TitleAsync(question, answer);
+            if (title == null || !ReferenceEquals(session, _session)) return;
+            session.Title = title;
+            session.AiTitle = true;
+            SaveSession();
+        }
+
         private void SaveSession()
         {
             var real = _msgs.Where(m => m.Role == "user" || m.Role == "assistant").ToList();
             if (real.Count == 0) return;
             _session.Messages = real.Select(m => new ChatMessage { Role = m.Role, Text = m.Text }).ToList();
-            _session.Title = real.FirstOrDefault(m => m.IsUser)?.Text ?? "Разговор";
-            if (_session.Title.Length > 48) _session.Title = _session.Title.Substring(0, 48) + "…";
+            if (!_session.AiTitle)
+            {
+                _session.Title = real.FirstOrDefault(m => m.IsUser)?.Text ?? "Разговор";
+                if (_session.Title.Length > 48) _session.Title = _session.Title.Substring(0, 48) + "…";
+            }
             _session.Updated = DateTime.Now;
             ChatHistory.Save(_session);
         }
