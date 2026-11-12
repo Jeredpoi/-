@@ -64,13 +64,24 @@ namespace Isle.Overlays
         private Shape _shape;
         private Polyline _line;
         private TextBox _text;
-        private Grid _mosaicFrame;
+        // Рамка мозаики — 4 стороны отдельными тонкими линиями (каждая — чёрная под белым пунктиром). Слой рисуется
+        // процессором и перерисовывает весь прямоугольник изменившегося элемента: рамка одним элементом заставляла
+        // перерисовывать всю выделенную область на каждое движение мыши — отсюда лаги на большой мозаике.
+        private Canvas _mosaicFrame;
+        private readonly Line[] _frameLines = new Line[8];
 
         private void PlaceFrame(Rect r)
         {
             if (_mosaicFrame == null) return;
-            Canvas.SetLeft(_mosaicFrame, r.X); Canvas.SetTop(_mosaicFrame, r.Y);
-            _mosaicFrame.Width = Math.Max(1, r.Width); _mosaicFrame.Height = Math.Max(1, r.Height);
+            double l = r.X + 0.5, t = r.Y + 0.5, rr = r.X + Math.Max(1, r.Width) - 0.5, b = r.Y + Math.Max(1, r.Height) - 0.5;
+            for (int i = 0; i < 2; i++)
+            {
+                Set(_frameLines[i * 4 + 0], l, t, rr, t);  // верх
+                Set(_frameLines[i * 4 + 1], l, b, rr, b);  // низ
+                Set(_frameLines[i * 4 + 2], l, t, l, b);   // лево
+                Set(_frameLines[i * 4 + 3], rr, t, rr, b); // право
+            }
+            static void Set(Line ln, double x1, double y1, double x2, double y2) { ln.X1 = x1; ln.Y1 = y1; ln.X2 = x2; ln.Y2 = y2; }
         }
 
         private static SolidColorBrush Frz(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
@@ -375,9 +386,14 @@ namespace Isle.Overlays
                     _patches.Children.Add(_livePatch);
                     _livePx = Int32Rect.Empty;
                     // рамка выделения: тонкий чёрный контур и белый пунктир поверх — видна на любом фоне, ничего не затемняет
-                    _mosaicFrame = new Grid { IsHitTestVisible = false };
-                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.Black, StrokeThickness = 1 });
-                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } });
+                    _mosaicFrame = new Canvas { IsHitTestVisible = false };
+                    for (int i = 0; i < 8; i++)
+                    {
+                        _frameLines[i] = i < 4
+                            ? new Line { Stroke = Brushes.Black, StrokeThickness = 1 }
+                            : new Line { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } };
+                        _mosaicFrame.Children.Add(_frameLines[i]);
+                    }
                     _ink.Children.Add(_mosaicFrame);
                     PlaceFrame(new Rect(p, p));
                     break;
@@ -483,24 +499,30 @@ namespace Isle.Overlays
             patch ??= _livePatch;
             if (patch == null || _cropPx == null) return;
             long now = Environment.TickCount64;
-            if (!force && now - _patchAt < 15) return;
+            if (!force && now - _patchAt < 30) return; // ~30 раз в секунду хватает глазу, процессору — легче
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
+            if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Source = null; return; }
+            int block = Mosaic.BlockForPatch(x1 - x0, y1 - y0);
+            if (!force)
+            {
+                // пока тянешь — плитка растёт целыми квадратами: пересчёт и перерисовка только при переходе на новый квадрат
+                x1 = Math.Min(_cropW, x0 + (x1 - x0 + block - 1) / block * block);
+                y1 = Math.Min(_cropH, y0 + (y1 - y0 + block - 1) / block * block);
+            }
             var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
-            if (ir.Width <= 0 || ir.Height <= 0) { patch.Source = null; return; }
             if (ir.Equals(_livePx) && patch.Source != null && !force) return;
             _patchAt = now;
-            int block = Mosaic.BlockForPatch(ir.Width, ir.Height);
             var cells = Mosaic.Cells(_cropPx, _cropW, _cropH, ir.X, ir.Y, ir.Width, ir.Height, block, out int cw, out int ch);
             var src = BitmapSource.Create(cw, ch, 96, 96, PixelFormats.Bgr32, null, cells, cw * 4);
             src.Freeze();
             patch.Source = src;
             _livePx = ir;
-            // картинка — целыми квадратами (последний ряд может выйти за рамку), лишнее обрезаем по рамке
+            // плитка ровно по рамке, без обрезки (обрезка у процессорной отрисовки дорогая); последний ряд квадратов чуть уже
             Canvas.SetLeft(patch, x0 / k); Canvas.SetTop(patch, y0 / k);
-            patch.Width = cw * block / k; patch.Height = ch * block / k;
-            patch.Clip = new RectangleGeometry(new Rect(0, 0, ir.Width / k, ir.Height / k));
+            patch.Width = ir.Width / k; patch.Height = ir.Height / k;
+            patch.Clip = null;
         }
 
         private static Geometry Arrow(Point a, Point b, double t)
@@ -606,19 +628,14 @@ namespace Isle.Overlays
         {
             foreach (var h in _handles) h.Visibility = Visibility.Collapsed;
             // Летит одна готовая картинка, а не весь слой с пометками и плитками мозаики — так анимации нечего пересчитывать.
-            // И на время полёта возвращаем отрисовку видеокартой: процессор не успевал анимировать снимок на 4K
-            // (чёрные прямоугольники были от частичной перерисовки при рисовании, а в полёте кадр перерисовывается целиком).
+            // Режим отрисовки НЕ переключаем: смена на ходу пересоздаёт поверхность окна — экран мигал белой пеленой.
             if (flat != null)
             {
                 _page.Children.Clear();
-                _page.Children.Add(new Image { Source = flat, Stretch = Stretch.Fill });
+                var img = new Image { Source = flat, Stretch = Stretch.Fill };
+                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.LowQuality); // в полёте — быстрое масштабирование
+                _page.Children.Add(img);
             }
-            try
-            {
-                if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource hs && hs.CompositionTarget != null)
-                    hs.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.Default;
-            }
-            catch { }
             _escPoll.Stop();
             IsHitTestVisible = false;
             // центр чёлки: верх основного монитора по центру (в координатах слоя)
@@ -635,7 +652,8 @@ namespace Isle.Overlays
 
             var dur = TimeSpan.FromMilliseconds(520);
             var move = new CubicEase { EasingMode = EasingMode.EaseInOut };
-            var shrink = new QuinticEase { EasingMode = EasingMode.EaseIn };
+            // сжимается сразу (большой снимок перерисовывать дорого), а летит плавно
+            var shrink = new CubicEase { EasingMode = EasingMode.EaseOut };
             st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
             st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
             tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, target.X - center.X, dur) { EasingFunction = move });
@@ -645,9 +663,10 @@ namespace Isle.Overlays
             ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusXProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
             ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusYProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
             _page.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)) { BeginTime = TimeSpan.FromMilliseconds(400) });
-            _bar.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
-            _hint.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
-            _dim.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(380)));
+            // панель, подсказка и затемнение — сразу: плавное таяние затемнения на весь 4K-экран процессор рисует рывками
+            _bar.Visibility = Visibility.Hidden;
+            _hint.Visibility = Visibility.Hidden;
+            _dim.Visibility = Visibility.Hidden;
             fly.Completed += (_, __) => done();
             tt.BeginAnimation(TranslateTransform.YProperty, fly);
         }
