@@ -417,6 +417,57 @@ namespace Isle
             return Win32.CallNextHookEx(_kbHook, code, wParam, lParam);
         }
 
+        // ---------- приветствие: пока идёт знакомство, чёлки нет; в конце окно «прилетает» на её место ----------
+        private bool _welcomeHidden;
+
+        /// <summary>Спрятать чёлку на время знакомства (или вернуть, если знакомство закрыли без анимации).</summary>
+        public void HideForWelcome(bool hide)
+        {
+            if (hide == _welcomeHidden) return;
+            _welcomeHidden = hide;
+            Root.BeginAnimation(OpacityProperty, null);
+            if (hide)
+            {
+                if (State == IslandState.Expanded) Collapse();
+                Root.Opacity = 0;
+                Root.IsHitTestVisible = false;
+            }
+            else
+            {
+                Root.IsHitTestVisible = true;
+                Root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(280)));
+            }
+            Journal.Info("welcome", hide ? "чёлка спрятана на время знакомства" : "чёлка возвращена");
+        }
+
+        /// <summary>Где свёрнутая чёлка на экране (физические пиксели) и радиус её нижних углов в пикселях.</summary>
+        public Rect IslandScreenRect(out double radiusPx)
+        {
+            var tl = Island.PointToScreen(new Point(0, 0));
+            var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
+            radiusPx = Island.CornerRadius.BottomLeft * (br.X - tl.X) / Math.Max(1, Island.ActualWidth);
+            return new Rect(tl, br);
+        }
+
+        /// <summary>Пилюля приветствия «прилипла»: чёлка проявляется на её месте, пружинит от удара, Клоди радуется.</summary>
+        public void LandFromWelcome()
+        {
+            _welcomeHidden = false;
+            Root.BeginAnimation(OpacityProperty, null);
+            Root.Opacity = 1;
+            Root.IsHitTestVisible = true;
+            var st = new ScaleTransform(1.07, 0.86);
+            Scaler.RenderTransformOrigin = new Point(0.5, 0);
+            Scaler.RenderTransform = st;
+            var spring = new Helpers.Spring { Damping = 6.5, Frequency = 13 };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(900)) { EasingFunction = spring });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(900)) { EasingFunction = spring });
+            Buddy.ForceActivity(3, 2.2); // Клоди машет: «привет!»
+            Buddy.Cheer();
+            Edge.DropBead();
+            Journal.Info("welcome", "чёлка прилетела на место");
+        }
+
         /// <summary>Включить/выключить PrintScreen через Isle. false — Windows не дала поставить перехват.</summary>
         public bool SetPrintScreen(bool on)
         {
@@ -675,6 +726,7 @@ namespace Isle
         {
             Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
+            if (_welcomeHidden) return; // идёт знакомство — чёлка появится в его конце
             _leaveClose.Stop();
             _oledHide.Stop();
             if (_oledHidden) OledReveal(false);
@@ -1561,7 +1613,7 @@ namespace Isle
             bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
             if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
             VoiceWave.Visibility = voiceWave ? Visibility.Visible : Visibility.Collapsed;
-            if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 18; w = Math.Max(w, 320); }
+            if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 34; w = Math.Max(w, 320); } // волна повыше — есть куда расти
             double imageSize = tile;
             // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
             ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;

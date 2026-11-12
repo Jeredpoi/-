@@ -35,6 +35,8 @@ namespace Isle.Views
         private readonly Character _buddy = new() { Width = 130, Height = 96, HorizontalAlignment = HorizontalAlignment.Center };
         private int _step = -1;
         private readonly bool _hasSteam;
+        private Border _card;
+        private bool _flying, _landed;
         private readonly List<Func<FrameworkElement>> _pages = new();
         private readonly int _firstSetup; // первый шаг личной настройки (после знакомства)
         private int Steps => _pages.Count;
@@ -59,7 +61,7 @@ namespace Isle.Views
             _pages.Add(PrintScreenStep);
             _pages.Add(Done);
 
-            var card = new Border
+            var card = _card = new Border
             {
                 Background = CardBg, BorderBrush = Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(28),
                 RenderTransformOrigin = new Point(0.5, 0.5)
@@ -71,7 +73,7 @@ namespace Isle.Views
             card.Child = root;
             Content = card;
             card.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource is Border || e.OriginalSource is Grid) try { DragMove(); } catch { } };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+            KeyDown += (_, e) => { if (e.Key == Key.Escape && !_flying) Close(); };
 
             for (int i = 0; i < Steps; i++)
                 _dots.Children.Add(new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(3.5), Margin = new Thickness(4, 0, 4, 0), Background = Line });
@@ -86,6 +88,7 @@ namespace Isle.Views
                 st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.9, 1, TimeSpan.FromMilliseconds(520)) { EasingFunction = ease });
                 card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(320)));
                 Journal.Info("welcome", "приветствие открыто, Steam " + (_hasSteam ? "найден" : "не найден"));
+                AppHost.Window?.HideForWelcome(true); // чёлка появится в конце — «прилетит» из этого окна
                 Next();
             };
             Closed += (_, __) =>
@@ -93,6 +96,7 @@ namespace Isle.Views
                 AppSettings.Current.WelcomeShown = true;
                 AppSettings.Current.Save();
                 Journal.Info("welcome", "приветствие закрыто на шаге " + _step);
+                if (!_landed) AppHost.Window?.HideForWelcome(false); // закрыли без анимации (Esc и т. п.) — просто вернуть чёлку
             };
         }
 
@@ -104,7 +108,8 @@ namespace Isle.Views
 
         private void Go(int step)
         {
-            if (step >= _pages.Count) { Close(); return; }
+            if (_flying) return;
+            if (step >= _pages.Count) { FlyToIsland(); return; }
             bool forward = step >= _step;
             _step = step;
             Journal.Info("welcome", "шаг " + step);
@@ -557,8 +562,130 @@ namespace Isle.Views
             _buddy.Mood = Mood.Done;
             _buddy.Cheer();
             var sp = Page("Всё готово!", "Упри курсор в самый верх экрана над чёлкой, кликни по ней или нажми " + KeyText(AppSettings.Current.Hotkey) + ". Правый клик по чёлке — меню. Это знакомство можно открыть снова: Настройки → Обновления.");
-            sp.Children.Add(Buttons(Pill("Начать", true, Close)));
+            sp.Children.Add(Buttons(Pill("Начать", true, FlyToIsland)));
             return sp;
+        }
+
+        // ---------- финал: окно сминается в пилюлю и «прилипает» на место чёлки ----------
+
+        /// <summary>
+        /// Окно сминается в чёрную пилюлю размером с чёлку, тяжело плывёт к верху экрана, зависает под своим местом
+        /// и дрожит, будто его тянет магнит, — и со шлепком прилипает. В этот момент проявляется настоящая чёлка.
+        /// </summary>
+        private void FlyToIsland()
+        {
+            if (_flying) return;
+            var main = AppHost.Window;
+            if (main == null || !IsLoaded || _card == null) { Close(); return; }
+            _flying = true;
+            Rect target; double radiusPx;
+            try { target = main.IslandScreenRect(out radiusPx); }
+            catch (Exception ex) { Journal.Warn("welcome", "не нашёл чёлку на экране: " + ex.Message); Close(); return; }
+
+            // экранные пиксели → точки этого окна
+            var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+            var tl = m.Transform(target.TopLeft);
+            var br = m.Transform(target.BottomRight);
+            double pw = Math.Max(80, br.X - tl.X), ph = Math.Max(24, br.Y - tl.Y), pr = Math.Max(4, radiusPx * m.M11);
+            var goal = new Point((tl.X + br.X) / 2, (tl.Y + br.Y) / 2);
+            Journal.Info("welcome", "знакомство завершено — летим к чёлке: " + Math.Round(goal.X) + "," + Math.Round(goal.Y) + " " + Math.Round(pw) + "×" + Math.Round(ph));
+
+            var card = _card;
+            card.RenderTransform = null;
+            card.BeginAnimation(OpacityProperty, null);
+            card.Opacity = 1;
+            double w0 = card.ActualWidth, h0 = card.ActualHeight;
+            card.Width = w0; card.Height = h0;
+            card.HorizontalAlignment = HorizontalAlignment.Center;
+            card.VerticalAlignment = VerticalAlignment.Center;
+            card.ClipToBounds = true;
+            // содержимое гаснет, карточка темнеет до чёрного, как чёлка
+            card.Child?.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(200)));
+            var bg = new SolidColorBrush(((SolidColorBrush)CardBg).Color);
+            card.Background = bg;
+            bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(420)));
+
+            var start = new Point(Left + Width / 2, Top + Height / 2);
+            var hover = new Point(goal.X, goal.Y + ph + 22); // зависает чуть ниже своего места
+            const double Morph = 0.52, Travel = 1.05, Shake = 0.55, Snap = 0.16;
+            const double pad = 40;
+            bool shrunk = false;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            void Place(Point c, double w, double h)
+            {
+                Left = c.X - Width / 2;
+                Top = c.Y - Height / 2;
+                card.Width = w; card.Height = h;
+            }
+            static double Smooth(double t) => t * t * t * (t * (t * 6 - 15) + 10);  // плавный старт и финиш
+            static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
+            EventHandler tick = null;
+            tick = (_, __) =>
+            {
+                double t = clock.Elapsed.TotalSeconds;
+                if (t < Morph)
+                {
+                    // 1) сминается: размер → пилюля, углы → полукруг
+                    double k = Smooth(t / Morph);
+                    double w = Lerp(w0, pw, k), h = Lerp(h0, ph, k);
+                    card.CornerRadius = new CornerRadius(Lerp(28, h / 2, k));
+                    // лёгкое «сжатие» в середине: поперёк чуть уже, как будто комкают
+                    double squeeze = Math.Sin(Math.PI * k) * 0.06;
+                    Place(start, w * (1 - squeeze), h * (1 + squeeze));
+                    return;
+                }
+                if (!shrunk)
+                {
+                    // окно ужимаем до пилюли (с полями): дальше двигаем маленькое окно, а не большое прозрачное
+                    shrunk = true;
+                    Width = pw + pad * 2; Height = ph + pad * 2;
+                    card.CornerRadius = new CornerRadius(ph / 2);
+                }
+                t -= Morph;
+                if (t < Travel)
+                {
+                    // 2) тяжело плывёт: медленно трогается, разгоняется, долго тормозит; путь — пологая дуга
+                    double u = t / Travel;
+                    double k = u < 0.35 ? 0.35 * Math.Pow(u / 0.35, 2.4) : 0.35 + 0.65 * (1 - Math.Pow(1 - (u - 0.35) / 0.65, 3));
+                    var c = new Point(Lerp(start.X, hover.X, k), Lerp(start.Y, hover.Y, k));
+                    c.X += Math.Sin(Math.PI * k) * 36;                      // дуга вбок
+                    double stretch = Math.Sin(Math.PI * k) * 0.08;          // на ходу чуть вытягивается вверх
+                    Place(c, pw * (1 - stretch * 0.5), ph * (1 + stretch));
+                    return;
+                }
+                t -= Travel;
+                if (t < Shake)
+                {
+                    // 3) дрожит под своим местом — магнит тянет всё сильнее, пилюля медленно подползает
+                    double u = t / Shake;
+                    double amp = 1 + 5 * u;
+                    var c = new Point(hover.X + Math.Sin(t * 70) * amp, hover.Y - 8 * u * u + Math.Sin(t * 53) * amp * 0.35);
+                    Place(c, pw, ph);
+                    return;
+                }
+                t -= Shake;
+                var from = new Point(hover.X, hover.Y - 8);
+                if (t < Snap)
+                {
+                    // 4) щёлк! — рывок вверх с ускорением, верхние углы выпрямляются, как у чёлки
+                    double u = t / Snap;
+                    double k = u * u * u;
+                    Place(new Point(from.X, Lerp(from.Y, goal.Y, k)), pw * (1 - 0.06 * k), ph * (1 + 0.1 * k));
+                    double r = Lerp(ph / 2, 0, k);
+                    card.CornerRadius = new CornerRadius(r, r, Lerp(ph / 2, pr, k), Lerp(ph / 2, pr, k));
+                    return;
+                }
+                // 5) прилипла: настоящая чёлка проявляется на этом месте и пружинит, окно исчезает
+                CompositionTarget.Rendering -= tick;
+                Place(goal, pw, ph);
+                _landed = true;
+                main.LandFromWelcome();
+                Opacity = 0;
+                Close();
+            };
+            CompositionTarget.Rendering += tick;
         }
     }
 }
