@@ -8,6 +8,48 @@ namespace Isle.Helpers
         /// <summary>Размер квадрата для картинки w×h: чем больше снимок, тем крупнее, но не меньше 8 px.</summary>
         public static int BlockFor(int w, int h) => Math.Max(8, (int)(Math.Max(w, h) / 70.0));
 
+        /// <summary>
+        /// Размер квадрата для рамки w×h (в пикселях снимка): маленькое сообщение — мелкие квадраты,
+        /// большой блок — крупные. Примерно 7 квадратов по короткой стороне, от 5 до 56 px.
+        /// </summary>
+        public static int BlockForPatch(int w, int h)
+        {
+            int b = (int)Math.Round(Math.Min(w, h) / 7.0);
+            b = Math.Clamp(b, 5, 56);
+            return b <= 12 ? b : b - b % 4; // крупные — ступеньками, чтобы при растягивании рамки сетка не дрожала
+        }
+
+        /// <summary>
+        /// Квадраты для куска r (в пикселях BGRA-буфера w×h): по одному пикселю на квадрат — средний цвет из сетки
+        /// до 4×4 точек внутри квадрата. Получается крошечная картинка cw×ch, её растягивают «без сглаживания».
+        /// Работает за время, пропорциональное числу квадратов, а не площади, — даже огромная рамка не лагает.
+        /// </summary>
+        public static byte[] Cells(byte[] px, int w, int h, int rx, int ry, int rw, int rh, int block, out int cw, out int ch)
+        {
+            cw = Math.Max(1, (rw + block - 1) / block);
+            ch = Math.Max(1, (rh + block - 1) / block);
+            var dst = new byte[cw * ch * 4];
+            int s = Math.Min(block, 4);
+            for (int cy = 0; cy < ch; cy++)
+                for (int cx = 0; cx < cw; cx++)
+                {
+                    int x0 = rx + cx * block, y0 = ry + cy * block;
+                    int bw = Math.Max(1, Math.Min(block, rx + rw - x0)), bh = Math.Max(1, Math.Min(block, ry + rh - y0));
+                    long sb = 0, sg = 0, sr = 0; int n = 0;
+                    for (int j = 0; j < s; j++)
+                        for (int i = 0; i < s; i++)
+                        {
+                            int x = Math.Clamp(x0 + (2 * i + 1) * bw / (2 * s), 0, w - 1);
+                            int y = Math.Clamp(y0 + (2 * j + 1) * bh / (2 * s), 0, h - 1);
+                            int k = (y * w + x) * 4;
+                            sb += px[k]; sg += px[k + 1]; sr += px[k + 2]; n++;
+                        }
+                    int d = (cy * cw + cx) * 4;
+                    dst[d] = (byte)(sb / n); dst[d + 1] = (byte)(sg / n); dst[d + 2] = (byte)(sr / n); dst[d + 3] = 255;
+                }
+            return dst;
+        }
+
         /// <summary>Пикселизованная копия всего BGRA-буфера (сетка квадратов от левого верхнего угла).</summary>
         public static byte[] Build(byte[] px, int w, int h, int block)
         {

@@ -48,8 +48,7 @@ namespace Isle.Overlays
         private BitmapSource _crop;
         private int _cropW, _cropH;
         private byte[] _cropPx;
-        private BitmapSource _mosaicSrc;   // весь снимок в квадратах — считается при первой мозаике
-        private Canvas _patches;           // плитки мозаики поверх снимка (каждая — кусок _mosaicSrc)
+        private Canvas _patches;           // плитки мозаики поверх снимка (у каждой свои квадраты — по её размеру)
         private Image _livePatch;          // плитка, которая тянется за мышью
         private Int32Rect _livePx;
         private Canvas _ink;
@@ -305,7 +304,7 @@ namespace Isle.Overlays
 
             _area = a;
             _crop = cb; _cropW = crop.Width; _cropH = crop.Height;
-            _cropPx = null; _mosaicSrc = null;                 // мозаика пересчитается для новой области
+            _cropPx = null;                                    // пиксели для мозаики возьмутся из новой области
             _baseImage.Source = cb;
             _page.Width = a.Width; _page.Height = a.Height;
             Canvas.SetLeft(_page, a.X); Canvas.SetTop(_page, a.Y);
@@ -443,7 +442,7 @@ namespace Isle.Overlays
                     if (_livePatch != null)
                     {
                         var patch = _livePatch; _livePatch = null;
-                        ShowPatch(r, patch);
+                        ShowPatch(r, patch, force: true);
                         if (r.Width >= 3 && r.Height >= 3 && patch.Source != null)
                             _markUndo.Push(() => _patches.Children.Remove(patch)); // итоговая плитка — та же, что была видна
                         else _patches.Children.Remove(patch);
@@ -466,34 +465,42 @@ namespace Isle.Overlays
             }
         }
 
+        /// <summary>Пиксели снимка для мозаики — копируются один раз, при первой мозаике.</summary>
         private void EnsureMosaic()
         {
-            if (_mosaicSrc != null) return;
             _cropPx ??= ScreenTools.Bgra(_crop, out _, out _);
-            var m = Mosaic.Build(_cropPx, _cropW, _cropH, Mosaic.BlockFor(_cropW, _cropH));
-            _mosaicSrc = BitmapSource.Create(_cropW, _cropH, 96, 96, PixelFormats.Bgr32, null, m, _cropW * 4);
-            _mosaicSrc.Freeze();
         }
 
-        /// <summary>Плитка мозаики на месте рамки r (в точках снимка): кусок заранее посчитанной мозаики, по сетке пикселей.</summary>
-        private void ShowPatch(Rect r, Image patch = null)
+        private long _patchAt; // когда плитка обновлялась последний раз — не чаще кадра
+
+        /// <summary>
+        /// Плитка мозаики на месте рамки r (в точках снимка). Размер квадратов — по размеру рамки: мелкое сообщение
+        /// закрывается мелкими квадратами, большой блок — крупными. Квадраты считаются прямо для этой рамки
+        /// (крошечная картинка «квадрат = пиксель», растянутая без сглаживания), поэтому даже огромная рамка не тормозит.
+        /// </summary>
+        private void ShowPatch(Rect r, Image patch = null, bool force = false)
         {
             patch ??= _livePatch;
-            if (patch == null || _mosaicSrc == null) return;
+            if (patch == null || _cropPx == null) return;
+            long now = Environment.TickCount64;
+            if (!force && now - _patchAt < 15) return;
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
             var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
             if (ir.Width <= 0 || ir.Height <= 0) { patch.Source = null; return; }
-            if (!ir.Equals(_livePx) || patch.Source == null)
-            {
-                var cb = new CroppedBitmap(_mosaicSrc, ir);
-                cb.Freeze();
-                patch.Source = cb;
-                _livePx = ir;
-            }
+            if (ir.Equals(_livePx) && patch.Source != null && !force) return;
+            _patchAt = now;
+            int block = Mosaic.BlockForPatch(ir.Width, ir.Height);
+            var cells = Mosaic.Cells(_cropPx, _cropW, _cropH, ir.X, ir.Y, ir.Width, ir.Height, block, out int cw, out int ch);
+            var src = BitmapSource.Create(cw, ch, 96, 96, PixelFormats.Bgr32, null, cells, cw * 4);
+            src.Freeze();
+            patch.Source = src;
+            _livePx = ir;
+            // картинка — целыми квадратами (последний ряд может выйти за рамку), лишнее обрезаем по рамке
             Canvas.SetLeft(patch, x0 / k); Canvas.SetTop(patch, y0 / k);
-            patch.Width = ir.Width / k; patch.Height = ir.Height / k;
+            patch.Width = cw * block / k; patch.Height = ch * block / k;
+            patch.Clip = new RectangleGeometry(new Rect(0, 0, ir.Width / k, ir.Height / k));
         }
 
         private static Geometry Arrow(Point a, Point b, double t)
@@ -591,13 +598,27 @@ namespace Isle.Overlays
             rtb.Render(dv);
             rtb.Freeze();
             _outline.Visibility = Visibility.Visible;
-            FlyToIsland(() => Finish(rtb));
+            FlyToIsland(() => Finish(rtb), rtb);
         }
 
         /// <summary>Снимок сжимается и улетает в чёлку (верх основного экрана), затемнение тает.</summary>
-        private void FlyToIsland(Action done)
+        private void FlyToIsland(Action done, BitmapSource flat = null)
         {
             foreach (var h in _handles) h.Visibility = Visibility.Collapsed;
+            // Летит одна готовая картинка, а не весь слой с пометками и плитками мозаики — так анимации нечего пересчитывать.
+            // И на время полёта возвращаем отрисовку видеокартой: процессор не успевал анимировать снимок на 4K
+            // (чёрные прямоугольники были от частичной перерисовки при рисовании, а в полёте кадр перерисовывается целиком).
+            if (flat != null)
+            {
+                _page.Children.Clear();
+                _page.Children.Add(new Image { Source = flat, Stretch = Stretch.Fill });
+            }
+            try
+            {
+                if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource hs && hs.CompositionTarget != null)
+                    hs.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.Default;
+            }
+            catch { }
             _escPoll.Stop();
             IsHitTestVisible = false;
             // центр чёлки: верх основного монитора по центру (в координатах слоя)
