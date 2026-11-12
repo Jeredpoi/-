@@ -127,7 +127,17 @@ namespace Isle
             var win = new Views.WelcomeWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -4000, Top = -4000, ShowActivated = false };
             win.Show();
             await Task.Delay(2600);
-            if (win.Content is FrameworkElement card) Save(card, path, 30);
+            if (win.Content is FrameworkElement card)
+            {
+                Save(card, path, 30);
+                // каждый шаг знакомства — отдельным снимком (welcome-1.png …)
+                for (int i = 1; i < win.ShotSteps - 1; i++)
+                {
+                    win.ShotGo(i);
+                    await Task.Delay(i == 1 ? 3400 : 1800);
+                    Save(card, Path.Combine(Path.GetDirectoryName(path), "welcome-" + i + ".png"), 30);
+                }
+            }
             win.Close();
             await Task.Delay(300);
         }

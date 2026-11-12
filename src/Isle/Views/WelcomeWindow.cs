@@ -99,6 +99,8 @@ namespace Isle.Views
         // ---------- шаги ----------
 
         private void Next() => Go(_step + 1);
+        internal int ShotSteps => _pages.Count;
+        internal void ShotGo(int step) => Go(step);
         private void Back() => Go(Math.Max(0, _step - 1));
         private void SkipIntro() { Journal.Info("welcome", "знакомство пропущено на шаге " + _step); Go(_firstSetup); }
 
