@@ -109,6 +109,19 @@ namespace Isle.Overlays
             // мышь отпустили за пределами окна или захват потерян (Alt+Tab) — завершаем рисование как обычное отпускание
             _page.LostMouseCapture += (_, e) => { if (_drawing) MarkUp(_page, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent }); };
 
+            // Полноэкранное непрозрачное окно с GPU-отрисовкой на части видеокарт и сборок Windows (в т. ч. Insider)
+            // оставляет чёрные прямоугольники там, где картинка перерисовывается кусками, — а при рисовании так и есть.
+            // На время пометок рисуем процессором: меняются только маленькие участки, это быстро и без артефактов.
+            try
+            {
+                if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource hs && hs.CompositionTarget != null)
+                {
+                    hs.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+                    Journal.Info("capture", "пометки: программная отрисовка (без чёрных прямоугольников GPU)");
+                }
+            }
+            catch (Exception ex) { Journal.Warn("capture", "не удалось включить программную отрисовку: " + ex.Message); }
+
             BuildBar();
             BuildHandles();
             _hintText.Text = "Рисуй прямо на снимке · уголки растягивают область · Enter — сохранить · Esc — отмена";

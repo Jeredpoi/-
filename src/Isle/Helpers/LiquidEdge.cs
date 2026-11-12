@@ -78,8 +78,11 @@ namespace Isle.Helpers
                     double dy = local.Y, dxOut = local.X < 0 ? -local.X : local.X > w ? local.X - w : 0;
                     if (dy > -6 && dy < 140 && dxOut < 60)
                     {
-                        double dist = Math.Max(0, dy) + dxOut;
-                        targetAmp = 13 * Math.Max(0, 1 - dist / 140.0);
+                        // сила тянется от нуля на границах зоны: раньше на входе сбоку сразу было ~7 из 13 — капля «выпрыгивала»
+                        double fd = Smooth(1 - Math.Max(0, dy) / 140.0);   // чем ниже курсор — тем слабее
+                        double fx = Smooth(1 - dxOut / 60.0);              // сбоку от острова — слабеет к краю зоны
+                        double fy = dy < 0 ? Smooth(1 + dy / 6.0) : 1;     // курсор заходит на сам остров — капля втягивается
+                        targetAmp = 13 * fd * fx * fy;
                         // центр выпуклости держим подальше от углов: у самого угла кривая уходила вниз почти отвесно
                         double margin = CornerRadius + 26;
                         targetX = margin < w / 2 ? Math.Clamp(local.X, margin, w - margin) : w / 2;
@@ -87,7 +90,8 @@ namespace Isle.Helpers
                 }
                 catch { }
             }
-            _bulgeAmp += (targetAmp - _bulgeAmp) * FrameClock.Lerp(0.18);
+            // вытягивается неторопливо, как густая жидкость, а втягивается чуть быстрее
+            _bulgeAmp += (targetAmp - _bulgeAmp) * FrameClock.Lerp(targetAmp > _bulgeAmp ? 0.085 : 0.12);
             _bulgeX += (targetX - _bulgeX) * FrameClock.Lerp(0.25);
 
             // провисание, когда пользователя нет
@@ -128,7 +132,9 @@ namespace Isle.Helpers
                 double k = fb - b0; k = (1 - Math.Cos(k * Math.PI)) / 2;
                 double band = _spec[b0] * (1 - k) + _spec[b1] * k;
                 double music = Math.Pow(band, 1.35) * 15;
-                double bulge = _bulgeAmp * Math.Exp(-Math.Pow((x - _bulgeX) / 34.0, 2));
+                // капля с «шейкой»: широкое мягкое основание + узкий кончик — без излома в месте стыка с краем
+                double bx = x - _bulgeX;
+                double bulge = _bulgeAmp * (0.45 * Math.Exp(-Math.Pow(bx / 52.0, 2)) + 0.55 * Math.Exp(-Math.Pow(bx / 22.0, 2)));
                 double sag = _sag * Math.Exp(-Math.Pow((t - 0.5) / 0.28, 2));
                 double spike = 0;
                 if (_bristle > 0)
@@ -146,6 +152,7 @@ namespace Isle.Helpers
         }
 
         private bool _wasAny;
+        private static double Smooth(double t) { t = Math.Clamp(t, 0, 1); return t * t * (3 - 2 * t); }
         private readonly Point[] _pts = new Point[Samples];
         private static readonly Pen OutlinePen = MakeOutline();
         private static Pen MakeOutline() { var p = new Pen(new SolidColorBrush(Color.FromRgb(0x23, 0x23, 0x2A)), 1); p.Freeze(); return p; }
