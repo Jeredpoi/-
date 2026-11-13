@@ -7,6 +7,7 @@ import json, re, subprocess, sys
 from datetime import datetime
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")  # консоль Windows по умолчанию cp1252 — кириллица роняла скрипт
 d = Path(sys.argv[1])
 rec = d / "rec.mp4"
 def ts(s):

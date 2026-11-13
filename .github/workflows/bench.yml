@@ -53,6 +53,8 @@ jobs:
 
       - name: Анализ
         shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
         run: python .github/scripts/bench_report.py bench
 
       - uses: actions/upload-artifact@v4
