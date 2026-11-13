@@ -123,7 +123,7 @@ namespace Isle
             if (AppSettings.IsFreshInstall && !s.WelcomeShown)
             {
                 var welcome = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
-                welcome.Tick += (_, __) => { welcome.Stop(); if (s.WelcomeShown) return; try { new Views.WelcomeWindow().Show(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
+                welcome.Tick += (_, __) => { welcome.Stop(); if (s.WelcomeShown) return; try { Views.WelcomeWindow.ShowOnce(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
                 welcome.Start();
             }
             AppHost.Vpn = new VpnService();
@@ -465,8 +465,20 @@ namespace Isle
             Root.BeginAnimation(OpacityProperty, null);
             Root.Opacity = 1;
             Root.IsHitTestVisible = true;
-            // пружинка от удара — ВМЕСТЕ со сдвигом SlideT (им чёлка прячется в OLED-режиме), а не вместо него
-            var st = new ScaleTransform(1.07, 0.86);
+            Squash(1.07, 0.86, 900);
+            Buddy.ForceActivity(3, 2.2); // Клоди машет: «привет!»
+            Buddy.Cheer();
+            Edge.DropBead();
+            Journal.Info("welcome", "чёлка прилетела на место");
+        }
+
+        /// <summary>
+        /// Чёлка пружинит, как от лёгкого удара: сплющивается до sx×sy и упруго возвращается.
+        /// Пружинка ставится ВМЕСТЕ со сдвигом SlideT (им чёлка прячется в OLED-режиме), а не вместо него.
+        /// </summary>
+        private void Squash(double sx, double sy, int ms)
+        {
+            var st = new ScaleTransform(sx, sy);
             Scaler.RenderTransformOrigin = new Point(0.5, 0);
             if (Scaler.RenderTransform is TransformGroup tg && tg.Children.Count == 2 && tg.Children[0] is ScaleTransform)
                 tg.Children[0] = st;
@@ -478,12 +490,16 @@ namespace Isle
                 Scaler.RenderTransform = group;
             }
             var spring = new Helpers.Spring { Damping = 6.5, Frequency = 13 };
-            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(900)) { EasingFunction = spring });
-            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(900)) { EasingFunction = spring });
-            Buddy.ForceActivity(3, 2.2); // Клоди машет: «привет!»
-            Buddy.Cheer();
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(ms)) { EasingFunction = spring });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(ms)) { EasingFunction = spring });
+        }
+
+        /// <summary>Снимок долетел до чёлки — она «проглатывает» его: лёгкий упругий толчок и капля снизу.</summary>
+        public void Gulp()
+        {
+            if (_welcomeHidden || State == IslandState.Expanded) return;
+            Squash(1.05, 0.9, 700);
             Edge.DropBead();
-            Journal.Info("welcome", "чёлка прилетела на место");
         }
 
         // ---------- плавность, когда видеокарта занята игрой ----------

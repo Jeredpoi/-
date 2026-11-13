@@ -605,13 +605,14 @@ namespace Isle.Overlays
         /// <summary>Esc: сначала отменяет набираемый текст, потом — весь снимок.</summary>
         private void OnEscape()
         {
+            if (_saving) return; // снимок уже улетает — Esc его не отменяет
             if (_markup && _text != null) { MarkUndo(); return; }
             Finish(null);
         }
 
         private void OnMarkupKey(KeyEventArgs e)
         {
-            if (!_markup || _text != null) return;
+            if (!_markup || _text != null || _saving) return; // во время сохранения пометки уже склеиваются — их не трогаем
             if (e.Key == Key.Enter) { SaveMarkup(); e.Handled = true; }
             else if (e.Key == Key.Z && (Keyboard.Modifiers & ModifierKeys.Control) != 0) { MarkUndo(); e.Handled = true; }
         }
@@ -652,14 +653,32 @@ namespace Isle.Overlays
             _escPoll.Stop();
             IsHitTestVisible = false;
             var fromPx = new Rect(_area.X * Kx + _vs.X, _area.Y * Ky + _vs.Y, _area.Width * Kx, _area.Height * Ky);
-            // сначала на экране появляется окошко с копией, и только потом прячется слой — без «провала»
-            ShotFlight.Fly(preview, fromPx, Hide, () =>
+            bool saved = false;
+            void Complete(string how)
             {
+                if (saved) return;
+                saved = true;
                 var t1 = System.Diagnostics.Stopwatch.StartNew();
+                Hide();
                 var full = RenderFlat(content, _cropW, _cropH);
-                Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс");
+                Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс" + how);
                 Finish(full);
-            });
+            }
+            // страховка: если окошко полёта почему-то не появилось — всё равно сохраняем (иначе слой завис бы без Esc)
+            var guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            guard.Tick += (_, __) => { guard.Stop(); if (!saved) Journal.Warn("capture", "полёт не завершился за 3 с — сохраняю без него"); Complete(" (страховка)"); };
+            guard.Start();
+            try
+            {
+                // сначала на экране появляется окошко с копией, и только потом прячется слой — без «провала»
+                ShotFlight.Fly(preview, fromPx, Hide, () => { guard.Stop(); Complete(""); });
+            }
+            catch (Exception ex)
+            {
+                Journal.Error("capture", "полёт не запустился: " + ex.Message);
+                guard.Stop();
+                Complete(" (без полёта)");
+            }
         }
 
         /// <summary>Склеить снимок с пометками в картинку w×h.</summary>

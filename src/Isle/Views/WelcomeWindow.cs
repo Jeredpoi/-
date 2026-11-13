@@ -41,6 +41,17 @@ namespace Isle.Views
         private readonly int _firstSetup; // первый шаг личной настройки (после знакомства)
         private int Steps => _pages.Count;
 
+        private static WelcomeWindow _open;
+
+        /// <summary>Показать знакомство; если оно уже открыто — просто вывести его вперёд (второе окно не нужно).</summary>
+        public static void ShowOnce()
+        {
+            if (_open != null && _open.IsLoaded) { _open.Activate(); return; }
+            _open = new WelcomeWindow();
+            _open.Closed += (_, __) => _open = null;
+            _open.Show();
+        }
+
         public WelcomeWindow()
         {
             Title = "Добро пожаловать в Isle";
@@ -67,16 +78,46 @@ namespace Isle.Views
                 RenderTransformOrigin = new Point(0.5, 0.5)
             };
             var root = new DockPanel();
-            DockPanel.SetDock(_dots, Dock.Bottom);
-            root.Children.Add(_dots);
+            // внизу — точки прогресса (кликабельные) и подсказка по клавишам
+            var bottom = new StackPanel { Margin = new Thickness(0, 0, 0, 14) };
+            _dots.Margin = new Thickness(0, 0, 0, 8);
+            bottom.Children.Add(_dots);
+            bottom.Children.Add(new TextBlock
+            {
+                Text = "← → — листать  ·  Enter — дальше  ·  Esc — закрыть", FontSize = 11, Foreground = Frz(Color.FromRgb(0x5A, 0x5A, 0x64)),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            DockPanel.SetDock(bottom, Dock.Bottom);
+            root.Children.Add(bottom);
             root.Children.Add(_host);
-            card.Child = root;
+            // слои карточки: мягкое «живое» свечение позади, содержимое, конфетти поверх
+            var layers = new Grid();
+            layers.Children.Add(BuildGlow());
+            layers.Children.Add(root);
+            layers.Children.Add(_confetti);
+            layers.SizeChanged += (_, __) => layers.Clip = new RectangleGeometry(new Rect(0, 0, layers.ActualWidth, layers.ActualHeight), 27, 27);
+            card.Child = layers;
             Content = card;
-            card.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource is Border || e.OriginalSource is Grid) try { DragMove(); } catch { } };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape && !_flying) Close(); };
+            card.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource is Border || e.OriginalSource is Grid || e.OriginalSource is Canvas) try { DragMove(); } catch { } };
+            KeyDown += (_, e) =>
+            {
+                if (_flying) return;
+                if (e.Key == Key.Escape) { Close(); return; }
+                // стрелками листаются шаги знакомства; на шагах настройки решения принимаются кнопками
+                if ((e.Key == Key.Right || e.Key == Key.Enter) && _step < _firstSetup) { Next(); e.Handled = true; }
+                else if (e.Key == Key.Enter && _step == _pages.Count - 1) { FlyToIsland(); e.Handled = true; }
+                else if (e.Key == Key.Left && _step > 0) { Back(); e.Handled = true; }
+            };
 
             for (int i = 0; i < Steps; i++)
-                _dots.Children.Add(new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(3.5), Margin = new Thickness(4, 0, 4, 0), Background = Line });
+            {
+                int target = i;
+                var dot = new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(3.5), Margin = new Thickness(4, 0, 4, 0), Background = Line, Cursor = Cursors.Hand };
+                // невидимая «подушка» вокруг точки — по ней легче попасть
+                var hit = new Border { Background = Brushes.Transparent, Padding = new Thickness(0, 6, 0, 6), Child = dot, Cursor = Cursors.Hand };
+                hit.MouseLeftButtonUp += (_, e) => { if (!_flying && target != _step) Go(target); e.Handled = true; };
+                _dots.Children.Add(hit);
+            }
 
             // окно «вырастает» из центра
             Loaded += (_, __) =>
@@ -116,7 +157,7 @@ namespace Isle.Views
             Show(_pages[step](), forward);
             for (int i = 0; i < _dots.Children.Count; i++)
             {
-                var d = (Border)_dots.Children[i];
+                var d = (Border)((Border)_dots.Children[i]).Child;
                 d.Background = i == _step ? Fg : Line;
                 d.BeginAnimation(WidthProperty, new DoubleAnimation(i == _step ? 22 : 7, TimeSpan.FromMilliseconds(320)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             }
@@ -561,9 +602,85 @@ namespace Isle.Views
         {
             _buddy.Mood = Mood.Done;
             _buddy.Cheer();
+            Dispatcher.BeginInvoke(new Action(BurstConfetti), System.Windows.Threading.DispatcherPriority.Background);
             var sp = Page("Всё готово!", "Упри курсор в самый верх экрана над чёлкой, кликни по ней или нажми " + KeyText(AppSettings.Current.Hotkey) + ". Правый клик по чёлке — меню. Это знакомство можно открыть снова: Настройки → Обновления.");
             sp.Children.Add(Buttons(Pill("Начать", true, FlyToIsland)));
             return sp;
+        }
+
+        // ---------- украшения: свечение и конфетти ----------
+
+        private readonly Canvas _confetti = new() { IsHitTestVisible = false };
+
+        /// <summary>Мягкое пятно света, которое медленно плавает и «дышит» позади содержимого.</summary>
+        private static FrameworkElement BuildGlow()
+        {
+            var host = new Canvas { IsHitTestVisible = false };
+            Ellipse Blob(Color c, double size, double x, double y, double dx, double dy, double sec)
+            {
+                var e = new Ellipse
+                {
+                    Width = size, Height = size,
+                    Fill = new RadialGradientBrush(Color.FromArgb(46, c.R, c.G, c.B), Color.FromArgb(0, c.R, c.G, c.B))
+                };
+                Canvas.SetLeft(e, x); Canvas.SetTop(e, y);
+                var tt = new TranslateTransform();
+                e.RenderTransform = tt;
+                var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+                tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, dx, TimeSpan.FromSeconds(sec)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = ease });
+                tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, dy, TimeSpan.FromSeconds(sec * 1.3)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = ease });
+                e.BeginAnimation(OpacityProperty, new DoubleAnimation(0.55, 1, TimeSpan.FromSeconds(sec * 0.8)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = ease });
+                host.Children.Add(e);
+                return e;
+            }
+            Blob(Color.FromRgb(0x8B, 0x7C, 0xFF), 460, -120, -180, 90, 50, 9);   // сиреневое — слева сверху
+            Blob(Color.FromRgb(0x4A, 0xC8, 0xFF), 420, 330, 260, -80, -60, 11);  // голубое — справа снизу
+            return host;
+        }
+
+        /// <summary>Конфетти на последнем шаге: разноцветные кусочки разлетаются из-под заголовка и падают.</summary>
+        private void BurstConfetti()
+        {
+            _confetti.Children.Clear();
+            var rnd = new Random();
+            Color[] colors = { Color.FromRgb(0x4A, 0xDE, 0x80), Color.FromRgb(0xFB, 0xBF, 0x24), Color.FromRgb(0x60, 0xA5, 0xFA),
+                               Color.FromRgb(0xF4, 0x72, 0xB6), Color.FromRgb(0xA7, 0x8B, 0xFA), Color.FromRgb(0xEC, 0xEC, 0xF1) };
+            double cx = ActualWidth / 2, cy = ActualHeight * 0.36;
+            var bits = new List<(FrameworkElement el, double vx, double vy, double spin, RotateTransform rt, TranslateTransform tt)>();
+            for (int i = 0; i < 70; i++)
+            {
+                var c = colors[rnd.Next(colors.Length)];
+                var el = new Rectangle { Width = 5 + rnd.NextDouble() * 5, Height = 3 + rnd.NextDouble() * 4, RadiusX = 1.5, RadiusY = 1.5, Fill = Frz(c) };
+                var rt = new RotateTransform(rnd.NextDouble() * 360);
+                var tt = new TranslateTransform(cx, cy);
+                var g = new TransformGroup(); g.Children.Add(rt); g.Children.Add(tt);
+                el.RenderTransform = g;
+                _confetti.Children.Add(el);
+                double ang = -Math.PI / 2 + (rnd.NextDouble() - 0.5) * 2.4, sp = 260 + rnd.NextDouble() * 320;
+                bits.Add((el, Math.Cos(ang) * sp, Math.Sin(ang) * sp, (rnd.NextDouble() - 0.5) * 720, rt, tt));
+            }
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            double prev = 0;
+            EventHandler tick = null;
+            tick = (_, __) =>
+            {
+                double t = clock.Elapsed.TotalSeconds, dt = Math.Min(0.05, t - prev);
+                prev = t;
+                for (int i = 0; i < bits.Count; i++)
+                {
+                    var b = bits[i];
+                    b.vy += 900 * dt;                 // падает
+                    b.vx *= Math.Pow(0.35, dt);       // и тормозит в воздухе
+                    b.tt.X += b.vx * dt; b.tt.Y += b.vy * dt;
+                    b.rt.Angle += b.spin * dt;
+                    b.el.Opacity = Math.Clamp(1.8 - t, 0, 1);
+                    bits[i] = b;
+                }
+                if (t < 1.9 && IsLoaded) return;
+                CompositionTarget.Rendering -= tick;
+                _confetti.Children.Clear();
+            };
+            CompositionTarget.Rendering += tick;
         }
 
         // ---------- финал: окно сминается в пилюлю и «прилипает» на место чёлки ----------
@@ -625,8 +742,10 @@ namespace Isle.Views
             static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
             EventHandler tick = null;
+            bool landed = false;
             tick = (_, __) =>
             {
+                if (landed) return; // окно закрывается — вложенный кадр не должен «приземлить» чёлку второй раз
                 double t = clock.Elapsed.TotalSeconds;
                 if (t < Morph)
                 {
@@ -681,6 +800,7 @@ namespace Isle.Views
                     return;
                 }
                 // 5) прилипла: настоящая чёлка проявляется на этом месте и пружинит, окно исчезает
+                landed = true;
                 CompositionTarget.Rendering -= tick;
                 Place(goal, pw, ph);
                 _landed = true;
