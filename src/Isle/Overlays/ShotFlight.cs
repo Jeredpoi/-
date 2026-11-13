@@ -22,8 +22,12 @@ namespace Isle.Overlays
         private const uint NoActivate = 0x0010, NoSize = 0x0001;
 
         /// <param name="shown">окошко уже на экране поверх слоя — теперь слой можно спрятать (без «провала» между ними)</param>
+        private static int _flights;
+
         public static void Fly(BitmapSource image, Rect from, Action shown, Action done)
         {
+            int id = ++_flights;
+            Journal.Info("capture", "полёт #" + id + ": старт, снимок " + image.PixelWidth + "×" + image.PixelHeight + ", окно " + Math.Round(from.Width) + "×" + Math.Round(from.Height) + " px");
             // куда: середина чёлки; снимок уменьшается до её высоты, сохраняя пропорции
             Rect to;
             try
@@ -70,7 +74,8 @@ namespace Isle.Overlays
             static double Lerp(double a, double b, double t) => a + (b - a) * t;
             void Place(double u)
             {
-                double ks = 1 - (1 - u) * (1 - u);                                                    // размер: мягко, без задержки в самом большом (дорогом) виде
+                // размер: в начале уменьшается быстрее — самые дорогие «большие» кадры длятся меньше, дальше мягко
+                double ks = 1 - Math.Pow(1 - u, 3);
                 double km = u < 0.5 ? 4 * u * u * u : 1 - Math.Pow(-2 * u + 2, 3) / 2;                // путь: плавно, с разгоном
                 double w = Lerp(from.Width, to.Width, ks), h = Lerp(from.Height, to.Height, ks);
                 double cx = Lerp(from.X + from.Width / 2, to.X + to.Width / 2, km);
@@ -101,7 +106,7 @@ namespace Isle.Overlays
                 CompositionTarget.Rendering -= tick;
                 win.Close();
                 try { AppHost.Window?.Gulp(); } catch { } // чёлка «проглатывает» снимок
-                Journal.Info("capture", "полёт в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс, смен размера " + resizes);
+                Journal.Info("capture", "полёт #" + id + " в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс, смен размера " + resizes);
                 done?.Invoke();
             };
             // окошко нарисовано поверх слоя — только теперь прячем слой и начинаем отсчёт (без «провала» между ними)
