@@ -40,6 +40,15 @@ namespace Isle.Helpers
             _frames++;
         }
 
+        /// <summary>Остановить и вернуть кадры в секунду, худший кадр и итог текстом.</summary>
+        public (double fps, double worst, string text) StopStats()
+        {
+            double ms = _sw.Elapsed.TotalMilliseconds;
+            int frames = _frames; double worst = _worst;
+            var text = Stop();
+            return (ms > 0 ? frames * 1000.0 / ms : 0, worst, text);
+        }
+
         /// <summary>Остановить и вернуть итог.</summary>
         public string Stop()
         {
