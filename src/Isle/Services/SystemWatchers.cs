@@ -72,6 +72,8 @@ namespace Isle.Services
         public bool HasBattery { get; private set; }
 
         public event Action<bool> FullscreenChanged;
+        /// <summary>Сейчас на переднем плане полноэкранное приложение (игра, видео).</summary>
+        public bool IsFullscreen => _lastFullscreen;
         public event Action LanguageChanged;
 
         public void Start()

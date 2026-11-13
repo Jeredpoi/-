@@ -159,7 +159,13 @@ namespace Isle
                 LangChip.Text = AppHost.Watchers.LanguageCode;
                 AnimateLangChip();
             };
-            AppHost.Watchers.FullscreenChanged += fs => { _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen; ApplyVisibility(); };
+            AppHost.Watchers.FullscreenChanged += fs =>
+            {
+                _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen;
+                ApplyVisibility();
+                // игра на весь экран занимает видеокарту — чёлку рисуем процессором, иначе она раскрывается рывками
+                SetSoftRender(fs, fs ? "полноэкранное приложение" : "полноэкранное приложение закрыто");
+            };
             AppHost.WeatherChanged += UpdateWeatherMini;
 
             _toastTimer.Tick += (_, __) => { _toastTimer.Stop(); NextToast(); };
@@ -496,6 +502,55 @@ namespace Isle
             Edge.DropBead();
         }
 
+        // ---------- плавность, когда видеокарта занята игрой ----------
+        // Окно чёлки прозрачное: каждый кадр Windows забирает из видеокарты в обычную память. Когда игра грузит
+        // видеокарту на 100%, чёлка ждёт своей очереди и раскрывается с 2–3 кадрами в секунду. Маленькое окно
+        // процессор рисует легко — поэтому, пока видеокарта занята, рисуем процессором.
+
+        private bool _softRender;
+        private DateTime _softUntil = DateTime.MinValue; // до какого времени держать процессор после медленного раскрытия
+        private readonly Helpers.FrameMeter _expandMeter = new();
+        private DispatcherTimer _expandMeterStop;
+
+        private void SetSoftRender(bool soft, string why)
+        {
+            // недавно было медленное раскрытие — держим процессор, пока не пройдут 10 минут
+            if (!soft && DateTime.Now < _softUntil) return;
+            if (soft == _softRender) return;
+            try
+            {
+                if (PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null)
+                {
+                    hs.CompositionTarget.RenderMode = soft ? RenderMode.SoftwareOnly : RenderMode.Default;
+                    _softRender = soft;
+                    Journal.Info("render", "чёлка: отрисовка " + (soft ? "процессором" : "видеокартой") + " — " + why);
+                }
+            }
+            catch (Exception ex) { Journal.Warn("render", "не удалось сменить отрисовку: " + ex.Message); }
+        }
+
+        /// <summary>Замер раскрытия: если кадров мало (видеокарта занята), переходим на процессор на 10 минут.</summary>
+        private void MeasureExpand()
+        {
+            _expandMeter.Start();
+            _expandMeterStop?.Stop();
+            _expandMeterStop = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(650) };
+            _expandMeterStop.Tick += (_, __) =>
+            {
+                _expandMeterStop.Stop();
+                var (fps, _, text) = _expandMeter.StopStats();
+                Journal.Info("render", "раскрытие (" + (_softRender ? "процессор" : "видеокарта") + "): " + text);
+                if (!_softRender && fps > 0 && fps < 20)
+                {
+                    _softUntil = DateTime.Now.AddMinutes(10);
+                    SetSoftRender(true, "раскрытие шло " + Math.Round(fps) + " к/с — видеокарта занята (на 10 минут)");
+                }
+                else if (_softRender && DateTime.Now >= _softUntil && !(AppHost.Watchers?.IsFullscreen ?? false))
+                    SetSoftRender(false, "видеокарта снова свободна");
+            };
+            _expandMeterStop.Start();
+        }
+
         /// <summary>Включить/выключить PrintScreen через Isle. false — Windows не дала поставить перехват.</summary>
         public bool SetPrintScreen(bool on)
         {
@@ -774,6 +829,7 @@ namespace Isle
             _collapseVersion++;
             MoveTabIndicator(TabButton(_currentTab), false);
             AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 620, spring: true);
+            MeasureExpand();
             // содержимое проявляется из лёгкого размытия и чуть «подрастает»
             var st = new ScaleTransform(0.95, 0.95);
             ExpandedView.RenderTransformOrigin = new Point(0.5, 0);
