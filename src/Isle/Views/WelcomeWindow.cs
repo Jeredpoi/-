@@ -588,6 +588,9 @@ namespace Isle.Views
             var br = m.Transform(target.BottomRight);
             double pw = Math.Max(80, br.X - tl.X), ph = Math.Max(24, br.Y - tl.Y), pr = Math.Max(4, radiusPx * m.M11);
             var goal = new Point((tl.X + br.X) / 2, (tl.Y + br.Y) / 2);
+            // страховка: центр пилюли не выше половины её высоты от верха экрана
+            double screenTop = SystemParameters.VirtualScreenTop;
+            if (goal.Y - ph / 2 < screenTop) goal.Y = screenTop + ph / 2;
             Journal.Info("welcome", "знакомство завершено — летим к чёлке: " + Math.Round(goal.X) + "," + Math.Round(goal.Y) + " " + Math.Round(pw) + "×" + Math.Round(ph));
 
             var card = _card;
