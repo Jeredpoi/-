@@ -446,7 +446,10 @@ namespace Isle
             var tl = Island.PointToScreen(new Point(0, 0));
             var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
             radiusPx = Island.CornerRadius.BottomLeft * (br.X - tl.X) / Math.Max(1, Island.ActualWidth);
-            return new Rect(tl, br);
+            // свёрнутая чёлка всегда прилегает к верху экрана: если она сейчас сдвинута (спрятана, пружинит) —
+            // берём её место у края окна, иначе пилюля приветствия улетала за верх экрана
+            double top = PointToScreen(new Point(0, 0)).Y;
+            return new Rect(tl.X, top, br.X - tl.X, br.Y - tl.Y);
         }
 
         /// <summary>Пилюля приветствия «прилипла»: чёлка проявляется на её месте, пружинит от удара, Клоди радуется.</summary>
@@ -456,9 +459,18 @@ namespace Isle
             Root.BeginAnimation(OpacityProperty, null);
             Root.Opacity = 1;
             Root.IsHitTestVisible = true;
+            // пружинка от удара — ВМЕСТЕ со сдвигом SlideT (им чёлка прячется в OLED-режиме), а не вместо него
             var st = new ScaleTransform(1.07, 0.86);
             Scaler.RenderTransformOrigin = new Point(0.5, 0);
-            Scaler.RenderTransform = st;
+            if (Scaler.RenderTransform is TransformGroup tg && tg.Children.Count == 2 && tg.Children[0] is ScaleTransform)
+                tg.Children[0] = st;
+            else
+            {
+                var group = new TransformGroup();
+                group.Children.Add(st);
+                group.Children.Add(SlideT);
+                Scaler.RenderTransform = group;
+            }
             var spring = new Helpers.Spring { Damping = 6.5, Frequency = 13 };
             st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(900)) { EasingFunction = spring });
             st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(900)) { EasingFunction = spring });
