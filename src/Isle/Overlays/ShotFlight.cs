@@ -21,7 +21,8 @@ namespace Isle.Overlays
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
         private const uint NoActivate = 0x0010;
 
-        public static void Fly(BitmapSource image, Rect from, Action done)
+        /// <param name="shown">окошко уже на экране поверх слоя — теперь слой можно спрятать (без «провала» между ними)</param>
+        public static void Fly(BitmapSource image, Rect from, Action shown, Action done)
         {
             // куда: середина чёлки; снимок уменьшается до её высоты, сохраняя пропорции
             Rect to;
@@ -54,14 +55,15 @@ namespace Isle.Overlays
             win.Show();
             var hwnd = new WindowInteropHelper(win).Handle;
 
-            const double Ms = 560;
+            const double Hold = 120;   // сначала снимок чуть «замирает» на месте — глаз успевает понять, что сейчас будет
+            const double Ms = 900;     // сам полёт — не торопясь
             var sw = Stopwatch.StartNew();
             int frames = 0; double last = 0, worst = 0;
             static double Lerp(double a, double b, double t) => a + (b - a) * t;
             void Place(double u)
             {
-                double ks = 1 - Math.Pow(1 - u, 3);                                                   // размер: сразу сжимается
-                double km = u < 0.5 ? 4 * u * u * u : 1 - Math.Pow(-2 * u + 2, 3) / 2;                // путь: плавно
+                double ks = u < 0.5 ? 2 * u * u : 1 - Math.Pow(-2 * u + 2, 2) / 2;                     // размер: плавно
+                double km = u < 0.5 ? 4 * u * u * u : 1 - Math.Pow(-2 * u + 2, 3) / 2;                // путь: плавно, с разгоном
                 double w = Lerp(from.Width, to.Width, ks), h = Lerp(from.Height, to.Height, ks);
                 double cx = Lerp(from.X + from.Width / 2, to.X + to.Width / 2, km);
                 double cy = Lerp(from.Y + from.Height / 2, to.Y + to.Height / 2, km);
@@ -70,23 +72,38 @@ namespace Isle.Overlays
                 win.Opacity = u > 0.82 ? Math.Max(0, 1 - (u - 0.82) / 0.18) : 1;
             }
             Place(0);
+            bool finished = false;
 
             EventHandler tick = null;
             tick = (_, __) =>
             {
-                double t = sw.Elapsed.TotalMilliseconds;
+                if (finished) return; // окно закрывается — вложенный кадр не должен завершить полёт второй раз
+                double t = Math.Max(0, sw.Elapsed.TotalMilliseconds - Hold);
                 frames++;
-                worst = Math.Max(worst, t - last);
-                last = t;
+                double now = sw.Elapsed.TotalMilliseconds;
+                worst = Math.Max(worst, now - last);
+                last = now;
                 double u = Math.Min(1, t / Ms);
                 Place(u);
                 if (u < 1) return;
+                finished = true;
                 CompositionTarget.Rendering -= tick;
                 win.Close();
                 Journal.Info("capture", "полёт в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс");
                 done?.Invoke();
             };
-            CompositionTarget.Rendering += tick;
+            // окошко нарисовано поверх слоя — только теперь прячем слой и начинаем отсчёт (без «провала» между ними)
+            bool begun = false;
+            void Begin()
+            {
+                if (begun) return;
+                begun = true;
+                shown?.Invoke();
+                sw.Restart();
+                CompositionTarget.Rendering += tick;
+            }
+            win.ContentRendered += (_, __) => Begin();
+            if (win.IsLoaded && win.IsVisible) win.Dispatcher.BeginInvoke(new Action(Begin), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
     }
 }
