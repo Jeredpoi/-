@@ -75,7 +75,9 @@ namespace Isle.Services
         {
             Kind = ToastKind.Success, Title = "Запись сохранена",
             Subtitle = file != null ? System.IO.Path.GetFileName(file) : "В папке записей OBS",
-            FilePath = file, FolderPath = file != null ? System.IO.Path.GetDirectoryName(file) : null,
+            // путь из OBS — с прямыми слешами; приводим к виду Windows, иначе Проводник открывал рабочий стол
+            FilePath = file != null ? System.IO.Path.GetFullPath(file.Replace('/', '\\')) : null,
+            FolderPath = file != null ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(file.Replace('/', '\\'))) : null,
             Icon = Icons.Record, ReplaceKey = "obs-saved", Important = true, Duration = TimeSpan.FromSeconds(7)
         };
 

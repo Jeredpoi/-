@@ -247,7 +247,7 @@ namespace Isle.Views
             var path = Services.Diag.PathToLog;
             try
             {
-                if (System.IO.File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                if (System.IO.File.Exists(path)) MainWindow.ShowInExplorer(path);
                 else System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Services.Storage.Dir) { UseShellExecute = true });
             }
             catch { }

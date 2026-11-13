@@ -1882,6 +1882,18 @@ namespace Isle
             }
         }
 
+        /// <summary>
+        /// Открыть Проводник с выделенным файлом. Путь приводим к виду Windows: OBS отдаёт его с прямыми слешами
+        /// («C:/Users/…/Videos/запись.mp4»), а Проводник такой путь в /select не понимает и открывает своё место
+        /// по умолчанию — у кого-то это рабочий стол.
+        /// </summary>
+        public static void ShowInExplorer(string file)
+        {
+            var path = Path.GetFullPath(file.Replace('/', '\\'));
+            Journal.Info("files", "показать в Проводнике: " + path);
+            System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+        }
+
         private void OnToastFolder(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
@@ -1890,7 +1902,7 @@ namespace Isle
             {
                 // снимок — открыть Проводник с выделенным файлом; игра — её папку
                 if (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath))
-                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + t.FilePath + "\"");
+                    ShowInExplorer(t.FilePath);
                 else if (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath))
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(t.FolderPath) { UseShellExecute = true });
             }
