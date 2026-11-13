@@ -512,6 +512,8 @@ namespace Isle.Overlays
         /// закрывается мелкими квадратами, большой блок — крупными. Квадраты считаются прямо для этой рамки
         /// (крошечная картинка «квадрат = пиксель», растянутая без сглаживания), поэтому даже огромная рамка не тормозит.
         /// </summary>
+        private static readonly int[] BlockSteps = { 6, 8, 12, 16, 20, 24 };
+
         private void ShowPatch(Rect r, Helpers.MosaicTiles patch = null, bool force = false)
         {
             patch ??= _livePatch;
@@ -522,19 +524,16 @@ namespace Isle.Overlays
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
             if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Children.Clear(); return; }
-            int block = Mosaic.BlockForPatch(x1 - x0, y1 - y0);
-            if (!force)
-            {
-                // пока тянешь — плитка растёт целыми квадратами: пересчёт только при переходе на новый квадрат
-                x1 = Math.Min(_cropW, x0 + (x1 - x0 + block - 1) / block * block);
-                y1 = Math.Min(_cropH, y0 + (y1 - y0 + block - 1) / block * block);
-            }
+            // размер квадрата — ступеньками (6, 8, 12…24): пока тянешь, он меняется редко, и квадраты не «дрожат»
+            int want = Mosaic.BlockForPatch(x1 - x0, y1 - y0), block = BlockSteps[0];
+            foreach (var b in BlockSteps) if (b <= want) block = b;
             var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
             if (ir.Equals(_livePx) && patch.Count > 0 && !force) return;
             _patchAt = now;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            // меняются и перерисовываются только кусочки у края рамки — внутренние остаются как были
-            patch.Update(_cropPx, _cropW, _cropH, ir, block, k);
+            // сетка привязана к точке начала: меняются и перерисовываются только кусочки у края рамки
+            int ax = Math.Clamp((int)Math.Round(_from.X * k), 0, _cropW), ay = Math.Clamp((int)Math.Round(_from.Y * k), 0, _cropH);
+            patch.Update(_cropPx, _cropW, _cropH, ax, ay, ir, block, k, final: force);
             _tilesRebuilt += patch.LastRebuilt;
             _livePx = ir;
             double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
@@ -653,8 +652,8 @@ namespace Isle.Overlays
             _escPoll.Stop();
             IsHitTestVisible = false;
             var fromPx = new Rect(_area.X * Kx + _vs.X, _area.Y * Ky + _vs.Y, _area.Width * Kx, _area.Height * Ky);
-            Hide();
-            ShotFlight.Fly(preview, fromPx, () =>
+            // сначала на экране появляется окошко с копией, и только потом прячется слой — без «провала»
+            ShotFlight.Fly(preview, fromPx, Hide, () =>
             {
                 var t1 = System.Diagnostics.Stopwatch.StartNew();
                 var full = RenderFlat(content, _cropW, _cropH);
