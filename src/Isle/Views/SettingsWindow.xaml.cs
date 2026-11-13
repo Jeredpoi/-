@@ -395,7 +395,7 @@ namespace Isle.Views
         private void OnShowWelcome(object s, RoutedEventArgs e)
         {
             Services.Journal.Info("welcome", "открыто вручную из Настроек");
-            try { new WelcomeWindow { Owner = null }.Show(); } catch (System.Exception ex) { App.Log("welcome: " + ex); }
+            try { WelcomeWindow.ShowOnce(); } catch (System.Exception ex) { App.Log("welcome: " + ex); }
         }
 
         private void OnOutfit(object s, RoutedEventArgs e)

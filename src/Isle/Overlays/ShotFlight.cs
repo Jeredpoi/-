@@ -89,6 +89,7 @@ namespace Isle.Overlays
                 finished = true;
                 CompositionTarget.Rendering -= tick;
                 win.Close();
+                try { AppHost.Window?.Gulp(); } catch { } // чёлка «проглатывает» снимок
                 Journal.Info("capture", "полёт в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс");
                 done?.Invoke();
             };
