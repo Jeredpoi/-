@@ -684,70 +684,140 @@ namespace Isle.Views
 
         // ---------- Клавиши ----------
 
+        private static readonly System.Collections.Generic.Dictionary<string, string> DefaultHotkeys = new()
+        {
+            ["island"] = "Ctrl+Alt+Space", ["command"] = "Ctrl+Alt+K", ["clipboard"] = "Ctrl+Alt+V",
+            ["screenshot"] = "Ctrl+Alt+S", ["voice"] = "Ctrl+Alt+D", ["voiceCommand"] = "Ctrl+Alt+A",
+            ["collapse"] = "Escape"
+        };
+
+        private static Brush Rgb(byte r, byte g, byte b, byte a = 255) { var x = new SolidColorBrush(Color.FromArgb(a, r, g, b)); x.Freeze(); return x; }
+        private static readonly Brush CapBg = Rgb(0x18, 0x18, 0x1C), CapLine = Rgb(0x2A, 0x2A, 0x32), CapFg = Rgb(0xEC, 0xEC, 0xF1),
+            CapMuted = Rgb(0x8B, 0x8B, 0x95), HostHover = Rgb(0xFF, 0xFF, 0xFF, 0x0C), HostRec = Rgb(0xFF, 0xFF, 0xFF, 0x16);
+
+        /// <summary>Сочетание кнопками-клавишами, как в знакомстве: [Ctrl] + [Alt] + [K].</summary>
+        private static FrameworkElement Keycaps(string hotkey)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            if (string.IsNullOrWhiteSpace(hotkey))
+            {
+                row.Children.Add(new TextBlock { Text = "не назначено", FontSize = 12.5, FontStyle = FontStyles.Italic, Foreground = CapMuted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 4, 4, 4) });
+                return row;
+            }
+            var parts = hotkey.Split('+');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (i > 0) row.Children.Add(new TextBlock { Text = "+", Foreground = CapMuted, FontSize = 12, Margin = new Thickness(5, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(new Border
+                {
+                    Background = CapBg, BorderBrush = CapLine, BorderThickness = new Thickness(1, 1, 1, 2.5), CornerRadius = new CornerRadius(7),
+                    Padding = new Thickness(9, 4, 9, 4), MinWidth = 30,
+                    Child = new TextBlock { Text = parts[i].Replace("Space", "Пробел"), FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = CapFg, HorizontalAlignment = HorizontalAlignment.Center }
+                });
+            }
+            return row;
+        }
+
+        /// <summary>Маленькая круглая кнопка со значком (сбросить, удалить).</summary>
+        private static Border IconButton(string path, string tip, Action click)
+        {
+            var b = new Border
+            {
+                Width = 30, Height = 30, CornerRadius = new CornerRadius(15), Background = Brushes.Transparent, Cursor = Cursors.Hand,
+                Margin = new Thickness(4, 0, 0, 0), ToolTip = tip, VerticalAlignment = VerticalAlignment.Center,
+                Child = new Isle.Helpers.Icon { Data = path, Width = 15, Height = 15, Foreground = CapMuted, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+            };
+            b.MouseEnter += (_, __) => { b.Background = HostHover; ((Isle.Helpers.Icon)b.Child).Foreground = CapFg; };
+            b.MouseLeave += (_, __) => { b.Background = Brushes.Transparent; ((Isle.Helpers.Icon)b.Child).Foreground = CapMuted; };
+            b.MouseLeftButtonUp += (_, e) => { click(); e.Handled = true; };
+            return b;
+        }
+
         private void BuildKeys()
         {
             var keys = new[]
             {
-                ("island", "Открыть / закрыть остров", S.Hotkey),
-                ("command", "Командная строка: калькулятор, запуск программ, таймер, напоминание", S.HotkeyCommand),
-                ("clipboard", "История буфера обмена", S.HotkeyClipboard),
-                ("screenshot", "Снимок области экрана", S.HotkeyScreenshot),
-                ("voice", "Голос в текст: начать / закончить диктовку", S.HotkeyVoice),
-                ("voiceCommand", "Голосовая команда ИИ", S.HotkeyVoiceCommand),
-                ("collapse", "Свернуть остров, когда он активен", S.HotkeyCollapse),
+                ("island", "Остров", "Открыть или закрыть чёлку"),
+                ("command", "Командная строка", "Калькулятор, запуск программ, таймер, напоминание"),
+                ("clipboard", "Буфер обмена", "История скопированного"),
+                ("screenshot", "Снимок экрана", "Выделить область и сделать снимок"),
+                ("voice", "Голос в текст", "Начать или закончить диктовку"),
+                ("voiceCommand", "Голосовая команда", "Сказать команду ИИ"),
+                ("collapse", "Свернуть остров", "Работает, когда остров активен"),
             };
-            foreach (var (name, description, gesture) in keys)
+            const string ResetIcon = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3 M4.5 4.5v4h4";
+            const string DeleteIcon = "M7 7L17 17 M17 7L7 17";
+            for (int n = 0; n < keys.Length; n++)
             {
-                var g = new Grid { Margin = new Thickness(0, 8, 0, 8) };
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(205) });
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(230) });
+                var (name, title, note) = keys[n];
+                if (n > 0) KeysList.Children.Add(new Border { Style = (Style)FindResource("Sep") });
+                var g = new Grid { Margin = new Thickness(0, 10, 0, 10) };
                 g.ColumnDefinitions.Add(new ColumnDefinition());
-                var key = new TextBox
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+                text.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("RowTitle") });
+                text.Children.Add(new TextBlock { Text = note, Style = (Style)FindResource("RowNote") });
+                g.Children.Add(text);
+
+                // поле сочетания: нажми — оно ждёт новое сочетание (Esc — отмена, кроме самой клавиши сворачивания)
+                var host = new Border
                 {
-                    Text = gesture, IsReadOnly = true, Focusable = true, Cursor = Cursors.Hand,
-                    Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20)),
-                    Foreground = (Brush)FindResource("Fg"), BorderThickness = new Thickness(0),
-                    Padding = new Thickness(10, 5, 10, 5), HorizontalAlignment = HorizontalAlignment.Left,
-                    ToolTip = "Нажми сюда, затем нажми новое сочетание клавиш"
+                    CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 5, 8, 5), Background = Brushes.Transparent,
+                    BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(1), Focusable = true, Cursor = Cursors.Hand,
+                    FocusVisualStyle = null, VerticalAlignment = VerticalAlignment.Center, MinWidth = 120,
+                    ToolTip = "Нажми, затем нажми новое сочетание клавиш"
                 };
-                key.PreviewMouseLeftButtonDown += (_, __) => { key.Focus(); key.Text = "Нажми сочетание…"; };
-                // ушли из поля, ничего не нажав, — возвращаем текущее сочетание
-                key.LostKeyboardFocus += (_, __) => { if (key.Text == "Нажми сочетание…") key.Text = GetHotkey(name); };
-                key.PreviewKeyDown += (_, e) =>
+                bool recording = false;
+                void Show()
                 {
+                    recording = false;
+                    host.Child = Keycaps(GetHotkey(name));
+                    host.BorderBrush = Brushes.Transparent;
+                    host.Background = host.IsMouseOver ? HostHover : Brushes.Transparent;
+                }
+                void Record()
+                {
+                    recording = true;
+                    host.Child = new TextBlock { Text = "Нажми сочетание…", FontSize = 12.5, Foreground = CapFg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) };
+                    host.BorderBrush = CapLine;
+                    host.Background = HostRec;
+                }
+                void Apply(string next)
+                {
+                    if (AppHost.Window.TrySetHotkey(name, next, out var error)) Show();
+                    else { Show(); MessageBox.Show(error, "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information); }
+                }
+                Show();
+                host.MouseEnter += (_, __) => { if (!recording) host.Background = HostHover; };
+                host.MouseLeave += (_, __) => { if (!recording) host.Background = Brushes.Transparent; };
+                host.MouseLeftButtonDown += (_, e) => { host.Focus(); Keyboard.Focus(host); Record(); e.Handled = true; };
+                host.LostKeyboardFocus += (_, __) => { if (recording) Show(); };
+                host.PreviewKeyDown += (_, e) =>
+                {
+                    if (!recording) return;
+                    e.Handled = true;
                     var k = e.Key == Key.System ? e.SystemKey : e.Key;
-                    if (k is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
-                    { e.Handled = true; return; }
+                    if (k is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
                     var mods = Keyboard.Modifiers;
+                    if (k == Key.Escape && mods == ModifierKeys.None && name != "collapse") { Show(); return; }
                     var parts = new System.Collections.Generic.List<string>();
                     if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
                     if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
                     if (mods.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
                     if (mods.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
                     parts.Add(k.ToString());
-                    var next = string.Join("+", parts);
-                    if (AppHost.Window.TrySetHotkey(name, next, out var error)) key.Text = next;
-                    else { key.Text = GetHotkey(name); MessageBox.Show(error, "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information); }
-                    e.Handled = true;
+                    Apply(string.Join("+", parts));
                 };
-                var reset = new Button { Content = "Сбросить", Style = (Style)FindResource("Ghost"), Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
-                reset.Click += (_, __) =>
-                {
-                    var defaults = new System.Collections.Generic.Dictionary<string, string>
-                    {
-                        ["island"] = "Ctrl+Alt+Space", ["command"] = "Ctrl+Alt+K", ["clipboard"] = "Ctrl+Alt+V",
-                        ["screenshot"] = "Ctrl+Alt+S", ["voice"] = "Ctrl+Alt+D", ["voiceCommand"] = "Ctrl+Alt+A",
-                        ["collapse"] = "Escape"
-                    };
-                    if (AppHost.Window.TrySetHotkey(name, defaults[name], out var error)) key.Text = defaults[name];
-                    else MessageBox.Show(error, "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information);
-                };
-                var desc = new TextBlock { Text = description, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-                Grid.SetColumn(reset, 1);
-                Grid.SetColumn(desc, 2);
-                g.Children.Add(key);
-                g.Children.Add(reset);
-                g.Children.Add(desc);
+                Grid.SetColumn(host, 1);
+                g.Children.Add(host);
+
+                var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+                buttons.Children.Add(IconButton(ResetIcon, "Вернуть как было: " + DefaultHotkeys[name], () => Apply(DefaultHotkeys[name])));
+                buttons.Children.Add(IconButton(DeleteIcon, "Убрать сочетание совсем", () => Apply("")));
+                Grid.SetColumn(buttons, 2);
+                g.Children.Add(buttons);
                 KeysList.Children.Add(g);
             }
 

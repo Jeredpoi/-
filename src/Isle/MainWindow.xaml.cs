@@ -569,6 +569,17 @@ namespace Isle
         public bool TrySetHotkey(string name, string gesture, out string error)
         {
             error = null;
+            // пустое — сочетание убрано совсем: команда не вызывается с клавиатуры
+            if (string.IsNullOrWhiteSpace(gesture))
+            {
+                var all = HotkeySpecs(AppSettings.Current);
+                if (!all.Any(b => b.Name == name)) { error = "Неизвестная команда."; return false; }
+                SetHotkeyValue(AppSettings.Current, name, "");
+                ApplyHotkeys();
+                AppSettings.Current.Save();
+                Journal.Info("hotkeys", "убрано сочетание: " + name);
+                return true;
+            }
             if (!TryParseHotkey(gesture, out uint mods, out uint key, name == "collapse"))
             { error = name == "collapse" ? "Выбери клавишу или сочетание клавиш." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
             var settings = AppSettings.Current;
