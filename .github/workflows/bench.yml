@@ -1,0 +1,77 @@
+name: Bench (снимки)
+
+# Стенд плавности снимков: Isle.exe --bench проходит сценарий настоящей мышью
+# (выделение, мозаика маленькая/средняя/большая, перо, сохранение и полёт в чёлку),
+# ffmpeg пишет экран, скрипт считает реально разные кадры в секунду на каждом этапе.
+# Итог (метрики, ключевые кадры, журнал, видео) — в ветку bench-results.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["isle-bench*"]
+
+permissions:
+  contents: write
+
+jobs:
+  bench:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish
+        run: dotnet publish src/Isle/Isle.csproj -c Release -r win-x64 --self-contained true -o out/app
+
+      - name: ffmpeg
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress | Out-Null }
+          ffmpeg -version | Select-Object -First 1
+
+      - name: Прогон
+        shell: pwsh
+        run: |
+          $dir = Join-Path $PWD "bench"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Get-CimInstance Win32_VideoController | ForEach-Object { "$($_.Name) $($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution)" } | Tee-Object "$dir/machine.txt"
+          (Get-CimInstance Win32_Processor).Name | Out-File -Append "$dir/machine.txt"
+          [DateTime]::UtcNow.ToString("o") | Out-File -Encoding utf8 "$dir/rec-start.txt"
+          # курсор не пишем — иначе любое движение мыши считалось бы «новым кадром»
+          $rec = Start-Process ffmpeg -ArgumentList "-hide_banner -loglevel error -f gdigrab -framerate 60 -draw_mouse 0 -i desktop -t 70 -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p `"$dir/rec.mp4`"" -PassThru -NoNewWindow
+          Start-Sleep -Milliseconds 800
+          $p = Start-Process -FilePath "out/app/Isle.exe" -ArgumentList "--bench", "`"$dir`"" -PassThru
+          if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
+          $rec.WaitForExit(90000) | Out-Null
+          Get-ChildItem $dir | ForEach-Object { Write-Host $_.Name $_.Length }
+          if (Test-Path "$dir/error.txt") { Get-Content "$dir/error.txt" }
+          $log = Join-Path $env:APPDATA "Isle/errors.log"
+          if (Test-Path $log) { Copy-Item $log "$dir/errors.log" }
+
+      - name: Анализ
+        shell: pwsh
+        run: python .github/scripts/bench_report.py bench
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench
+          path: bench
+
+      - name: Сохранить в ветку bench-results
+        if: always()
+        shell: pwsh
+        run: |
+          git config user.name "Jeredpoi"
+          git config user.email "death_in_red19@mail.ru"
+          git checkout --orphan bench-results
+          git rm -rf --cached . | Out-Null
+          New-Item -ItemType Directory -Force results | Out-Null
+          Copy-Item bench/* results/ -Recurse
+          "${{ github.sha }}  ${{ github.ref_name }}  run ${{ github.run_number }}" | Out-File -Encoding utf8 results/source.txt
+          git add -f results
+          git commit -m "Результаты стенда снимков"
+          git push -f origin bench-results
