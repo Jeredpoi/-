@@ -19,7 +19,7 @@ namespace Isle.Overlays
     {
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
-        private const uint NoActivate = 0x0010;
+        private const uint NoActivate = 0x0010, NoSize = 0x0001;
 
         /// <param name="shown">окошко уже на экране поверх слоя — теперь слой можно спрятать (без «провала» между ними)</param>
         public static void Fly(BitmapSource image, Rect from, Action shown, Action done)
@@ -47,13 +47,21 @@ namespace Isle.Overlays
             };
             var brush = new ImageBrush(image) { Stretch = Stretch.Fill };
             RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.LowQuality);
+            // Размер окна меняется ступеньками (раз в ~15%), а между ними снимок плавно уменьшается внутри окна.
+            // Смена размера прозрачного окна — дорогая (Windows заново создаёт его картинку), и на 4K она давала рывки.
+            var scale = new ScaleTransform(1, 1);
             win.Content = new Border
             {
                 Background = brush, CornerRadius = new CornerRadius(10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(110, 255, 255, 255)), BorderThickness = new Thickness(1)
+                BorderBrush = new SolidColorBrush(Color.FromArgb(110, 255, 255, 255)), BorderThickness = new Thickness(1),
+                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = scale
             };
             win.Show();
             var hwnd = new WindowInteropHelper(win).Handle;
+            // рисует процессор: не нужно гонять картинку окна из видеокарты обратно (самое медленное, особенно когда видеокарта занята)
+            try { if (PresentationSource.FromVisual(win) is HwndSource hs && hs.CompositionTarget != null) hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly; } catch { }
+            double stepW = 0, stepH = 0;
+            int resizes = 0;
 
             const double Hold = 120;   // сначала снимок чуть «замирает» на месте — глаз успевает понять, что сейчас будет
             const double Ms = 900;     // сам полёт — не торопясь
@@ -62,13 +70,16 @@ namespace Isle.Overlays
             static double Lerp(double a, double b, double t) => a + (b - a) * t;
             void Place(double u)
             {
-                double ks = u < 0.5 ? 2 * u * u : 1 - Math.Pow(-2 * u + 2, 2) / 2;                     // размер: плавно
+                double ks = 1 - (1 - u) * (1 - u);                                                    // размер: мягко, без задержки в самом большом (дорогом) виде
                 double km = u < 0.5 ? 4 * u * u * u : 1 - Math.Pow(-2 * u + 2, 3) / 2;                // путь: плавно, с разгоном
                 double w = Lerp(from.Width, to.Width, ks), h = Lerp(from.Height, to.Height, ks);
                 double cx = Lerp(from.X + from.Width / 2, to.X + to.Width / 2, km);
                 double cy = Lerp(from.Y + from.Height / 2, to.Y + to.Height / 2, km);
-                SetWindowPos(hwnd, new IntPtr(-1), (int)Math.Round(cx - w / 2), (int)Math.Round(cy - h / 2),
-                    Math.Max(1, (int)Math.Round(w)), Math.Max(1, (int)Math.Round(h)), NoActivate);
+                bool resize = stepW <= 0 || w < stepW * 0.85 || h < stepH * 0.85 || u >= 1;
+                if (resize) { stepW = Math.Max(1, Math.Ceiling(w)); stepH = Math.Max(1, Math.Ceiling(h)); resizes++; }
+                scale.ScaleX = w / stepW; scale.ScaleY = h / stepH;
+                SetWindowPos(hwnd, new IntPtr(-1), (int)Math.Round(cx - stepW / 2), (int)Math.Round(cy - stepH / 2),
+                    (int)stepW, (int)stepH, NoActivate | (resize ? 0u : NoSize));
                 win.Opacity = u > 0.82 ? Math.Max(0, 1 - (u - 0.82) / 0.18) : 1;
             }
             Place(0);
@@ -90,7 +101,7 @@ namespace Isle.Overlays
                 CompositionTarget.Rendering -= tick;
                 win.Close();
                 try { AppHost.Window?.Gulp(); } catch { } // чёлка «проглатывает» снимок
-                Journal.Info("capture", "полёт в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс");
+                Journal.Info("capture", "полёт в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс, смен размера " + resizes);
                 done?.Invoke();
             };
             // окошко нарисовано поверх слоя — только теперь прячем слой и начинаем отсчёт (без «провала» между ними)
