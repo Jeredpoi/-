@@ -194,8 +194,8 @@
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,70,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Совместимая отрисовка пометок на снимке"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Включи, только если при рисовании на снимке появляются чёрные квадраты. Рисует процессором — мозаика и анимации медленнее."/>
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Рисовать пометки на снимке видеокартой"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Быстрее, но на части компьютеров при рисовании появляются чёрные квадраты. Если они есть — выключи."/>
                                 </StackPanel>
                                 <CheckBox x:Name="CaptureSoft" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>

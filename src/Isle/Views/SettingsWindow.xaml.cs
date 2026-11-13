@@ -156,7 +156,7 @@ namespace Isle.Views
             Oled.IsChecked = S.OledMode;
             Captures.IsChecked = S.ShowInCaptures;
             Hover.IsChecked = S.ExpandOnHover;
-            CaptureSoft.IsChecked = S.CaptureSoftwareRender;
+            CaptureSoft.IsChecked = S.CaptureGpuRender;
             Clock24.IsChecked = S.Use24h;
 
             ChPixel.IsChecked = S.Character == "pixel";
@@ -224,7 +224,7 @@ namespace Isle.Views
             if (_loading) return;
             S.HideInFullscreen = Fullscreen.IsChecked == true;
             S.ExpandOnHover = Hover.IsChecked == true;
-            S.CaptureSoftwareRender = CaptureSoft.IsChecked == true;
+            S.CaptureGpuRender = CaptureSoft.IsChecked == true;
             S.Use24h = Clock24.IsChecked == true;
             S.VoiceAutoPaste = VoicePaste.IsChecked == true;
             S.VoicePunctuate = VoicePunct.IsChecked == true;

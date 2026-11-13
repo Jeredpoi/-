@@ -104,6 +104,8 @@ namespace Isle.Overlays
 
             _page = new Grid { Width = area.Width, Height = area.Height, ClipToBounds = true, Background = Brushes.Transparent, Cursor = Cursors.Cross, RenderTransformOrigin = new Point(0.5, 0.5) };
             _baseImage = new Image { Source = _crop, Stretch = Stretch.Fill };
+            // снимок пиксель в пиксель с экраном: без сглаживания перерисовка куска — простое копирование (процессору легко)
+            RenderOptions.SetBitmapScalingMode(_baseImage, BitmapScalingMode.NearestNeighbor);
             _page.Children.Add(_baseImage);
             _patches = new Canvas { IsHitTestVisible = false };
             _page.Children.Add(_patches);
@@ -118,6 +120,20 @@ namespace Isle.Overlays
             _page.MouseLeftButtonUp += MarkUp;
             // мышь отпустили за пределами окна или захват потерян (Alt+Tab) — завершаем рисование как обычное отпускание
             _page.LostMouseCapture += (_, e) => { if (_drawing) MarkUp(_page, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent }); };
+
+            // Пометки рисует процессор: видеокарта на части ПК при частичной перерисовке (а при рисовании так и есть)
+            // оставляет чёрные прямоугольники. Видеокарту можно включить в Настройках.
+            bool gpu = AppSettings.Current.CaptureGpuRender;
+            if (!gpu)
+            {
+                try
+                {
+                    if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource hs && hs.CompositionTarget != null)
+                        hs.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+                }
+                catch (Exception ex) { Journal.Warn("capture", "не удалось включить отрисовку процессором: " + ex.Message); }
+            }
+            Journal.Info("capture", "пометки: отрисовка " + (gpu ? "видеокартой (из настроек)" : "процессором"));
 
             BuildBar();
             BuildHandles();
@@ -613,36 +629,55 @@ namespace Isle.Overlays
             if (_saving) return;
             CommitMarkText();
             _saving = true;
+            var t0 = System.Diagnostics.Stopwatch.StartNew();
             Journal.Info("capture", "сохранение: слоёв пометок " + _ink.Children.Count + ", плиток мозаики " + _patches.Children.Count);
-            // Сначала полёт — живой слой летит в чёлку (видеокарте это ничего не стоит), а склейка большой картинки —
-            // уже после, когда экран свободен: раньше склейка 4K шла ДО анимации, и экран на это время подвисал.
+            _outline.Visibility = Visibility.Hidden;
+            foreach (var hd in _handles) hd.Visibility = Visibility.Collapsed;
+            _page.UpdateLayout();
+
+            // Пометки переносим в отдельный (невидимый) контейнер — из него после полёта склеится полная картинка.
+            // В полёт уходит маленькая копия: процессору нечего пересчитывать, а большую склейку экран не ждёт.
+            var content = new Grid { Width = _area.Width, Height = _area.Height };
+            while (_page.Children.Count > 0)
+            {
+                var c = _page.Children[0];
+                _page.Children.RemoveAt(0);
+                content.Children.Add(c);
+            }
+            content.Measure(new Size(_area.Width, _area.Height));
+            content.Arrange(new Rect(0, 0, _area.Width, _area.Height));
+            content.UpdateLayout();
+            double k = Math.Min(1, 900.0 / Math.Max(_cropW, _cropH));
+            var preview = RenderFlat(content, Math.Max(1, (int)(_cropW * k)), Math.Max(1, (int)(_cropH * k)));
+            _page.Children.Add(new Image { Source = preview, Stretch = Stretch.Fill });
+            Journal.Info("capture", "сохранение: копия для полёта " + preview.PixelWidth + "×" + preview.PixelHeight + " за " + t0.ElapsedMilliseconds + " мс");
+
             FlyToIsland(() =>
             {
-                var t0 = System.Diagnostics.Stopwatch.StartNew();
-                Hide(); // слой убран с экрана — склеиваем незаметно
-                _page.BeginAnimation(OpacityProperty, null);
-                _page.Opacity = 1;
-                _page.RenderTransform = null;
-                _page.Clip = null;
-                _outline.Visibility = Visibility.Hidden;
-                _page.UpdateLayout();
-                int w = _cropW, h = _cropH;
-                var dv = new DrawingVisual();
-                using (var dc = dv.RenderOpen())
-                    dc.DrawRectangle(new VisualBrush(_page) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
-                var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-                rtb.Render(dv);
-                rtb.Freeze();
-                Journal.Info("capture", "сохранение: картинка " + w + "×" + h + " склеена за " + t0.ElapsedMilliseconds + " мс");
-                Finish(rtb);
+                var t1 = System.Diagnostics.Stopwatch.StartNew();
+                Hide(); // слой убран с экрана — полную картинку склеиваем незаметно
+                var full = RenderFlat(content, _cropW, _cropH);
+                Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс");
+                Finish(full);
             });
+        }
+
+        /// <summary>Склеить снимок с пометками в картинку w×h.</summary>
+        private static BitmapSource RenderFlat(FrameworkElement content, int w, int h)
+        {
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+                dc.DrawRectangle(new VisualBrush(content) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
+            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(dv);
+            rtb.Freeze();
+            return rtb;
         }
 
         /// <summary>Снимок сжимается и улетает в чёлку (верх основного экрана), затемнение тает.</summary>
         private void FlyToIsland(Action done)
         {
             foreach (var h in _handles) h.Visibility = Visibility.Collapsed;
-            _outline.Visibility = Visibility.Hidden;
             // режим отрисовки на ходу НЕ переключаем: смена пересоздаёт поверхность окна — экран мигал белой пеленой
             _meter.Start();
             _escPoll.Stop();
@@ -657,7 +692,7 @@ namespace Isle.Overlays
             var tt = new TranslateTransform();
             var g = new TransformGroup(); g.Children.Add(st); g.Children.Add(tt);
             _page.RenderTransform = g;
-            _page.Clip = new RectangleGeometry(new Rect(0, 0, _area.Width, _area.Height), 0, 0);
+            _page.Clip = null; // скруглённая обрезка на лету процессору дорога — летит обычная прямоугольная плитка
 
             var dur = TimeSpan.FromMilliseconds(520);
             var move = new CubicEase { EasingMode = EasingMode.EaseInOut };
@@ -666,14 +701,11 @@ namespace Isle.Overlays
             st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
             tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, target.X - center.X, dur) { EasingFunction = move });
             var fly = new DoubleAnimation(0, target.Y - center.Y, dur) { EasingFunction = move };
-            // углы скругляются по мере полёта — к чёлке подлетает «плитка»
-            double r = Math.Min(_area.Width, _area.Height) / 2;
-            ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusXProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
-            ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusYProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
             _page.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)) { BeginTime = TimeSpan.FromMilliseconds(400) });
-            _bar.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
-            _hint.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
-            _dim.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(380)));
+            // панель, подсказка, затемнение — сразу: таяние затемнения на весь 4K-экран процессор рисует рывками
+            _bar.Visibility = Visibility.Hidden;
+            _hint.Visibility = Visibility.Hidden;
+            _dim.Visibility = Visibility.Hidden;
             fly.Completed += (_, __) =>
             {
                 Journal.Info("capture", "полёт в чёлку: " + _meter.Stop());

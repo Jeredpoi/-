@@ -185,8 +185,8 @@ namespace Isle.Services
         public bool PrintScreenIsle { get; set; }
         /// <summary>Сохранять снимки Isle в «Изображения\\Isle» (а не только в буфер обмена).</summary>
         public bool SaveScreenshots { get; set; } = true;
-        /// <summary>Рисовать слой пометок на снимке процессором (медленнее, но без чёрных прямоугольников на редких видеокартах).</summary>
-        public bool CaptureSoftwareRender { get; set; }
+        /// <summary>Рисовать пометки на снимке видеокартой (быстрее, но на части ПК — чёрные прямоугольники). По умолчанию — процессор.</summary>
+        public bool CaptureGpuRender { get; set; }
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;
