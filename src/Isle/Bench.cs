@@ -55,11 +55,13 @@ namespace Isle
                 Phase("open");
                 _ = Tools.RegionShot();
                 var overlay = await WaitOverlay();
+                Phase("idle");
                 if (overlay == null) { Phase("error: слой не открылся"); return; }
                 await Task.Delay(700);
 
                 Phase("select");
                 await Drag((int)(W * 0.04), (int)(H * 0.05), (int)(W * 0.96), (int)(H * 0.88), 900);
+                Phase("idle");
                 await Task.Delay(1000);
 
                 if (!await ClickTool(overlay, "Mosaic")) { Phase("error: нет кнопки мозаики"); return; }
@@ -67,12 +69,15 @@ namespace Isle
 
                 Phase("mosaic-small");
                 await Drag((int)(W * 0.10), (int)(H * 0.10), (int)(W * 0.10) + 260, (int)(H * 0.10) + 60, 1500);
+                Phase("idle");
                 await Task.Delay(700);
                 Phase("mosaic-medium");
                 await Drag((int)(W * 0.15), (int)(H * 0.25), (int)(W * 0.55), (int)(H * 0.55), 1800);
+                Phase("idle");
                 await Task.Delay(700);
                 Phase("mosaic-big");
                 await Drag((int)(W * 0.06), (int)(H * 0.08), (int)(W * 0.94), (int)(H * 0.84), 2400);
+                Phase("idle");
                 await Task.Delay(700);
 
                 if (await ClickTool(overlay, "Pen"))
@@ -80,13 +85,16 @@ namespace Isle
                     await Task.Delay(400);
                     Phase("pen");
                     await Squiggle((int)(W * 0.3), (int)(H * 0.6), (int)(W * 0.4), 1500);
+                    Phase("idle");
                     await Task.Delay(600);
                 }
 
                 Phase("save");
                 keybd_event(0x0D, 0, 0, UIntPtr.Zero);
                 keybd_event(0x0D, 0, KeyUp, UIntPtr.Zero);
-                await Task.Delay(3500);
+                await Task.Delay(1600); // полёт ~1.1 с
+                Phase("idle");
+                await Task.Delay(1900);
                 Phase("done");
                 backdrop.Close();
             }
