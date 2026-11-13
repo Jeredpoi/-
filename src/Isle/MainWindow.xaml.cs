@@ -508,6 +508,7 @@ namespace Isle
         // процессор рисует легко — поэтому, пока видеокарта занята, рисуем процессором.
 
         private bool _softRender;
+        private System.Windows.Media.Effects.Effect _shadowEffect;
         private DateTime _softUntil = DateTime.MinValue; // до какого времени держать процессор после медленного раскрытия
         private readonly Helpers.FrameMeter _expandMeter = new();
         private DispatcherTimer _expandMeterStop;
@@ -523,6 +524,9 @@ namespace Isle
                 {
                     hs.CompositionTarget.RenderMode = soft ? RenderMode.SoftwareOnly : RenderMode.Default;
                     _softRender = soft;
+                    // мягкая тень под чёлкой пересчитывается каждый кадр раскрытия — пока идёт игра, без неё
+                    if (soft) { _shadowEffect ??= IslandShadow.Effect; IslandShadow.Effect = null; }
+                    else if (_shadowEffect != null) IslandShadow.Effect = _shadowEffect;
                     Journal.Info("render", "чёлка: отрисовка " + (soft ? "процессором" : "видеокартой") + " — " + why);
                 }
             }
@@ -834,16 +838,22 @@ namespace Isle
             var st = new ScaleTransform(0.95, 0.95);
             ExpandedView.RenderTransformOrigin = new Point(0.5, 0);
             ExpandedView.RenderTransform = st;
-            var blur = new System.Windows.Media.Effects.BlurEffect { Radius = 14, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
-            ExpandedView.Effect = blur;
             var dur = TimeSpan.FromMilliseconds(340);
             var begin = TimeSpan.FromMilliseconds(90);
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, dur) { BeginTime = begin, EasingFunction = ease });
             st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, dur) { BeginTime = begin, EasingFunction = ease });
-            var unblur = new DoubleAnimation(0, dur) { BeginTime = begin, EasingFunction = ease };
-            unblur.Completed += (_, __) => { if (State == IslandState.Expanded) ExpandedView.Effect = null; }; // без эффекта рисуется быстрее
-            blur.BeginAnimation(System.Windows.Media.Effects.BlurEffect.RadiusProperty, unblur);
+            // Размытие на всю панель — самый тяжёлый эффект раскрытия. Пока идёт игра (видеокарта занята, рисует процессор)
+            // его не делаем: на процессоре оно давало ~12 кадров в секунду. Без игры — как раньше.
+            if (!_softRender)
+            {
+                var blur = new System.Windows.Media.Effects.BlurEffect { Radius = 14, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
+                ExpandedView.Effect = blur;
+                var unblur = new DoubleAnimation(0, dur) { BeginTime = begin, EasingFunction = ease };
+                unblur.Completed += (_, __) => { if (State == IslandState.Expanded) ExpandedView.Effect = null; }; // без эффекта рисуется быстрее
+                blur.BeginAnimation(System.Windows.Media.Effects.BlurEffect.RadiusProperty, unblur);
+            }
+            else ExpandedView.Effect = null;
             ExpandedView.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { BeginTime = begin, EasingFunction = ease });
             (TabHost.Content as Views.IIslandView)?.OnShown();
         }
