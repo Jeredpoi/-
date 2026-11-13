@@ -119,19 +119,6 @@ namespace Isle.Overlays
             // мышь отпустили за пределами окна или захват потерян (Alt+Tab) — завершаем рисование как обычное отпускание
             _page.LostMouseCapture += (_, e) => { if (_drawing) MarkUp(_page, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent }); };
 
-            // Полноэкранное непрозрачное окно с GPU-отрисовкой на части видеокарт и сборок Windows (в т. ч. Insider)
-            // оставляет чёрные прямоугольники там, где картинка перерисовывается кусками, — а при рисовании так и есть.
-            // На время пометок рисуем процессором: меняются только маленькие участки, это быстро и без артефактов.
-            try
-            {
-                if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource hs && hs.CompositionTarget != null)
-                {
-                    hs.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
-                    Journal.Info("capture", "пометки: программная отрисовка (без чёрных прямоугольников GPU)");
-                }
-            }
-            catch (Exception ex) { Journal.Warn("capture", "не удалось включить программную отрисовку: " + ex.Message); }
-
             BuildBar();
             BuildHandles();
             _hintText.Text = "Рисуй прямо на снимке · уголки растягивают область · Enter — сохранить · Esc — отмена";
@@ -215,7 +202,7 @@ namespace Isle.Overlays
         {
             var sz = _bar.DesiredSize;
             double y = _area.Bottom + 14;
-            bool below = y + sz.Height <= ActualHeight - 8;
+            bool below = y + sz.Height <= ScreenH - 8;
             if (!below) y = _area.Top - 14 - sz.Height;
             if (y < 8) y = _area.Bottom - sz.Height - 12;
             double x = Math.Clamp(_area.X + (_area.Width - sz.Width) / 2, 8, Math.Max(8, ActualWidth - sz.Width - 8));
@@ -259,8 +246,8 @@ namespace Isle.Overlays
                     var (fx, fy) = HandleAt[idx];
                     if (fx == 0) l += dx; else if (fx == 1) r += dx;
                     if (fy == 0) t += dy; else if (fy == 1) b += dy;
-                    l = Math.Clamp(l, 0, ActualWidth); r = Math.Clamp(r, 0, ActualWidth);
-                    t = Math.Clamp(t, 0, ActualHeight); b = Math.Clamp(b, 0, ActualHeight);
+                    l = Math.Clamp(l, 0, ScreenW); r = Math.Clamp(r, 0, ScreenW);
+                    t = Math.Clamp(t, 0, ScreenH); b = Math.Clamp(b, 0, ScreenH);
                     const double min = 16;
                     if (r - l < min) { if (fx == 0) l = r - min; else r = l + min; }
                     if (b - t < min) { if (fy == 0) t = b - min; else b = t + min; }
@@ -380,7 +367,15 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    EnsureMosaic();
+                    {
+                        long e0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                        bool first = _cropPx == null;
+                        EnsureMosaic();
+                        if (first) Journal.Info("capture", "мозаика: пиксели снимка " + _cropW + "×" + _cropH + " подготовлены за "
+                            + Math.Round((System.Diagnostics.Stopwatch.GetTimestamp() - e0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency) + " мс");
+                    }
+                    _patchUpdates = 0; _patchMsSum = 0; _patchMsMax = 0;
+                    _meter.Start();
                     _livePatch = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
                     RenderOptions.SetBitmapScalingMode(_livePatch, BitmapScalingMode.NearestNeighbor);
                     _patches.Children.Add(_livePatch);
@@ -459,6 +454,9 @@ namespace Isle.Overlays
                     {
                         var patch = _livePatch; _livePatch = null;
                         ShowPatch(r, patch, force: true);
+                        Journal.Info("capture", "мозаика: рамка " + _livePx.Width + "×" + _livePx.Height + " px, квадрат " + _patchBlock + " px, обновлений " + _patchUpdates
+                            + ", расчёт в среднем " + (_patchUpdates > 0 ? Math.Round(_patchMsSum / _patchUpdates, 1) : 0) + " мс, макс " + Math.Round(_patchMsMax, 1)
+                            + " мс; плавность: " + _meter.Stop());
                         if (r.Width >= 3 && r.Height >= 3 && patch.Source != null)
                             _markUndo.Push(() => _patches.Children.Remove(patch)); // итоговая плитка — та же, что была видна
                         else _patches.Children.Remove(patch);
@@ -488,6 +486,8 @@ namespace Isle.Overlays
         }
 
         private long _patchAt; // когда плитка обновлялась последний раз — не чаще кадра
+        private readonly Helpers.FrameMeter _meter = new();
+        private int _patchUpdates; private double _patchMsSum, _patchMsMax; private int _patchBlock;
 
         /// <summary>
         /// Плитка мозаики на месте рамки r (в точках снимка). Размер квадратов — по размеру рамки: мелкое сообщение
@@ -499,7 +499,7 @@ namespace Isle.Overlays
             patch ??= _livePatch;
             if (patch == null || _cropPx == null) return;
             long now = Environment.TickCount64;
-            if (!force && now - _patchAt < 30) return; // ~30 раз в секунду хватает глазу, процессору — легче
+            if (!force && now - _patchAt < 16) return; // не чаще кадра
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
@@ -514,6 +514,7 @@ namespace Isle.Overlays
             var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
             if (ir.Equals(_livePx) && patch.Source != null && !force) return;
             _patchAt = now;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             var cells = Mosaic.Cells(_cropPx, _cropW, _cropH, ir.X, ir.Y, ir.Width, ir.Height, block, out int cw, out int ch);
             var src = BitmapSource.Create(cw, ch, 96, 96, PixelFormats.Bgr32, null, cells, cw * 4);
             src.Freeze();
@@ -523,6 +524,8 @@ namespace Isle.Overlays
             Canvas.SetLeft(patch, x0 / k); Canvas.SetTop(patch, y0 / k);
             patch.Width = ir.Width / k; patch.Height = ir.Height / k;
             patch.Clip = null;
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            _patchUpdates++; _patchMsSum += ms; if (ms > _patchMsMax) _patchMsMax = ms; _patchBlock = block;
         }
 
         private static Geometry Arrow(Point a, Point b, double t)
@@ -610,32 +613,38 @@ namespace Isle.Overlays
             if (_saving) return;
             CommitMarkText();
             _saving = true;
-            int w = _cropW, h = _cropH;
-            _outline.Visibility = Visibility.Hidden;
-            _page.UpdateLayout();
-            var dv = new DrawingVisual();
-            using (var dc = dv.RenderOpen())
-                dc.DrawRectangle(new VisualBrush(_page) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
-            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-            rtb.Render(dv);
-            rtb.Freeze();
-            _outline.Visibility = Visibility.Visible;
-            FlyToIsland(() => Finish(rtb), rtb);
+            Journal.Info("capture", "сохранение: слоёв пометок " + _ink.Children.Count + ", плиток мозаики " + _patches.Children.Count);
+            // Сначала полёт — живой слой летит в чёлку (видеокарте это ничего не стоит), а склейка большой картинки —
+            // уже после, когда экран свободен: раньше склейка 4K шла ДО анимации, и экран на это время подвисал.
+            FlyToIsland(() =>
+            {
+                var t0 = System.Diagnostics.Stopwatch.StartNew();
+                Hide(); // слой убран с экрана — склеиваем незаметно
+                _page.BeginAnimation(OpacityProperty, null);
+                _page.Opacity = 1;
+                _page.RenderTransform = null;
+                _page.Clip = null;
+                _outline.Visibility = Visibility.Hidden;
+                _page.UpdateLayout();
+                int w = _cropW, h = _cropH;
+                var dv = new DrawingVisual();
+                using (var dc = dv.RenderOpen())
+                    dc.DrawRectangle(new VisualBrush(_page) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
+                var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+                rtb.Render(dv);
+                rtb.Freeze();
+                Journal.Info("capture", "сохранение: картинка " + w + "×" + h + " склеена за " + t0.ElapsedMilliseconds + " мс");
+                Finish(rtb);
+            });
         }
 
         /// <summary>Снимок сжимается и улетает в чёлку (верх основного экрана), затемнение тает.</summary>
-        private void FlyToIsland(Action done, BitmapSource flat = null)
+        private void FlyToIsland(Action done)
         {
             foreach (var h in _handles) h.Visibility = Visibility.Collapsed;
-            // Летит одна готовая картинка, а не весь слой с пометками и плитками мозаики — так анимации нечего пересчитывать.
-            // Режим отрисовки НЕ переключаем: смена на ходу пересоздаёт поверхность окна — экран мигал белой пеленой.
-            if (flat != null)
-            {
-                _page.Children.Clear();
-                var img = new Image { Source = flat, Stretch = Stretch.Fill };
-                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.LowQuality); // в полёте — быстрое масштабирование
-                _page.Children.Add(img);
-            }
+            _outline.Visibility = Visibility.Hidden;
+            // режим отрисовки на ходу НЕ переключаем: смена пересоздаёт поверхность окна — экран мигал белой пеленой
+            _meter.Start();
             _escPoll.Stop();
             IsHitTestVisible = false;
             // центр чёлки: верх основного монитора по центру (в координатах слоя)
@@ -652,7 +661,6 @@ namespace Isle.Overlays
 
             var dur = TimeSpan.FromMilliseconds(520);
             var move = new CubicEase { EasingMode = EasingMode.EaseInOut };
-            // сжимается сразу (большой снимок перерисовывать дорого), а летит плавно
             var shrink = new CubicEase { EasingMode = EasingMode.EaseOut };
             st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
             st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
@@ -663,11 +671,14 @@ namespace Isle.Overlays
             ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusXProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
             ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusYProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
             _page.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)) { BeginTime = TimeSpan.FromMilliseconds(400) });
-            // панель, подсказка и затемнение — сразу: плавное таяние затемнения на весь 4K-экран процессор рисует рывками
-            _bar.Visibility = Visibility.Hidden;
-            _hint.Visibility = Visibility.Hidden;
-            _dim.Visibility = Visibility.Hidden;
-            fly.Completed += (_, __) => done();
+            _bar.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
+            _hint.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
+            _dim.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(380)));
+            fly.Completed += (_, __) =>
+            {
+                Journal.Info("capture", "полёт в чёлку: " + _meter.Stop());
+                done();
+            };
             tt.BeginAnimation(TranslateTransform.YProperty, fly);
         }
     }
