@@ -46,6 +46,8 @@ namespace Isle.Overlays
             Left = 0; Top = 0; Width = 100; Height = 100;
 
             var img = new Image { Source = shot, Stretch = Stretch.Fill };
+            // снимок лежит пиксель в пиксель с экраном: без сглаживания процессору при перерисовке остаётся простое копирование
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
             var root = _root = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             root.Children.Add(img);
             root.Children.Add(_canvas);
@@ -80,19 +82,14 @@ namespace Isle.Overlays
             Loaded += (_, __) =>
             {
                 var h = new WindowInteropHelper(this).Handle;
-                // Окно на 1 пиксель выше экрана: окно ровно «во весь экран» Windows выводит в особом полноэкранном режиме
-                // (independent flip / MPO), и на части видеокарт и сборок при частичной перерисовке там оставались чёрные
-                // прямоугольники. Лишняя строка уходит за нижний край, само содержимое — ровно по экрану.
-                bool soft = AppSettings.Current.CaptureSoftwareRender;
-                SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height + (soft ? 0 : 1), 0x0040);
+                // Выделение рисует видеокарта (там всё перерисовывается целиком — артефактов нет). Пометки — процессор
+                // (см. EnterMarkup): видеокарта на части ПК оставляет чёрные прямоугольники при частичной перерисовке.
+                SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height, 0x0040);
                 var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
                 _root.Width = _vs.Width * dev.M11;
                 _root.Height = _vs.Height * dev.M22;
-                if (soft && PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null)
-                    hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
-                Journal.Info("capture", "слой: окно " + _vs.Width + "×" + (_vs.Height + (soft ? 0 : 1)) + " px, содержимое " + Math.Round(_root.Width) + "×" + Math.Round(_root.Height)
-                    + " точек, отрисовка " + (soft ? "процессором (совместимая)" : "видеокартой") + ", tier " + (RenderCapability.Tier >> 16)
-                    + ", открыт через " + _openedFor.ElapsedMilliseconds + " мс");
+                Journal.Info("capture", "слой: окно " + _vs.Width + "×" + _vs.Height + " px, " + Math.Round(_root.Width) + "×" + Math.Round(_root.Height)
+                    + " точек, tier " + (RenderCapability.Tier >> 16) + ", открыт через " + _openedFor.ElapsedMilliseconds + " мс");
                 // Windows не даёт фоновой программе забрать фокус обычным Activate() — без фокуса не доходил Esc
                 Isle.Native.Win32.ForceForeground(h);
                 Activate();
