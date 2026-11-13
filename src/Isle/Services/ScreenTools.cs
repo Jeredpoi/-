@@ -61,10 +61,19 @@ namespace Isle.Services
             return opaque;
         }
 
-        public static string SavePng(BitmapSource bmp)
+        /// <summary>Путь для нового снимка в «Изображения\\Isle» (папка создаётся).</summary>
+        public static string NewShotPath()
         {
             Directory.CreateDirectory(ShotsDir);
             var path = Path.Combine(ShotsDir, "Снимок " + DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss") + ".png");
+            for (int i = 2; File.Exists(path); i++) path = Path.Combine(ShotsDir, "Снимок " + DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss") + " (" + i + ").png");
+            return path;
+        }
+
+        public static string SavePng(BitmapSource bmp) => SavePng(bmp, NewShotPath());
+
+        public static string SavePng(BitmapSource bmp, string path)
+        {
             var enc = new PngBitmapEncoder();
             enc.Frames.Add(BitmapFrame.Create(bmp));
             using var fs = File.Create(path);

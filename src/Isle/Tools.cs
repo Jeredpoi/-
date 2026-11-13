@@ -81,9 +81,24 @@ namespace Isle
 
         private static void Done(BitmapSource bmp)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             ScreenTools.CopyImage(bmp);
+            long copyMs = sw.ElapsedMilliseconds;
             string path = null;
-            if (AppSettings.Current.SaveScreenshots) { try { path = ScreenTools.SavePng(bmp); } catch { } }
+            if (AppSettings.Current.SaveScreenshots)
+            {
+                // PNG 4K сжимается долго — в фоне, чтобы экран не замирал (картинка заморожена, из другого потока читать можно)
+                path = ScreenTools.NewShotPath();
+                var target = path;
+                if (!bmp.IsFrozen) bmp.Freeze();
+                _ = Task.Run(() =>
+                {
+                    var s2 = System.Diagnostics.Stopwatch.StartNew();
+                    try { ScreenTools.SavePng(bmp, target); Journal.Info("capture", "PNG сохранён за " + s2.ElapsedMilliseconds + " мс: " + System.IO.Path.GetFileName(target)); }
+                    catch (Exception ex) { Journal.Error("capture", "PNG не сохранился: " + ex.Message); }
+                });
+            }
+            Journal.Info("capture", "снимок " + bmp.PixelWidth + "×" + bmp.PixelHeight + " в буфере за " + copyMs + " мс");
             ToastBus.Show(new Toast
             {
                 Kind = ToastKind.Success, Title = "Снимок скопирован",

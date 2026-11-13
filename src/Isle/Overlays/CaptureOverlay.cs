@@ -46,7 +46,7 @@ namespace Isle.Overlays
             Left = 0; Top = 0; Width = 100; Height = 100;
 
             var img = new Image { Source = shot, Stretch = Stretch.Fill };
-            var root = new Grid();
+            var root = _root = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             root.Children.Add(img);
             root.Children.Add(_canvas);
             _canvas.Children.Add(_dim);
@@ -80,7 +80,19 @@ namespace Isle.Overlays
             Loaded += (_, __) =>
             {
                 var h = new WindowInteropHelper(this).Handle;
-                SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height, 0x0040);
+                // Окно на 1 пиксель выше экрана: окно ровно «во весь экран» Windows выводит в особом полноэкранном режиме
+                // (independent flip / MPO), и на части видеокарт и сборок при частичной перерисовке там оставались чёрные
+                // прямоугольники. Лишняя строка уходит за нижний край, само содержимое — ровно по экрану.
+                bool soft = AppSettings.Current.CaptureSoftwareRender;
+                SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height + (soft ? 0 : 1), 0x0040);
+                var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+                _root.Width = _vs.Width * dev.M11;
+                _root.Height = _vs.Height * dev.M22;
+                if (soft && PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null)
+                    hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
+                Journal.Info("capture", "слой: окно " + _vs.Width + "×" + (_vs.Height + (soft ? 0 : 1)) + " px, содержимое " + Math.Round(_root.Width) + "×" + Math.Round(_root.Height)
+                    + " точек, отрисовка " + (soft ? "процессором (совместимая)" : "видеокартой") + ", tier " + (RenderCapability.Tier >> 16)
+                    + ", открыт через " + _openedFor.ElapsedMilliseconds + " мс");
                 // Windows не даёт фоновой программе забрать фокус обычным Activate() — без фокуса не доходил Esc
                 Isle.Native.Win32.ForceForeground(h);
                 Activate();
@@ -100,7 +112,7 @@ namespace Isle.Overlays
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
             // окно закрыли не через Finish (Alt+F4 и т. п.) — всё равно завершаем, иначе чёлка останется скрытой, а снимки — заблокированы
-            Closed += (_, __) => { _escPoll.Stop(); _tcs.TrySetResult(null); };
+            Closed += (_, __) => { _escPoll.Stop(); _meter.Stop(); _tcs.TrySetResult(null); }; // замер кадров не должен пережить слой
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
@@ -148,8 +160,12 @@ namespace Isle.Overlays
             Close();
         }
 
-        private double Kx => _shot.PixelWidth / Math.Max(1, ActualWidth);
-        private double Ky => _shot.PixelHeight / Math.Max(1, ActualHeight);
+        private Grid _root;
+        /// <summary>Размер экрана в точках слоя (окно на 1 px выше — лишняя строка не в счёт).</summary>
+        private double ScreenW => _root != null && _root.ActualWidth > 0 ? _root.ActualWidth : ActualWidth;
+        private double ScreenH => _root != null && _root.ActualHeight > 0 ? _root.ActualHeight : ActualHeight;
+        private double Kx => _shot.PixelWidth / Math.Max(1, ScreenW);
+        private double Ky => _shot.PixelHeight / Math.Max(1, ScreenH);
 
         private void OnDown(object s, MouseButtonEventArgs e)
         {
@@ -190,7 +206,7 @@ namespace Isle.Overlays
             if (_markup || _mode == CaptureMode.Pipette || _start == null) return;
             ReleaseMouseCapture();
             var r = new Rect(_start.Value, e.GetPosition(_canvas));
-            r.Intersect(new Rect(0, 0, ActualWidth, ActualHeight));
+            r.Intersect(new Rect(0, 0, ScreenW, ScreenH));
             _start = null;
             if (r.IsEmpty) { Finish(null); return; }
             if (r.Width < 4 || r.Height < 4) { Finish(null); return; }
@@ -221,7 +237,7 @@ namespace Isle.Overlays
                 _dimGroup.Children.Add(_dimHole);
                 _dim.Data = _dimGroup;
             }
-            _dimOuter.Rect = new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight));
+            _dimOuter.Rect = new Rect(0, 0, Math.Max(1, ScreenW), Math.Max(1, ScreenH));
             _dimHole.Rect = hole.IsEmpty ? Rect.Empty : hole;
         }
 
