@@ -28,6 +28,11 @@ namespace Isle.Overlays
         {
             int id = ++_flights;
             Journal.Info("capture", "полёт #" + id + ": старт, снимок " + image.PixelWidth + "×" + image.PixelHeight + ", окно " + Math.Round(from.Width) + "×" + Math.Round(from.Height) + " px");
+            // Окошко сразу небольшое (не больше 480 px по длинной стороне) — в центре выделенной области.
+            // Большое прозрачное окно (снимок во весь 4K-экран) рисуется слишком медленно: полёт шёл рывками,
+            // особенно в игре, когда видеокарта занята. Маленькое рисуется легко и плавно.
+            double k0 = Math.Min(1, 480 / Math.Max(1, Math.Max(from.Width, from.Height)));
+            from = new Rect(from.X + from.Width / 2 - from.Width * k0 / 2, from.Y + from.Height / 2 - from.Height * k0 / 2, from.Width * k0, from.Height * k0);
             // куда: середина чёлки; снимок уменьшается до её высоты, сохраняя пропорции
             Rect to;
             try
@@ -67,11 +72,12 @@ namespace Isle.Overlays
             double stepW = 0, stepH = 0;
             int resizes = 0;
 
-            const double Hold = 120;   // сначала снимок чуть «замирает» на месте — глаз успевает понять, что сейчас будет
+            const double Hold = 160;   // сначала снимок «щёлкает» на месте — глаз успевает понять, что сейчас будет
             const double Ms = 900;     // сам полёт — не торопясь
             var sw = Stopwatch.StartNew();
             int frames = 0; double last = 0, worst = 0;
             static double Lerp(double a, double b, double t) => a + (b - a) * t;
+            double pop = 0.9; // «щелчок» при появлении: окошко чуть подрастает до полного размера
             void Place(double u)
             {
                 // размер: в начале уменьшается быстрее — самые дорогие «большие» кадры длятся меньше, дальше мягко
@@ -82,7 +88,7 @@ namespace Isle.Overlays
                 double cy = Lerp(from.Y + from.Height / 2, to.Y + to.Height / 2, km);
                 bool resize = stepW <= 0 || w < stepW * 0.85 || h < stepH * 0.85 || u >= 1;
                 if (resize) { stepW = Math.Max(1, Math.Ceiling(w)); stepH = Math.Max(1, Math.Ceiling(h)); resizes++; }
-                scale.ScaleX = w / stepW; scale.ScaleY = h / stepH;
+                scale.ScaleX = w / stepW * pop; scale.ScaleY = h / stepH * pop;
                 SetWindowPos(hwnd, new IntPtr(-1), (int)Math.Round(cx - stepW / 2), (int)Math.Round(cy - stepH / 2),
                     (int)stepW, (int)stepH, NoActivate | (resize ? 0u : NoSize));
                 win.Opacity = u > 0.82 ? Math.Max(0, 1 - (u - 0.82) / 0.18) : 1;
@@ -94,7 +100,9 @@ namespace Isle.Overlays
             tick = (_, __) =>
             {
                 if (finished) return; // окно закрывается — вложенный кадр не должен завершить полёт второй раз
-                double t = Math.Max(0, sw.Elapsed.TotalMilliseconds - Hold);
+                double held = sw.Elapsed.TotalMilliseconds;
+                pop = held < Hold ? 0.9 + 0.1 * (1 - Math.Pow(1 - held / Hold, 3)) : 1;
+                double t = Math.Max(0, held - Hold);
                 frames++;
                 double now = sw.Elapsed.TotalMilliseconds;
                 worst = Math.Max(worst, now - last);
