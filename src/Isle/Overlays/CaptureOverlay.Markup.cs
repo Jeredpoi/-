@@ -134,7 +134,17 @@ namespace Isle.Overlays
                 }
                 catch (Exception ex) { Journal.Warn("capture", "не удалось включить отрисовку процессором: " + ex.Message); }
             }
-            Journal.Info("capture", "пометки: отрисовка " + (gpu ? "видеокартой (из настроек)" : "процессором"));
+            else
+            {
+                // Видеокарта: чёрные прямоугольники появлялись при ЧАСТИЧНОЙ перерисовке (только изменившийся кусок).
+                // Пока рисуешь, заставляем перерисовывать окно целиком каждый кадр: почти невидимый слой на весь экран
+                // чуть меняет прозрачность — для видеокарты целый кадр 4K ничего не стоит, а частичных обновлений нет.
+                _repaint = new System.Windows.Shapes.Rectangle { Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), IsHitTestVisible = false };
+                _root.Children.Add(_repaint);
+                CompositionTarget.Rendering += OnFullRepaint;
+                Closed += (_, __) => CompositionTarget.Rendering -= OnFullRepaint;
+            }
+            Journal.Info("capture", "пометки: отрисовка " + (gpu ? "видеокартой (из настроек), целыми кадрами" : "процессором"));
 
             BuildBar();
             BuildHandles();
@@ -504,6 +514,16 @@ namespace Isle.Overlays
         private void EnsureMosaic()
         {
             _cropPx ??= ScreenTools.Bgra(_crop, out _, out _);
+        }
+
+        private System.Windows.Shapes.Rectangle _repaint;
+        private bool _repaintFlip;
+        /// <summary>Видеокарта: пока рисуешь — каждый кадр окно перерисовывается целиком (без частичных обновлений).</summary>
+        private void OnFullRepaint(object s, EventArgs e)
+        {
+            if (_repaint == null || !_drawing) return;
+            _repaintFlip = !_repaintFlip;
+            _repaint.Opacity = _repaintFlip ? 1 : 0.99;
         }
 
         private Rect? _pendingMosaic;   // последняя рамка от мыши, ещё не показанная
