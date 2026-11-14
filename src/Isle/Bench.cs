@@ -35,7 +35,41 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void Snap(MainWindow w, string dir, string name)
+        {
+            w.UpdateLayout();
+            var dpi = VisualTreeHelper.GetDpi(w);
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(w.ActualWidth * dpi.DpiScaleX), 120, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(70, 40, 110)), null, new Rect(0, 0, w.ActualWidth, 120)); dc.DrawRectangle(new VisualBrush(w.Content as Visual) { Stretch = Stretch.None, AlignmentY = AlignmentY.Top, ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, w.ActualWidth, 120) }, null, new Rect(0, 0, w.ActualWidth, 120)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png"));
+            enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                await Task.Delay(4000);
+                var info = new UpdateInfo { Version = new Version(0, 2, 0), Tag = "v0.2.0", Size = 48_000_000, SetupUrl = "https://example.invalid/Isle-Setup.exe" };
+                typeof(UpdateService).GetProperty("Available").SetValue(null, info);
+                UpdateService.ShowAvailableToast();
+                await Task.Delay(900); Snap(w, dir, "upd-1-available");
+                ToastBus.Show(new Toast { Kind = ToastKind.Download, Title = "Обновление до 0.2.0", Subtitle = "Скачиваю… 42% · 19 из 46 МБ", Icon = Icons.Download, Progress = 0.42, ReplaceKey = "update", Important = true, Duration = TimeSpan.FromMinutes(1) });
+                await Task.Delay(900); Snap(w, dir, "upd-2-progress");
+                await UpdateService.InstallFromToastAsync(); // адрес недоступен — должна прийти плашка ошибки
+                await Task.Delay(900); Snap(w, dir, "upd-3-error");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
