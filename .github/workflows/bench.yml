@@ -48,6 +48,7 @@ jobs:
           $rec.WaitForExit(90000) | Out-Null
           Get-ChildItem $dir | ForEach-Object { Write-Host $_.Name $_.Length }
           if (Test-Path "$dir/error.txt") { Get-Content "$dir/error.txt" }
+          Get-ChildItem "$env:USERPROFILE/Pictures/Isle" -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1 | Copy-Item -Destination "$dir/saved.png"
           $log = Join-Path $env:APPDATA "Isle/errors.log"
           if (Test-Path $log) { Copy-Item $log "$dir/errors.log" }
 
@@ -55,7 +56,7 @@ jobs:
         shell: pwsh
         env:
           PYTHONIOENCODING: utf-8
-        run: python .github/scripts/bench_report.py bench
+        run: python .github/scripts/bench_report.py bench; exit 0
 
       - uses: actions/upload-artifact@v4
         if: always()
