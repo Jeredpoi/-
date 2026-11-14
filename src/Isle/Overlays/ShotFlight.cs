@@ -143,6 +143,7 @@ namespace Isle.Overlays
                 last = now;
                 double u = Math.Min(1, t / Ms);
                 Place(u);
+                Journal.Debug("flight", "#" + id + " кадр " + frames + " (окошко): " + Math.Round(now) + " мс, u=" + u.ToString("0.000") + ", окно " + stepW + "×" + stepH);
                 // SetWindowPos внутри Place отдаёт управление Windows, и та может успеть вызвать следующий кадр
                 // прямо отсюда — он и завершил бы полёт, а потом ещё раз этот (в журнале было два «полёт #1»)
                 if (finished || u < 1) return;
@@ -281,10 +282,14 @@ namespace Isle.Overlays
                     double pop = held < Hold ? 1 - 0.03 * Math.Sin(Math.PI * held / Hold) : 1;
                     double t = Math.Max(0, held - Hold);
                     frames++;
-                    worst = Math.Max(worst, held - last);
+                    double gap = held - last;
+                    worst = Math.Max(worst, gap);
                     last = held;
                     double u = Math.Min(1, t / Ms);
+                    long p0 = Stopwatch.GetTimestamp();
                     Place(u, pop);
+                    Journal.Debug("flight", "#" + id + " кадр " + frames + ": " + Math.Round(held) + " мс, шаг " + Math.Round(gap, 1) + " мс, u=" + u.ToString("0.000")
+                        + ", масштаб " + scale.ScaleX.ToString("0.000") + ", расчёт " + ((Stopwatch.GetTimestamp() - p0) * 1000.0 / Stopwatch.Frequency).ToString("0.00") + " мс");
                     if (u < 1) return;
                     finished = true;
                     CompositionTarget.Rendering -= tick;
@@ -300,17 +305,32 @@ namespace Isle.Overlays
             catch { try { win.Close(); } catch { } throw; } // запасной путь — обычное окошко (см. Fly)
             card.Width = from.Width / dpi; card.Height = from.Height / dpi;
             Place(0, 1);
+            // Слой выделения прячем, только когда окно полёта уже реально на экране: WPF сообщает «нарисовано»
+            // раньше, чем DWM покажет кадр, — снимок на один кадр пропадал («мигал»). Ждём 2 кадра и DwmFlush.
+            int warm = 0;
+            EventHandler warmTick = null;
+            warmTick = (_, e) =>
+            {
+                if (e is RenderingEventArgs re) { if (re.RenderingTime == lastRT) return; lastRT = re.RenderingTime; }
+                if (++warm < 3) return;
+                CompositionTarget.Rendering -= warmTick;
+                try { DwmFlush(); } catch { }
+                Journal.Debug("flight", "#" + id + ": окно на экране, прячу слой (окно " + aw + "×" + ah + " px в " + ax + "," + ay + ", масштаб " + dpi + ")");
+                try { shown?.Invoke(); } catch (Exception ex) { Journal.Warn("capture", "полёт: " + ex.Message); }
+                sw.Restart();
+                CompositionTarget.Rendering += tick;
+            };
             void Begin()
             {
                 if (begun) return;
                 begun = true;
-                try { shown?.Invoke(); } catch (Exception ex) { Journal.Warn("capture", "полёт: " + ex.Message); }
-                sw.Restart();
-                CompositionTarget.Rendering += tick;
+                CompositionTarget.Rendering += warmTick;
             }
             win.ContentRendered += (_, __) => Begin();
             if (win.IsLoaded && win.IsVisible) win.Dispatcher.BeginInvoke(new Action(Begin), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmFlush();
 
         private static void Marshal(int hr) { if (hr < 0) throw new InvalidOperationException("DWM: 0x" + hr.ToString("X8")); }
 }

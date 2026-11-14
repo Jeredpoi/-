@@ -647,6 +647,12 @@
                                     <TextBlock Style="{StaticResource RowNote}" Text="То, что показывается при первом запуске: возможности Isle, точная скорость Steam и PrintScreen"/></StackPanel>
                                 <Button Style="{StaticResource SFlat}" Content="Показать" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnShowWelcome"/>
                             </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Подробный журнал (отладка)"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Пишет всё: кадры анимаций, зависания, процессор и память, мониторы, ошибки. Без буфера обмена, клавиш и паролей. Журнал — %AppData%\Isle\isle.log"/></StackPanel>
+                                <CheckBox x:Name="DebugLog" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnToggle"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

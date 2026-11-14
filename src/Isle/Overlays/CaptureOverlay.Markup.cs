@@ -508,6 +508,7 @@ namespace Isle.Overlays
 
         private Rect? _pendingMosaic;   // последняя рамка от мыши, ещё не показанная
         private bool _mosaicHooked;
+        private long _mosaicLastAt;
         private TimeSpan _mosaicFrameTime;
 
         private void HookMosaicFrame()
@@ -520,6 +521,7 @@ namespace Isle.Overlays
         private void UnhookMosaicFrame()
         {
             _pendingMosaic = null;
+            _mosaicLastAt = 0;
             if (!_mosaicHooked) return;
             _mosaicHooked = false;
             CompositionTarget.Rendering -= OnMosaicFrame;
@@ -536,8 +538,15 @@ namespace Isle.Overlays
             if (_pendingMosaic is not Rect r) return;
             _pendingMosaic = null;
             if (!_drawing || _livePatch == null) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            double gap = _mosaicLastAt > 0 ? (t0 - _mosaicLastAt) * 1000.0 / System.Diagnostics.Stopwatch.Frequency : 0;
+            _mosaicLastAt = t0;
             ShowPatch(r);
             PlaceFrame(r);
+            // в подробном журнале — каждый медленный кадр мозаики: сколько ждали кадра и сколько считали
+            if (gap > 25)
+                Journal.Debug("mosaic", "кадр через " + Math.Round(gap) + " мс, рамка " + Math.Round(r.Width) + "×" + Math.Round(r.Height) + ", расчёт "
+                    + ((System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency).ToString("0.0") + " мс, кусочков " + _livePatch.Count + ", пересчитано " + _livePatch.LastRebuilt);
         }
 
         private int _hz = -1;
