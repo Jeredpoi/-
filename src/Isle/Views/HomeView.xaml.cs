@@ -93,7 +93,63 @@ namespace Isle.Views
             AppHost.Voice.Toggle();
         }
 
+        /// <summary>
+        /// «+»: список ярлыков с рабочего стола (свой и общий) со значками — отмечаешь нужные.
+        /// Меню не закрывается после клика, можно выбрать несколько. «Другой файл…» — обычный выбор файла.
+        /// </summary>
         private void OnLauncherAdd(object s, RoutedEventArgs e)
+        {
+            var menu = new ContextMenu { PlacementTarget = LauncherAddBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Top, MaxHeight = 440, MinWidth = 260 };
+            var desk = DesktopShortcuts();
+            if (desk.Count == 0) menu.Items.Add(new MenuItem { Header = "На рабочем столе нет ярлыков", IsEnabled = false });
+            foreach (var path in desk)
+            {
+                var item = new MenuItem { IsCheckable = true, StaysOpenOnClick = true, IsChecked = Has(path) };
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                row.Children.Add(new System.Windows.Controls.Image { Source = Isle.Native.Win32.ShellIcon(path), Width = 20, Height = 20, Margin = new Thickness(0, 0, 10, 0) });
+                row.Children.Add(new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(path), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis });
+                item.Header = row;
+                var p = path;
+                item.Click += (_, __) =>
+                {
+                    if (Has(p)) _launch.Remove(_launch.First(l => string.Equals(l.Path, p, StringComparison.OrdinalIgnoreCase)));
+                    else if (_launch.Count < 16) _launch.Add(new LauncherItem { Path = p });
+                    item.IsChecked = Has(p);
+                    SaveLauncher();
+                };
+                menu.Items.Add(item);
+            }
+            menu.Items.Add(new Separator());
+            var other = new MenuItem { Header = "Другой файл или программа…" };
+            other.Click += (_, __) => PickFile();
+            menu.Items.Add(other);
+            menu.IsOpen = true;
+        }
+
+        private bool Has(string path) => _launch.Any(l => string.Equals(l.Path, path, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>Ярлыки и программы с рабочего стола пользователя и общего (как их видно на экране), по алфавиту.</summary>
+        private static List<string> DesktopShortcuts()
+        {
+            var list = new List<string>();
+            foreach (var dir in new[] { Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory) })
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) continue;
+                    list.AddRange(System.IO.Directory.EnumerateFiles(dir).Where(f =>
+                    {
+                        var ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
+                        return ext is ".lnk" or ".url" or ".exe" or ".appref-ms";
+                    }));
+                }
+                catch { }
+            }
+            return list.GroupBy(f => System.IO.Path.GetFileNameWithoutExtension(f), StringComparer.CurrentCultureIgnoreCase).Select(g => g.First())
+                .OrderBy(f => System.IO.Path.GetFileNameWithoutExtension(f), StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
+        private void PickFile()
         {
             AppHost.Window.SuppressAutoCollapse = true;
             try
@@ -102,7 +158,7 @@ namespace Isle.Views
                 if (dlg.ShowDialog() == true)
                 {
                     foreach (var f in dlg.FileNames)
-                        if (_launch.All(l => !string.Equals(l.Path, f, StringComparison.OrdinalIgnoreCase)) && _launch.Count < 16)
+                        if (!Has(f) && _launch.Count < 16)
                             _launch.Add(new LauncherItem { Path = f });
                     SaveLauncher();
                 }

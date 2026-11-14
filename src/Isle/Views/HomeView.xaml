@@ -200,14 +200,14 @@
         <Grid Grid.Row="4" Grid.ColumnSpan="3">
             <Border x:Name="LauncherBox" Style="{StaticResource CardBox}" Padding="8" AllowDrop="True" Drop="OnLauncherDrop" Height="56">
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Style="{StaticResource Flat}" Height="40" Padding="12,0" Margin="10,0,0,0" Click="OnVoice" ToolTip="Голос в текст: скажи — текст вставится туда, где стоял курсор">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Flat}" Height="38" Padding="12,0" Margin="10,0,0,0" Click="OnVoice" ToolTip="Голос в текст: скажи — текст вставится туда, где стоял курсор">
                         <StackPanel Orientation="Horizontal">
                             <h:Icon Kind="Mic" Width="15" Height="15"/>
                             <TextBlock Text="Голос" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
                             <TextBlock Text="Ctrl+Alt+D" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource Muted}"/>
                         </StackPanel>
                     </Button>
-                    <Button DockPanel.Dock="Left" Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Margin="0,0,10,0" Click="OnLauncherAdd" ToolTip="Добавить программу или файл">
+                    <Button x:Name="LauncherAddBtn" DockPanel.Dock="Left" Style="{StaticResource Flat}" Width="38" Height="38" Padding="0" Margin="0,0,10,0" Click="OnLauncherAdd" ToolTip="Добавить ярлык с рабочего стола">
                         <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
                     </Button>
                     <Grid>
@@ -218,7 +218,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource Ghost}" Width="40" Height="40" Margin="0,0,4,0" Padding="4" Tag="{Binding Path}"
+                                    <Button Style="{StaticResource Ghost}" Width="38" Height="38" Margin="0,0,4,0" Padding="4" Tag="{Binding Path}"
                                             ToolTip="{Binding Name}" Click="OnLaunch" MouseRightButtonUp="OnLaunchRemove">
                                         <Image Source="{Binding Icon}" Width="28" Height="28"/>
                                     </Button>
