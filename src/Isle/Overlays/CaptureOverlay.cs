@@ -138,6 +138,7 @@ namespace Isle.Overlays
         {
             // прошлый слой почему-то остался на экране — закрываем, иначе он попадёт в новый снимок второй панелью
             if (_open != null) { try { _open.Finish(null); } catch { } _open = null; }
+            ClipboardService.NoteShotApp(); // что снимаем — чтобы снимок попал в папку этого приложения
             var vs = ScreenTools.VirtualScreen();
             shot ??= ScreenTools.Capture(vs);
             var w = new CaptureOverlay(shot, vs, mode);
