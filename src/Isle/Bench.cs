@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -36,6 +37,44 @@ namespace Isle
         }
 
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.ClipboardLimit = 5;
+                await Task.Delay(3500);
+                var c = AppHost.Clipboard;
+                for (int i = 0; i < 5; i++) c.Items.Add(new ClipItem { Text = "история " + i, Kind = ClipKind.Text, Time = DateTime.Now.AddMinutes(-i) });
+                c.AddFolder("Игра");
+                for (int i = 0; i < 4; i++) c.Items.Add(new ClipItem { Text = "игра " + i, Kind = ClipKind.Text, Folder = "Игра", Time = DateTime.Now.AddMinutes(-10 - i) });
+                c.SetFolderApp("Игра", "notepad", true);
+                c.ActiveFolder = "Игра";
+                w.SuppressAutoCollapse = true;
+                w.Expand("clip"); await Task.Delay(1200);
+                var v = (Isle.Views.ClipboardView)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "clip" });
+                object F(string n) => v.GetType().GetField(n, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(v);
+                void Call(string m, params object[] a) => v.GetType().GetMethod(m, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(v, a);
+                Call("SelectFolder", "Игра"); await Task.Delay(300);
+                // переименование открытой папки
+                v.GetType().GetField("_renaming", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(v, "Игра");
+                v.FolderName.Visibility = Visibility.Visible; v.FolderName.Text = "Игры";
+                Call("EndFolderName", true); await Task.Delay(400);
+                L("после переименования открыта: " + F("_folder") + "; записей в «Игры»: " + c.Items.Count(x => x.Folder == "Игры") + "; приложения: " + string.Join(",", c.AppsOf("Игры")) + "; запись в: " + c.ActiveFolder + "; видно строк: " + v.List.Items.Count);
+                // удаление с отменой (лимит 5: 5 обычных + 4 из папки → 4 лишних)
+                Call("DeleteFolderWithUndo", "Игры"); await Task.Delay(400);
+                L("после удаления: папок " + c.Folders.Count + ", записей всего " + c.Items.Count + ", полоса: «" + v.UndoText.Text + "»");
+                Call("OnUndo", null, null); await Task.Delay(400);
+                L("после отмены: папки " + string.Join(",", c.Folders) + ", в «Игры» " + c.Items.Count(x => x.Folder == "Игры") + ", всего " + c.Items.Count + ", приложения " + string.Join(",", c.AppsOf("Игры")) + ", запись в: " + c.ActiveFolder);
+                L("тип «2024-01-15»: " + ClipboardService.Classify("2024-01-15", "") + ", «+7 999 123-45-67»: " + ClipboardService.Classify("+7 999 123-45-67", "") + ", «89991234567»: " + ClipboardService.Classify("89991234567", "") + ", «1234567»: " + ClipboardService.Classify("1234567", ""));
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
