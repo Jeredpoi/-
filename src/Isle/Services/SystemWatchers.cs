@@ -212,6 +212,15 @@ namespace Isle.Services
             if (fs != _lastFullscreen)
             {
                 _lastFullscreen = fs;
+                try
+                {
+                    var fg = Win32.GetForegroundWindow();
+                    Win32.GetWindowRect(fg, out var wr);
+                    var cls = new StringBuilder(64); Win32.GetClassName(fg, cls, cls.Capacity);
+                    Win32.SHQueryUserNotificationState(out int qs);
+                    Journal.Debug("watch", "полноэкранное: " + (fs ? "да" : "нет") + " — " + ProcessOf(fg) + " [" + cls + "] окно " + wr.Left + "," + wr.Top + "–" + wr.Right + "," + wr.Bottom + ", QUNS " + qs);
+                }
+                catch { }
                 FullscreenChanged?.Invoke(fs);
             }
         }

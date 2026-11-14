@@ -134,7 +134,17 @@ namespace Isle.Overlays
                 }
                 catch (Exception ex) { Journal.Warn("capture", "не удалось включить отрисовку процессором: " + ex.Message); }
             }
-            Journal.Info("capture", "пометки: отрисовка " + (gpu ? "видеокартой (из настроек)" : "процессором"));
+            else
+            {
+                // Видеокарта: чёрные прямоугольники появлялись при ЧАСТИЧНОЙ перерисовке (только изменившийся кусок).
+                // Пока рисуешь, заставляем перерисовывать окно целиком каждый кадр: почти невидимый слой на весь экран
+                // чуть меняет прозрачность — для видеокарты целый кадр 4K ничего не стоит, а частичных обновлений нет.
+                _repaint = new System.Windows.Shapes.Rectangle { Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), IsHitTestVisible = false };
+                _root.Children.Add(_repaint);
+                CompositionTarget.Rendering += OnFullRepaint;
+                Closed += (_, __) => CompositionTarget.Rendering -= OnFullRepaint;
+            }
+            Journal.Info("capture", "пометки: отрисовка " + (gpu ? "видеокартой (из настроек), целыми кадрами" : "процессором"));
 
             BuildBar();
             BuildHandles();
@@ -506,8 +516,19 @@ namespace Isle.Overlays
             _cropPx ??= ScreenTools.Bgra(_crop, out _, out _);
         }
 
+        private System.Windows.Shapes.Rectangle _repaint;
+        private bool _repaintFlip;
+        /// <summary>Видеокарта: пока рисуешь — каждый кадр окно перерисовывается целиком (без частичных обновлений).</summary>
+        private void OnFullRepaint(object s, EventArgs e)
+        {
+            if (_repaint == null || !_drawing) return;
+            _repaintFlip = !_repaintFlip;
+            _repaint.Opacity = _repaintFlip ? 1 : 0.99;
+        }
+
         private Rect? _pendingMosaic;   // последняя рамка от мыши, ещё не показанная
         private bool _mosaicHooked;
+        private long _mosaicLastAt;
         private TimeSpan _mosaicFrameTime;
 
         private void HookMosaicFrame()
@@ -520,6 +541,7 @@ namespace Isle.Overlays
         private void UnhookMosaicFrame()
         {
             _pendingMosaic = null;
+            _mosaicLastAt = 0;
             if (!_mosaicHooked) return;
             _mosaicHooked = false;
             CompositionTarget.Rendering -= OnMosaicFrame;
@@ -536,8 +558,15 @@ namespace Isle.Overlays
             if (_pendingMosaic is not Rect r) return;
             _pendingMosaic = null;
             if (!_drawing || _livePatch == null) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            double gap = _mosaicLastAt > 0 ? (t0 - _mosaicLastAt) * 1000.0 / System.Diagnostics.Stopwatch.Frequency : 0;
+            _mosaicLastAt = t0;
             ShowPatch(r);
             PlaceFrame(r);
+            // в подробном журнале — каждый медленный кадр мозаики: сколько ждали кадра и сколько считали
+            if (gap > 25)
+                Journal.Debug("mosaic", "кадр через " + Math.Round(gap) + " мс, рамка " + Math.Round(r.Width) + "×" + Math.Round(r.Height) + ", расчёт "
+                    + ((System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency).ToString("0.0") + " мс, кусочков " + _livePatch.Count + ", пересчитано " + _livePatch.LastRebuilt);
         }
 
         private int _hz = -1;

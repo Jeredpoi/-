@@ -56,6 +56,7 @@ namespace Isle
             DispatcherUnhandledException += OnError;
             AppDomain.CurrentDomain.UnhandledException += (_, a) => { Log(a.ExceptionObject?.ToString()); Journal.Flush(); };
             System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, a) => { Journal.Error("task", a.Exception); a.SetObserved(); };
+            Journal.Verbose = AppSettings.Current.DebugLog;
             LogSession();
             base.OnStartup(e);
 
@@ -67,6 +68,7 @@ namespace Isle
                 w.Show();
                 Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
+                try { DebugProbe.Start(); } catch (Exception ex) { Log("debug probe: " + ex.Message); }
                 if (_benchDir != null) _ = Bench.RunAsync(w, _benchDir);
             }
             catch (Exception ex)

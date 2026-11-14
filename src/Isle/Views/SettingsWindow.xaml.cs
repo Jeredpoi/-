@@ -164,6 +164,7 @@ namespace Isle.Views
             Captures.IsChecked = S.ShowInCaptures;
             Hover.IsChecked = S.ExpandOnHover;
             CaptureSoft.IsChecked = S.CaptureGpuRender;
+            DebugLog.IsChecked = S.DebugLog;
             Clock24.IsChecked = S.Use24h;
 
             ChPixel.IsChecked = S.Character == "pixel";
@@ -233,6 +234,13 @@ namespace Isle.Views
             S.HideInFullscreen = Fullscreen.IsChecked == true;
             S.ExpandOnHover = Hover.IsChecked == true;
             S.CaptureGpuRender = CaptureSoft.IsChecked == true;
+            if (S.DebugLog != (DebugLog.IsChecked == true))
+            {
+                S.DebugLog = DebugLog.IsChecked == true;
+                Journal.Info("debug", "подробный журнал " + (S.DebugLog ? "включён" : "выключен"));
+                Journal.Verbose = S.DebugLog;
+                if (S.DebugLog) DebugProbe.Start();
+            }
             S.Use24h = Clock24.IsChecked == true;
             S.VoiceAutoPaste = VoicePaste.IsChecked == true;
             S.VoicePunctuate = VoicePunct.IsChecked == true;
