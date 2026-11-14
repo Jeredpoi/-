@@ -214,29 +214,60 @@ namespace Isle.Services
             : FolderApps.FirstOrDefault(kv => kv.Value.Any(a => a.Equals(app, StringComparison.OrdinalIgnoreCase))).Key;
 
         // ---------- из какого приложения снимок ----------
+        // Снимок Isle: приложение запоминается в момент, когда открывается слой выделения (или снимается весь
+        // экран), и расходуется ОДИН раз — следующей картинкой от Isle. Отменили снимок — забываем.
+        // Снимок «Ножниц» / Win+Shift+S: последнее «настоящее» активное приложение (без самого Isle и инструмента
+        // снимков) — его отслеживаем постоянно, поэтому прошлый снимок из игры не подменит Discord.
         private static string _shotApp;
         private static DateTime _shotAppAt;
+        private static string _lastApp;
+        private static Win32.WinEventProc _fgProc; // держим ссылку — иначе сборщик мусора заберёт делегат
 
-        /// <summary>
-        /// Запомнить приложение, которое снимают (Isle сам открывает слой выделения, и в момент копирования
-        /// активно уже не оно). Если впереди сама чёлка — берём окно, которое было до неё.
-        /// </summary>
+        /// <summary>Запомнить приложение, которое сейчас снимает Isle. Если впереди сама чёлка — окно, которое было до неё.</summary>
         public static void NoteShotApp()
         {
             var name = Win32.ForegroundProcessName();
-            if (IsOwnProcess(name)) name = Win32.ProcessNameOf(AppHost.Window?.PreviousForeground ?? IntPtr.Zero);
-            if (IsOwnProcess(name) || name.Length == 0) return;
-            _shotApp = name; _shotAppAt = DateTime.Now;
+            if (!IsRealApp(name)) name = Win32.ProcessNameOf(AppHost.Window?.PreviousForeground ?? IntPtr.Zero);
+            if (!IsRealApp(name)) name = _lastApp;
+            _shotApp = IsRealApp(name) ? name : null;
+            _shotAppAt = DateTime.Now;
         }
+
+        /// <summary>Снимок отменили (или это был не снимок: текст с экрана, пипетка) — приложение не должно достаться следующей картинке.</summary>
+        public static void ForgetShotApp() => _shotApp = null;
+
+        /// <summary>Снимок готов и сейчас ляжет в буфер: приложение действительно ещё 30 секунд.</summary>
+        public static void ShotTaken() => _shotAppAt = DateTime.Now;
 
         private static readonly string OwnName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
         private static bool IsOwnProcess(string name) => string.Equals(name, OwnName, StringComparison.OrdinalIgnoreCase);
+        private static bool IsRealApp(string name) => !string.IsNullOrEmpty(name) && !IsOwnProcess(name) && !IsScreenshotOwner(name);
 
-        /// <summary>Откуда картинка: снимок Isle или «Ножниц» — приложение, которое снимали; иначе — кто скопировал.</summary>
+        /// <summary>Следим, какое приложение активно (для снимков «Ножницами»).</summary>
+        private static void TrackForeground()
+        {
+            _lastApp = Win32.ForegroundProcessName() is var n && IsRealApp(n) ? n : null;
+            _fgProc = (_, __, hwnd, ___, ____, _____, ______) =>
+            {
+                var name = Win32.ProcessNameOf(hwnd);
+                if (IsRealApp(name)) _lastApp = name;
+            };
+            Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _fgProc, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
+        }
+
+        /// <summary>Из какого приложения картинка.</summary>
         private static string ImageSource(string source)
         {
-            if ((IsOwnProcess(source) || IsScreenshotOwner(source) || source.Length == 0) && _shotApp != null && DateTime.Now - _shotAppAt < TimeSpan.FromMinutes(2))
-                return _shotApp;
+            if (IsOwnProcess(source))
+            {
+                // картинку положил сам Isle: снимок — тогда приложение снимка (один раз); иначе (копия из истории,
+                // из редактора) — ни к какому приложению не относим
+                var app = _shotApp != null && DateTime.Now - _shotAppAt < TimeSpan.FromSeconds(30) ? _shotApp : null;
+                _shotApp = null;
+                return app ?? source;
+            }
+            // «Ножницы», Win+Shift+S, PrintScreen: активным может оказаться сам инструмент снимков
+            if (IsScreenshotOwner(source) || source.Length == 0) return _lastApp ?? source;
             return source;
         }
 
@@ -255,6 +286,7 @@ namespace Isle.Services
             foreach (var kv in data.FolderApps ?? new())
                 if (Folders.Contains(kv.Key) && kv.Value is { Count: > 0 }) FolderApps[kv.Key] = kv.Value.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             _ = Task.Run(CleanOrphans);
+            try { TrackForeground(); } catch (Exception ex) { App.Log("слежение за активным окном: " + ex.Message); }
             Win32.AddClipboardFormatListener(src.Handle);
             src.AddHook(Hook);
         }

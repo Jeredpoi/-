@@ -160,6 +160,9 @@ namespace Isle.Overlays
                 Color c => "цвет " + Hex(c),
                 _ => result.GetType().Name
             }) + " через " + _openedFor.ElapsedMilliseconds + " мс");
+            // приложение снимка — только настоящему снимку области; отмена, текст с экрана, пипетка, QR — забываем
+            if (result is BitmapSource && _mode == CaptureMode.Region) ClipboardService.ShotTaken();
+            else ClipboardService.ForgetShotApp();
             _tcs.TrySetResult(result);
             Close();
         }
