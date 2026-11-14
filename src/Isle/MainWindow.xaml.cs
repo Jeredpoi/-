@@ -768,6 +768,16 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // у плашки своё действие по клику (обновление и т. п.)
+            if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.OnClick is Action onClick
+                && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
+            {
+                _toastTimer.Stop();
+                NextToast();
+                try { onClick(); } catch (Exception ex) { App.Log("клик по плашке: " + ex.Message); }
+                e.Handled = true;
+                return;
+            }
             // клик по уведомлению другого приложения — открываем это приложение
             if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.LaunchAppId is string appId
                 && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
