@@ -21,6 +21,15 @@ namespace Isle.Helpers
 
         public MosaicTiles() { IsHitTestVisible = false; }
 
+        // Зеркало на графическом слое Windows: те же кусочки (те же квадраты) показывает видеокарта,
+        // а эта WPF-плитка остаётся невидимой — из неё собирается сохраняемая картинка.
+        /// <summary>Кусочек (i, j) теперь в прямоугольнике px (пиксели области), квадраты cells cw×ch.</summary>
+        public event Action<(int, int), Int32Rect, byte[], int, int> TileSet;
+        public event Action<(int, int)> TileGone;
+        public event Action Cleared;
+        /// <summary>Обрезка ровно по рамке (null — без обрезки).</summary>
+        public event Action<Int32Rect?> Clipped;
+
         /// <summary>Убрать всё (рамка схлопнулась в линию). Вместе с картинками забываем и кусочки —
         /// иначе при новом растягивании они считались бы «уже нарисованными», и под мозаикой оставались дыры.</summary>
         public void Reset()
@@ -29,6 +38,8 @@ namespace Isle.Helpers
             _tiles.Clear();
             _block = -1;
             Clip = null;
+            Cleared?.Invoke();
+            Clipped?.Invoke(null);
         }
 
         /// <summary>Размер квадрата, выбранный при первом обновлении (дальше не меняется — сетка не дрожит).</summary>
@@ -49,6 +60,7 @@ namespace Isle.Helpers
                 Children.Clear();
                 _tiles.Clear();
                 _block = block; _ax = ax; _ay = ay;
+                Cleared?.Invoke();
             }
             // рамка, расширенная до целых квадратов сетки
             int x0 = Math.Max(0, ax + FloorDiv(exact.X - ax, block) * block);
@@ -61,7 +73,7 @@ namespace Isle.Helpers
 
             var gone = new List<(int, int)>();
             foreach (var key in _tiles.Keys) if (key.Item1 < i0 || key.Item1 > i1 || key.Item2 < j0 || key.Item2 > j1) gone.Add(key);
-            foreach (var key in gone) { Children.Remove(_tiles[key].img); _tiles.Remove(key); }
+            foreach (var key in gone) { Children.Remove(_tiles[key].img); _tiles.Remove(key); TileGone?.Invoke(key); }
 
             for (int j = j0; j <= j1; j++)
                 for (int i = i0; i <= i1; i++)
@@ -86,9 +98,11 @@ namespace Isle.Helpers
                     img.Width = pr.Width / k; img.Height = pr.Height / k;
                     _tiles[(i, j)] = (img, pr);
                     LastRebuilt++;
+                    TileSet?.Invoke((i, j), pr, cells, cw, ch);
                 }
             // в конце — ровно по рамке (одна прямоугольная обрезка, а не на каждом движении)
             Clip = final ? new RectangleGeometry(new Rect(exact.X / k, exact.Y / k, exact.Width / k, exact.Height / k)) : null;
+            Clipped?.Invoke(final ? exact : null);
         }
 
         private static int FloorDiv(int a, int b) => (int)Math.Floor(a / (double)b);

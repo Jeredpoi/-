@@ -197,6 +197,8 @@ namespace Isle.Services
         public bool SaveScreenshots { get; set; } = true;
         /// <summary>Рисовать пометки на снимке видеокартой (быстрее, но на части ПК — чёрные прямоугольники). По умолчанию — процессор.</summary>
         public bool CaptureGpuRender { get; set; }
+        /// <summary>Снимок, затемнение и мозаику рисует графический слой Windows (видеокарта, частота монитора).</summary>
+        public bool CaptureComposition { get; set; } = true;
         /// <summary>Подробный журнал для отладки (временно включён по умолчанию — чтобы по журналу было видно всё).</summary>
         public bool DebugLog { get; set; } = true;
         public bool Use24h { get; set; } = true;

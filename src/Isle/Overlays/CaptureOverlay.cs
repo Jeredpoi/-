@@ -45,7 +45,7 @@ namespace Isle.Overlays
             Cursor = Cursors.Cross;
             Left = 0; Top = 0; Width = 100; Height = 100;
 
-            var img = new Image { Source = shot, Stretch = Stretch.Fill };
+            var img = _shotImage = new Image { Source = shot, Stretch = Stretch.Fill };
             // снимок лежит пиксель в пиксель с экраном: без сглаживания процессору при перерисовке остаётся простое копирование
             RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
             var root = _root = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
@@ -88,6 +88,7 @@ namespace Isle.Overlays
                 var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
                 _root.Width = _vs.Width * dev.M11;
                 _root.Height = _vs.Height * dev.M22;
+                TryEnableComp(h, _shotImage);
                 Journal.Info("capture", "слой: окно " + _vs.Width + "×" + _vs.Height + " px, " + Math.Round(_root.Width) + "×" + Math.Round(_root.Height)
                     + " точек, tier " + (RenderCapability.Tier >> 16) + ", открыт через " + _openedFor.ElapsedMilliseconds + " мс");
                 // Windows не даёт фоновой программе забрать фокус обычным Activate() — без фокуса не доходил Esc
@@ -158,6 +159,8 @@ namespace Isle.Overlays
         }
 
         private Grid _root;
+        private Image _shotImage;
+        private int _cropX, _cropY; // начало области в пикселях экрана (для мозаики на графическом слое)
         /// <summary>Размер экрана в точках слоя (окно на 1 px выше — лишняя строка не в счёт).</summary>
         private double ScreenW => _root != null && _root.ActualWidth > 0 ? _root.ActualWidth : ActualWidth;
         private double ScreenH => _root != null && _root.ActualHeight > 0 ? _root.ActualHeight : ActualHeight;
@@ -214,6 +217,7 @@ namespace Isle.Overlays
             if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
+            _cropX = crop.X; _cropY = crop.Y;
             // обычный снимок области — сначала пометки прямо на месте (мозаика, стрелки…), «Сохранить» — в чёлку
             if (_mode == CaptureMode.Region) { EnterMarkup(r, cb); return; }
             Finish(cb);
@@ -236,6 +240,7 @@ namespace Isle.Overlays
             }
             _dimOuter.Rect = new Rect(0, 0, Math.Max(1, ScreenW), Math.Max(1, ScreenH));
             _dimHole.Rect = hole.IsEmpty ? Rect.Empty : hole;
+            CompDim(hole);
         }
 
         private Color ColorAt(Point p)
