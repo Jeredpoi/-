@@ -55,9 +55,20 @@
                 </DockPanel>
             </Border>
 
+            <!-- у папки есть приложения: их снимки попадают сюда сами -->
+            <Border x:Name="AppsBar" DockPanel.Dock="Top" Background="#121216" BorderBrush="#24242B" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,8" Visibility="Collapsed">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="8,2" Click="OnEditApps">
+                        <TextBlock Text="Изменить" FontSize="11"/>
+                    </Button>
+                    <h:Icon Kind="Crop" Width="13" Height="13" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="AppsText" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+            </Border>
+
             <Grid DockPanel.Dock="Bottom" Margin="2,8,0,0">
                 <TextBlock x:Name="Hint" Style="{StaticResource MutedText}" FontSize="11"
-                           Text="Клик — вставить в прошлое окно · Shift+клик — только скопировать · ↑↓ и Enter — с клавиатуры"/>
+                           Text="Клик — вставить · Shift+клик — только скопировать · перетащи запись в папку слева или в другую программу"/>
                 <Border x:Name="UndoBar" Background="#1A1A1F" CornerRadius="10" Padding="12,5" Visibility="Collapsed" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="UndoText" FontSize="12" VerticalAlignment="Center"/>
@@ -79,7 +90,7 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border x:Name="row" Background="{StaticResource Card}" CornerRadius="12" Padding="12,9" Cursor="Hand"
-                                    MouseLeftButtonUp="OnItemClick" Tag="{Binding}">
+                                    MouseLeftButtonUp="OnItemClick" PreviewMouseLeftButtonDown="OnRowDown" MouseMove="OnRowMove" Tag="{Binding}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
