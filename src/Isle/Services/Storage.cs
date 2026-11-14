@@ -56,6 +56,8 @@ namespace Isle.Services
         public bool CapsToasts { get; set; } = true;
         public bool BatteryToasts { get; set; } = true;
         public bool NotificationToasts { get; set; } = true;
+        /// <summary>Убирать плашку Windows: уведомление видно только в острове (без дублей справа снизу).</summary>
+        public bool NotificationsOnlyInIsland { get; set; }
         public bool ClipboardHistory { get; set; } = true;
         public int ClipboardLimit { get; set; } = 50;
         public bool HideInFullscreen { get; set; } = true;

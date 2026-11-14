@@ -79,6 +79,7 @@ namespace Isle.Services
         public void Start()
         {
             _fast.Tick += (_, __) => Fast();
+            StartCapsWatch();
             _slow.Tick += (_, __) => Slow();
             _fast.Start();
             _slow.Start();
@@ -127,23 +128,70 @@ namespace Isle.Services
 
             ReadLanguage(s.LayoutToasts);
 
-            // Caps Lock — страховка для случаев без перехвата клавиатуры (кнопка на экранной клавиатуре, программа).
-            // GetKeyState у фоновой программы отстаёт: сразу после нажатия ему не верим, состояние уже знает OnCapsKey.
-            bool caps = (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
-            if (DateTime.Now - _capsKeyAt < TimeSpan.FromMilliseconds(700)) return;
-            // расхождение должно продержаться 3 опроса подряд (~0,6 с) — иначе это просто запаздывание GetKeyState
-            if (_lastCaps.HasValue && caps != _lastCaps.Value && ++_capsMismatch < 3) return;
-            _capsMismatch = 0;
-            if (_lastCaps.HasValue && caps != _lastCaps.Value)
+        }
+
+        // ---------- Caps Lock: настоящее состояние ----------
+        // GetKeyState у фоновой программы показывает устаревшее состояние (оно обновляется, только когда сама программа
+        // получает нажатия) — в игре Isle не замечал Caps Lock. Поэтому отдельный поток каждые 120 мс читает состояние
+        // окна, которое сейчас впереди (подключаясь к его вводу), и сообщает об изменении. Отдельный поток — чтобы
+        // зависшая игра не подвесила интерфейс Isle.
+        private System.Threading.Thread _capsThread;
+        private bool? _capsTruthSent;
+
+        private void StartCapsWatch()
+        {
+            if (_capsThread != null) return;
+            var ui = System.Windows.Application.Current.Dispatcher;
+            _capsThread = new System.Threading.Thread(() =>
             {
-                Journal.Info("caps", "опрос: Caps Lock " + (caps ? "вкл" : "выкл") + (DateTime.Now - _capsKeyAt < TimeSpan.FromSeconds(3) ? " (поправка после нажатия)" : ""));
-                ShowCaps(caps);
+                bool loggedFail = false;
+                while (true)
+                {
+                    System.Threading.Thread.Sleep(120);
+                    bool? caps = ReadCapsTruth(out string how);
+                    if (caps == null)
+                    {
+                        if (!loggedFail) { loggedFail = true; Journal.Debug("caps", "не удалось прочитать состояние у окна впереди (" + how + ") — остаётся перехват клавиатуры"); }
+                        continue;
+                    }
+                    loggedFail = false;
+                    if (caps == _capsTruthSent) continue;
+                    _capsTruthSent = caps;
+                    bool v = caps.Value;
+                    ui.BeginInvoke(new Action(() => OnCapsTruth(v, how)));
+                }
+            }) { IsBackground = true, Name = "Isle Caps Lock", Priority = System.Threading.ThreadPriority.BelowNormal };
+            _capsThread.Start();
+        }
+
+        private static bool? ReadCapsTruth(out string how)
+        {
+            how = "";
+            try
+            {
+                var fg = Win32.GetForegroundWindow();
+                uint fgThread = Win32.GetWindowThreadProcessId(fg, out _);
+                uint me = Win32.GetCurrentThreadId();
+                if (fgThread == 0) { how = "нет окна"; return null; }
+                if (!Win32.AttachThreadInput(me, fgThread, true)) { how = "окно не даёт подключиться — возможно, запущено от администратора"; return null; }
+                try { return (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0; }
+                finally { Win32.AttachThreadInput(me, fgThread, false); }
             }
+            catch (Exception ex) { how = ex.Message; return null; }
+        }
+
+        /// <summary>Настоящее состояние сменилось: если плашка показывает другое (нажатие не дошло до перехвата) — поправляем.</summary>
+        private void OnCapsTruth(bool caps, string how)
+        {
+            if (_lastCaps == caps) return;
+            bool afterPress = DateTime.Now - _capsKeyAt < TimeSpan.FromSeconds(3);
+            Journal.Info("caps", "состояние: Caps Lock " + (caps ? "вкл" : "выкл") + (_lastCaps.HasValue ? (afterPress ? " (поправка после нажатия)" : " (нажатие не дошло до перехвата)") : " (начальное)"));
+            bool first = !_lastCaps.HasValue;
             _lastCaps = caps;
+            if (!first) ShowCaps(caps);
         }
 
         private DateTime _capsKeyAt = DateTime.MinValue;
-        private int _capsMismatch;
 
         /// <summary>
         /// Нажали Caps Lock (из перехвата клавиатуры): переключаем плашку сразу, без ожидания опроса.
@@ -151,11 +199,10 @@ namespace Isle.Services
         /// </summary>
         public void OnCapsKey()
         {
-            if (!_lastCaps.HasValue) _lastCaps = (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
+            if (!_lastCaps.HasValue) _lastCaps = ReadCapsTruth(out _) ?? (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
             bool caps = !_lastCaps.Value;
             _lastCaps = caps;
             _capsKeyAt = DateTime.Now;
-            _capsMismatch = 0;
             Journal.Info("caps", "нажатие: Caps Lock " + (caps ? "вкл" : "выкл"));
             ShowCaps(caps);
         }
