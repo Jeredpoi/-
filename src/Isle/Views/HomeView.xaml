@@ -159,7 +159,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Button Style="{StaticResource Ghost}" Click="OnMute" ToolTip="Выключить звук">
+                <Button Style="{StaticResource Ghost}" Click="OnMute" ToolTip="Выключить / включить звук">
                     <h:Icon x:Name="VolIcon" Kind="Volume" Width="16" Height="16"/>
                 </Button>
                 <Slider x:Name="Volume" Grid.Column="1" Minimum="0" Maximum="100" Margin="8,0" VerticalAlignment="Center" ValueChanged="OnVolume"/>
@@ -230,7 +230,7 @@
             </Border>
             <Grid x:Name="CommandBox" Visibility="Collapsed">
                 <TextBox x:Name="Command" Tag="Команда: приложение, сайт, 2+2*3, «таймер 10», «напомни … через 20 минут», &gt;cmd, ?поиск — Enter · Esc — назад"
-                         KeyDown="OnCommandKey" Padding="38,17,10,17" LostKeyboardFocus="OnCommandLostFocus"/>
+                         KeyDown="OnCommandKey" Height="56" Padding="38,0,10,0" VerticalContentAlignment="Center" LostKeyboardFocus="OnCommandLostFocus"/>
                 <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
                 <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" IsHitTestVisible="False"/>
             </Grid>

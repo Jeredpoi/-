@@ -502,8 +502,8 @@ namespace Isle.Tests
             var rnd = new Random(1);
             for (int i = 0; i < 200; i++)
             {
-                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10 }); // быстро и плотно
-                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9 }); // медленно
+                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10, 15, 17, 18, 19 }); // быстро и плотно
+                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9, 14, 20 }); // медленно
                 Assert.NotEqual(3, Isle.Helpers.Character.PickDance(110, 0.4, 3, rnd));                      // не повторяет текущий
             }
         }

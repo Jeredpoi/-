@@ -44,6 +44,7 @@ namespace Isle.Overlays
             Color.FromRgb(0xFF, 0x4D, 0x4D), Color.FromRgb(0xFF, 0xE0, 0x4D), Color.FromRgb(0x4A, 0xDE, 0x80),
             Color.FromRgb(0x5A, 0xA9, 0xFF), Color.FromRgb(0xEC, 0xEC, 0xF1)
         };
+        private static readonly string[] ColorNames = { "Красный", "Жёлтый", "Зелёный", "Синий", "Белый" };
         private static readonly int[] Widths = { 2, 4, 6 };
         private static readonly Color MarkerYellow = Color.FromArgb(153, 0xFF, 0xE0, 0x4D); // жёлтый, 60 %
         private static readonly Brush Selected = Frozen(Color.FromRgb(0x26, 0x26, 0x2D));
@@ -119,7 +120,7 @@ namespace Isle.Overlays
                 var ring = new Border
                 {
                     Width = 26, Height = 26, CornerRadius = new CornerRadius(13), BorderThickness = new Thickness(2), Margin = new Thickness(0, 0, 4, 0),
-                    Background = Brushes.Transparent, Cursor = Cursors.Hand, ToolTip = "Цвет",
+                    Background = Brushes.Transparent, Cursor = Cursors.Hand, ToolTip = c < ColorNames.Length ? ColorNames[c] : "Цвет",
                     Child = new Ellipse { Width = 16, Height = 16, Fill = Frozen(Palette[c]) }
                 };
                 ring.MouseLeftButtonUp += (_, __) => SelectColor(ci);
@@ -134,7 +135,7 @@ namespace Isle.Overlays
                 var dotBox = new Border
                 {
                     Width = 32, Height = 28, CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 0, 2, 0), Cursor = Cursors.Hand,
-                    Background = Brushes.Transparent, ToolTip = "Толщина " + wd + " px",
+                    Background = Brushes.Transparent, ToolTip = wd == Widths[0] ? "Тонкая линия" : wd == Widths[Widths.Length - 1] ? "Толстая линия" : "Средняя линия",
                     Child = new Ellipse { Width = 3 + wd * 1.6, Height = 3 + wd * 1.6, Fill = Fg }
                 };
                 dotBox.MouseLeftButtonUp += (_, __) => SelectWidth(width);

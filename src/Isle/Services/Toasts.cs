@@ -67,6 +67,7 @@ namespace Isle.Services
     public static class Icons
     {
         public const string Info = "M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17M12 11v5M12 8h.01";
+        public const string History = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9M4.5 4.5V9H9M12 8v4l2.5 1.5";
         public const string Check = "M5 12.5l4.5 4.5L19 7.5";
         public const string Keyboard = "M4.5 6h15A1.5 1.5 0 0 1 21 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5v-9A1.5 1.5 0 0 1 4.5 6zM7 10h.01M10 10h.01M13 10h.01M16 10h.01M8 14.5h8";
         public const string Caps = "M12 4.5L19 12h-3.5v4h-7v-4H5zM8.5 19.5h7";

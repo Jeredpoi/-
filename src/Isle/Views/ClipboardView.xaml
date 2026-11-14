@@ -15,7 +15,7 @@
             </Button>
         </Grid>
         <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource MutedText}" FontSize="11" Margin="2,8,0,0"
-                   Text="Клик — вставить в прошлое окно · Shift+клик — только скопировать · Ctrl+Alt+V — открыть буфер"/>
+                   Text="Клик — вставить в прошлое окно · Shift+клик — только скопировать"/>
         <Grid>
             <TextBlock x:Name="Empty" Text="Пока пусто — скопируй что-нибудь (Ctrl+C)" Style="{StaticResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             <ListBox x:Name="List">
