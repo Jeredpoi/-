@@ -27,6 +27,7 @@ namespace Isle.Overlays
         public static void Fly(BitmapSource image, Rect from, Action shown, Action done)
         {
             int id = ++_flights;
+            int hz = Isle.Helpers.Display.RefreshHz((int)(from.X + from.Width / 2), (int)(from.Y + from.Height / 2));
             Journal.Info("capture", "полёт #" + id + ": старт, снимок " + image.PixelWidth + "×" + image.PixelHeight + ", окно " + Math.Round(from.Width) + "×" + Math.Round(from.Height) + " px");
             // Окошко сразу небольшое (не больше 480 px по длинной стороне) — в центре выделенной области.
             // Большое прозрачное окно (снимок во весь 4K-экран) рисуется слишком медленно: полёт шёл рывками,
@@ -97,9 +98,17 @@ namespace Isle.Overlays
             bool finished = false;
 
             EventHandler tick = null;
-            tick = (_, __) =>
+            bool inTick = false;
+            TimeSpan lastRT = TimeSpan.Zero;
+            tick = (_, e) =>
             {
-                if (finished) return; // окно закрывается — вложенный кадр не должен завершить полёт второй раз
+                if (e is RenderingEventArgs re) { if (re.RenderingTime == lastRT) return; lastRT = re.RenderingTime; }
+                if (finished || inTick) return; // окно закрывается / кадр вызван изнутри предыдущего — пропускаем
+                inTick = true;
+                try { Frame(); } finally { inTick = false; }
+            };
+            void Frame()
+            {
                 double held = sw.Elapsed.TotalMilliseconds;
                 pop = held < Hold ? 0.9 + 0.1 * (1 - Math.Pow(1 - held / Hold, 3)) : 1;
                 double t = Math.Max(0, held - Hold);
@@ -109,14 +118,17 @@ namespace Isle.Overlays
                 last = now;
                 double u = Math.Min(1, t / Ms);
                 Place(u);
-                if (u < 1) return;
+                // SetWindowPos внутри Place отдаёт управление Windows, и та может успеть вызвать следующий кадр
+                // прямо отсюда — он и завершил бы полёт, а потом ещё раз этот (в журнале было два «полёт #1»)
+                if (finished || u < 1) return;
                 finished = true;
                 CompositionTarget.Rendering -= tick;
                 win.Close();
                 try { AppHost.Window?.Gulp(); } catch { } // чёлка «проглатывает» снимок
-                Journal.Info("capture", "полёт #" + id + " в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс, худший кадр " + Math.Round(worst) + " мс, смен размера " + resizes);
+                Journal.Info("capture", "полёт #" + id + " в чёлку (окошком): кадров " + frames + " за " + Math.Round(t) + " мс (~"
+                    + Math.Round(frames * 1000.0 / Math.Max(1, t + Hold)) + " к/с, монитор " + hz + " Гц), худший кадр " + Math.Round(worst) + " мс, смен размера " + resizes);
                 done?.Invoke();
-            };
+            }
             // окошко нарисовано поверх слоя — только теперь прячем слой и начинаем отсчёт (без «провала» между ними)
             bool begun = false;
             void Begin()
