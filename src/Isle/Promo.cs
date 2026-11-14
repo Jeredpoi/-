@@ -29,6 +29,53 @@ namespace Isle
 
         private static Task Wait(double s) => Task.Delay(TimeSpan.FromSeconds(s));
 
+        // ---------- запись самой чёлки ----------
+        // Чёлка — прозрачное окно, обычная запись экрана его не видит. Поэтому Isle сам рисует своё окно в картинку
+        // 30 раз в секунду (вдвое крупнее, с прозрачным фоном); из кадров workflow собирает видео для монтажа.
+        private static System.Windows.Threading.DispatcherTimer _rec;
+        private static int _frame;
+        private static readonly System.Diagnostics.Stopwatch _recClock = new();
+        private static StreamWriter _frameLog;
+
+        private static void StartIslandRec(Window w, string dir)
+        {
+            var fdir = Path.Combine(dir, "island");
+            Directory.CreateDirectory(fdir);
+            _frameLog = new StreamWriter(Path.Combine(dir, "island-frames.txt"), false, new UTF8Encoding(false));
+            var root = (FrameworkElement)w.Content;
+            int pw = (int)Math.Ceiling(root.ActualWidth * 2), ph = (int)Math.Ceiling(Math.Min(root.ActualHeight, 560) * 2);
+            _recClock.Restart();
+            _rec = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
+            _rec.Tick += (_, __) =>
+            {
+                try
+                {
+                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(pw, ph, 192, 192, PixelFormats.Pbgra32);
+                    rtb.Render(root);
+                    rtb.Freeze();
+                    int n = _frame++;
+                    _frameLog.WriteLine(n + "\t" + _recClock.ElapsedMilliseconds + "\t" + DateTime.UtcNow.ToString("O"));
+                    var file = Path.Combine(fdir, "f" + n.ToString("00000") + ".png");
+                    Task.Run(() =>
+                    {
+                        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                        enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                        using var fs = File.Create(file);
+                        enc.Save(fs);
+                    });
+                }
+                catch (Exception ex) { Journal.Warn("promo", "кадр чёлки: " + ex.Message); }
+            };
+            _rec.Start();
+        }
+
+        private static void StopIslandRec()
+        {
+            _rec?.Stop();
+            try { _frameLog?.Flush(); _frameLog?.Dispose(); } catch { }
+            System.Threading.Thread.Sleep(1500); // дописываются последние кадры
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
@@ -47,6 +94,7 @@ namespace Isle
                 int W = (int)(sw * dev.M11), H = (int)(sh * dev.M22);
                 Journal.Info("promo", "экран " + W + "×" + H);
 
+                StartIslandRec(w, dir);
                 // 1. Клоди танцует в свёрнутой чёлке
                 Scene("idle");
                 try { w.Buddy.Mood = Helpers.Mood.Music; w.Buddy.Bpm = 120; w.Buddy.Energy = 0.6; w.Buddy.ForceDance(19); } catch { }
@@ -99,7 +147,7 @@ namespace Isle
                 w.Collapse();
                 await Wait(1.4);
 
-                // 8. Снимок: выделение → мозаика → полёт в чёлку
+                // 8. Снимок: выделение → мозаика → полёт в чёлку (его снимает обычная запись экрана)
                 Scene("shot");
                 _ = Tools.RegionShot();
                 var overlay = await Bench.WaitOverlay();
@@ -124,6 +172,7 @@ namespace Isle
                 Scene("end");
                 try { w.Buddy.ForceDance(20); } catch { }
                 await Wait(3);
+                StopIslandRec();
                 wall.Close();
             }
             catch (Exception ex)

@@ -33,15 +33,19 @@ jobs:
           New-Item -ItemType Directory -Force $dir | Out-Null
           Get-CimInstance Win32_VideoController | ForEach-Object { "$($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution)" } | Tee-Object "$dir/screen.txt"
           [DateTime]::UtcNow.ToString("o") | Out-File -Encoding utf8 "$dir/rec-start.txt"
-          # Desktop Duplication (ddagrab) снимает и прозрачные окна (чёлку); gdigrab их не видит
-          ffmpeg -hide_banner -filters 2>$null | Select-String ddagrab | Out-Host
-          $rec = Start-Process ffmpeg -ArgumentList "-hide_banner -loglevel warning -f lavfi -i ddagrab=framerate=60:draw_mouse=1,hwdownload,format=bgra -t 75 -c:v libx264 -preset ultrafast -crf 14 -pix_fmt yuv420p `"$dir/rec.mp4`"" -PassThru -NoNewWindow -RedirectStandardError "$dir/ffmpeg.txt"
+          # экран целиком (снимок, мозаика, полёт); чёлку (прозрачное окно) Isle записывает сам — кадры в promo/island
+          $rec = Start-Process ffmpeg -ArgumentList "-hide_banner -loglevel error -f gdigrab -framerate 30 -draw_mouse 1 -i desktop -t 75 -c:v libx264 -preset ultrafast -crf 16 -pix_fmt yuv420p `"$dir/rec.mp4`"" -PassThru -NoNewWindow
           Start-Sleep -Milliseconds 800
           $p = Start-Process -FilePath "out/app/Isle.exe" -ArgumentList "--promo", "`"$dir`"" -PassThru
           if (-not $p.WaitForExit(150000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
           $rec.WaitForExit(90000) | Out-Null
           Get-ChildItem $dir | ForEach-Object { Write-Host $_.Name $_.Length }
           if (Test-Path "$dir/error.txt") { Get-Content "$dir/error.txt" }
+          # кадры чёлки → видео с прозрачностью (VP9 + альфа), сами кадры в ветку не кладём
+          $n = (Get-ChildItem "$dir/island" -Filter *.png).Count
+          Write-Host "кадров чёлки: $n"
+          if ($n -gt 0) { ffmpeg -hide_banner -loglevel error -framerate 30 -i "$dir/island/f%05d.png" -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 6M -deadline realtime -cpu-used 8 "$dir/island.webm" }
+          Remove-Item -Recurse -Force "$dir/island"
       - name: В ветку promo-results
         if: always()
         shell: pwsh
