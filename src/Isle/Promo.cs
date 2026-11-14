@@ -46,7 +46,7 @@ namespace Isle
             // только область вокруг чёлки (по центру, сверху) — так кадр рисуется быстро и запись идёт ~30 к/с
             double rw = Math.Min(root.ActualWidth, 640), rh = Math.Min(root.ActualHeight, 520);
             var region = new Rect((root.ActualWidth - rw) / 2, 0, rw, rh);
-            const double K = 1.6;
+            const double K = 1.25; // чуть мельче — зато кадров больше (машина без видеокарты)
             int pw = (int)Math.Ceiling(rw * K), ph = (int)Math.Ceiling(rh * K);
             var brush = new VisualBrush(root) { Viewbox = region, ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.Fill };
             File.WriteAllText(Path.Combine(dir, "island-region.txt"), region + " ×" + K + " → " + pw + "×" + ph);
@@ -170,7 +170,7 @@ namespace Isle
                     {
                         await Wait(0.4);
                         Scene("mosaic");
-                        await Bench.Drag((int)(W * 0.26), (int)(H * 0.34), (int)(W * 0.62), (int)(H * 0.46), 1300);
+                        await Bench.Drag((int)(W * 0.465), (int)(H * 0.49), (int)(W * 0.655), (int)(H * 0.555), 1300); // строка с паролем
                         await Wait(0.6);
                     }
                     Scene("save");
