@@ -97,6 +97,7 @@ namespace Isle.Overlays
             _area = area;
             Cursor = Cursors.Arrow;
             _sel.Visibility = Visibility.Collapsed;
+            CompSel(null);
 
             _crop = crop;
             _cropW = crop.PixelWidth; _cropH = crop.PixelHeight;
@@ -419,16 +420,20 @@ namespace Isle.Overlays
                     _tilesRebuilt = 0;
                     _livePx = Int32Rect.Empty;
                     // рамка выделения: тонкий чёрный контур и белый пунктир поверх — видна на любом фоне, ничего не затемняет
-                    _mosaicFrame = new Canvas { IsHitTestVisible = false };
-                    for (int i = 0; i < 8; i++)
+                    if (_comp) CompFrame(new Rect(p, p));
+                    else
                     {
-                        _frameLines[i] = i < 4
-                            ? new Line { Stroke = Brushes.Black, StrokeThickness = 1 }
-                            : new Line { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } };
-                        _mosaicFrame.Children.Add(_frameLines[i]);
+                        _mosaicFrame = new Canvas { IsHitTestVisible = false };
+                        for (int i = 0; i < 8; i++)
+                        {
+                            _frameLines[i] = i < 4
+                                ? new Line { Stroke = Brushes.Black, StrokeThickness = 1 }
+                                : new Line { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } };
+                            _mosaicFrame.Children.Add(_frameLines[i]);
+                        }
+                        _ink.Children.Add(_mosaicFrame);
+                        PlaceFrame(new Rect(p, p));
                     }
-                    _ink.Children.Add(_mosaicFrame);
-                    PlaceFrame(new Rect(p, p));
                     break;
                 case Mark.Rect:
                     _shape = new Rectangle { Stroke = brush, StrokeThickness = Ink, RadiusX = 4, RadiusY = 4 };
@@ -464,6 +469,18 @@ namespace Isle.Overlays
                     // Мышь присылает движения чаще, чем монитор показывает кадры (до 1000 в секунду).
                     // Запоминаем последнюю рамку, а квадраты и контур обновляем один раз за кадр монитора —
                     // ровно с его частотой (60/144/240 Гц), и рамка не отстаёт от квадратов.
+                    if (_comp)
+                    {
+                        // на графическом слое — сразу, но не чаще кадра монитора: WPF тут не участвует
+                        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+                        int hz = Math.Max(60, MonitorHz());
+                        if ((now - _mosaicLastAt) * (double)hz < System.Diagnostics.Stopwatch.Frequency * 0.9) { _pendingMosaic = r; HookMosaicFrame(); break; }
+                        _mosaicLastAt = now;
+                        _pendingMosaic = null;
+                        ShowPatch(r);
+                        CompFrame(r);
+                        break;
+                    }
                     _pendingMosaic = r;
                     HookMosaicFrame();
                     break;
@@ -490,6 +507,7 @@ namespace Isle.Overlays
             {
                 case Mark.Mosaic:
                     UnhookMosaicFrame();
+                    CompFrame(null);
                     if (_mosaicFrame != null) { _ink.Children.Remove(_mosaicFrame); _mosaicFrame = null; }
                     if (_livePatch != null)
                     {
@@ -574,6 +592,7 @@ namespace Isle.Overlays
             _mosaicLastAt = t0;
             ShowPatch(r);
             PlaceFrame(r);
+            CompFrame(r);
             // в подробном журнале — каждый медленный кадр мозаики: сколько ждали кадра и сколько считали
             if (gap > 25)
                 Journal.Debug("mosaic", "кадр через " + Math.Round(gap) + " мс, рамка " + Math.Round(r.Width) + "×" + Math.Round(r.Height) + ", расчёт "

@@ -80,6 +80,7 @@ namespace Isle.Overlays
                     _cDim[i].Brush = dimBrush;
                     _cRoot.Children.InsertAtTop(_cDim[i]);
                 }
+                BuildCompShapes(c);
                 ShowWindow(_cHost.Handle, 4 /* SW_SHOWNOACTIVATE */);
 
                 // окно WPF — прозрачное; почти невидимый фон, чтобы клики не проходили сквозь него
@@ -99,6 +100,94 @@ namespace Isle.Overlays
                 DisposeComp();
                 return false;
             }
+        }
+
+        // Рамка выделения и пунктир мозаики — тоже на графическом слое: при перетаскивании WPF вообще не
+        // перерисовывается, рамка идёт с частотой монитора (240 Гц), а не ~60, как у прозрачного окна WPF.
+        // Только простые прямоугольники (как затемнение и мозаика): «фигуры» слоя на части видеокарт оставляли следы.
+        private readonly SpriteVisual[] _cSel = new SpriteVisual[4];       // белая рамка выделения
+        private readonly SpriteVisual[] _cFrameUnder = new SpriteVisual[4]; // чёрная линия рамки мозаики
+        private readonly SpriteVisual[] _cFrameDash = new SpriteVisual[4];  // белый пунктир поверх
+        private float _selW = 2, _lineW = 1;
+
+        private void BuildCompShapes(Compositor c)
+        {
+            float k = (float)Math.Max(1, _vs.Width / Math.Max(1.0, SystemParameters.VirtualScreenWidth));
+            _selW = Math.Max(1, (float)Math.Round(1.5 * k)); // как у WPF: 1,5 точки
+            _lineW = Math.Max(1, (float)Math.Round(k));
+            var white = c.CreateColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
+            var black = c.CreateColorBrush(Windows.UI.Color.FromArgb(255, 0, 0, 0));
+            for (int i = 0; i < 4; i++)
+            {
+                _cSel[i] = Sprite(white);
+                _cFrameUnder[i] = Sprite(black);
+            }
+            // пунктир 4 на 4 точки — длинная полоска-картинка, видна её начальная часть нужной длины
+            int dash = Math.Max(1, (int)Math.Round(4 * k)), len = Math.Max(_vs.Width, _vs.Height) + dash * 2;
+            var hBrush = DashBrush(c, len, 1, dash, true);
+            var vBrush = DashBrush(c, 1, len, dash, false);
+            for (int i = 0; i < 4; i++) _cFrameDash[i] = Sprite(i < 2 ? hBrush : vBrush);
+            SpriteVisual Sprite(CompositionBrush brush)
+            {
+                var v = c.CreateSpriteVisual();
+                v.Brush = brush;
+                v.IsVisible = false;
+                _cRoot.Children.InsertAtTop(v);
+                return v;
+            }
+        }
+
+        private static CompositionSurfaceBrush DashBrush(Compositor c, int w, int h, int dash, bool horizontal)
+        {
+            var px = new byte[w * h * 4];
+            int n = horizontal ? w : h;
+            for (int i = 0; i < n; i++)
+                if ((i / dash) % 2 == 0) { int o = i * 4; px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 255; }
+            var surf = Helpers.Comp.Device.CreateDrawingSurface(new Windows.Foundation.Size(w, h),
+                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, Windows.Graphics.DirectX.DirectXAlphaMode.Premultiplied);
+            Helpers.Comp.Draw(surf, px, w, h, w * 4);
+            var b = c.CreateSurfaceBrush(surf);
+            b.Stretch = CompositionStretch.None;          // без растягивания: видна начальная часть полоски
+            b.HorizontalAlignmentRatio = 0; b.VerticalAlignmentRatio = 0;
+            b.BitmapInterpolationMode = CompositionBitmapInterpolationMode.NearestNeighbor;
+            return b;
+        }
+
+        /// <summary>Четыре стороны рамки толщиной t (пиксели слоя).</summary>
+        private static void Box(SpriteVisual[] v, float l, float t, float r, float b, float th, bool show)
+        {
+            if (!show) { foreach (var x in v) x.IsVisible = false; return; }
+            float w = Math.Max(th, r - l), h = Math.Max(th, b - t);
+            Set(v[0], l, t, w, th);            // верх
+            Set(v[1], l, t + h - th, w, th);   // низ
+            Set(v[2], l, t, th, h);            // лево
+            Set(v[3], l + w - th, t, th, h);   // право
+            static void Set(SpriteVisual s, float x, float y, float w, float h)
+            {
+                s.Offset = new Vector3(x, y, 0);
+                s.Size = new Vector2(w, h);
+                s.IsVisible = true;
+            }
+        }
+
+        /// <summary>Рамка выделения (в точках слоя); null — спрятать.</summary>
+        private void CompSel(Rect? r)
+        {
+            if (!_comp || _cSel[0] == null) return;
+            if (r is not Rect x || x.IsEmpty) { Box(_cSel, 0, 0, 0, 0, 0, false); return; }
+            float l = (float)Math.Round(x.X * Kx), t = (float)Math.Round(x.Y * Ky), rr = (float)Math.Round(x.Right * Kx), b = (float)Math.Round(x.Bottom * Ky);
+            Box(_cSel, l - _selW / 2, t - _selW / 2, rr + _selW / 2, b + _selW / 2, _selW, true);
+        }
+
+        /// <summary>Пунктирная рамка мозаики (в точках страницы); null — спрятать.</summary>
+        private void CompFrame(Rect? r)
+        {
+            if (!_comp || _cFrameUnder[0] == null) return;
+            if (r is not Rect x) { Box(_cFrameUnder, 0, 0, 0, 0, 0, false); Box(_cFrameDash, 0, 0, 0, 0, 0, false); return; }
+            float l = (float)Math.Round((_area.X + x.X) * Kx), t = (float)Math.Round((_area.Y + x.Y) * Ky);
+            float rr = (float)Math.Round((_area.X + x.X + Math.Max(1, x.Width)) * Kx), b = (float)Math.Round((_area.Y + x.Y + Math.Max(1, x.Height)) * Ky);
+            Box(_cFrameUnder, l, t, rr, b, _lineW, true);
+            Box(_cFrameDash, l, t, rr, b, _lineW, true);
         }
 
         private void DisposeComp()
