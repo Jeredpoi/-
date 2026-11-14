@@ -648,13 +648,16 @@ namespace Isle.Views
             FinishUndo();
             var u = Svc.DeleteFolder(folder);
             _folderUndo = u;
-            UndoText.Text = "Папка «" + folder + "» удалена" + (u.Evicted.Count > 0 ? " · " + u.Evicted.Count + " старых записей не поместились в историю" : "");
+            UndoText.Text = "Папка «" + folder + "» удалена" + (u.Evicted.Count > 0 ? " · " + u.Evicted.Count + Plural(u.Evicted.Count, " старая запись не поместилась", " старые записи не поместились", " старых записей не поместились") + " в историю" : "");
             UndoBar.Visibility = Visibility.Visible;
             Hint.Visibility = Visibility.Hidden;
             _undoTimer.Stop(); _undoTimer.Start();
             RebuildFolders();
             Apply();
         }
+
+        private static string Plural(int n, string one, string few, string many) =>
+            n % 10 == 1 && n % 100 != 11 ? one : n % 10 is >= 2 and <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
 
         private void DeleteWithUndo(IEnumerable<ClipItem> items, string verb)
         {
