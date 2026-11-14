@@ -95,6 +95,9 @@ namespace Isle
                 await Task.Delay(1600); // полёт ~1.1 с
                 Phase("idle");
                 await Task.Delay(1900);
+                Journal.Info("bench", "память перед уборкой: " + (Environment.WorkingSet >> 20) + " МБ, управляемая " + (GC.GetTotalMemory(false) >> 20) + " МБ");
+                Helpers.MemoryTrim.Now("стенд");
+                await Task.Delay(500);
                 Phase("done");
                 backdrop.Close();
             }
