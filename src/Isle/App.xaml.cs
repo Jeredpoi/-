@@ -16,8 +16,13 @@ namespace Isle
         private TrayIcon _tray;
         private bool _started;
 
+        /// <summary>Стенд проверки снимков (--bench папка): сценарий настоящей мышью, после него выходим.</summary>
+        private string _benchDir;
+
         protected override void OnStartup(StartupEventArgs e)
         {
+            int bi = Array.IndexOf(e.Args, "--bench");
+            if (bi >= 0 && bi + 1 < e.Args.Length) _benchDir = Path.GetFullPath(e.Args[bi + 1]);
             _single = new Mutex(true, MutexName, out bool first);
             Trace("запуск " + typeof(App).Assembly.GetName().Version + ", " + Environment.OSVersion + ", " + Environment.ProcessPath, first);
             if (!first)
@@ -34,7 +39,7 @@ namespace Isle
                 return;
             }
 
-            if (SwitchToInstalledCopy()) { Shutdown(); return; }
+            if (_benchDir == null && SwitchToInstalledCopy()) { Shutdown(); return; }
 
             try { SystemControls.RepairAutostartPath(); }
             catch (Exception ex) { Log("autostart repair: " + ex.Message); }
@@ -53,6 +58,7 @@ namespace Isle
                 w.Show();
                 Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
+                if (_benchDir != null) _ = Bench.RunAsync(w, _benchDir);
             }
             catch (Exception ex)
             {
