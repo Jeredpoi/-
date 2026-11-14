@@ -187,6 +187,7 @@ namespace Isle
             {
                 var s = AppSettings.Current;
                 s.WelcomeShown = true; s.SaveScreenshots = true; s.HideInFullscreen = false; s.ExpandOnHover = true;
+                s.ShowInCaptures = true; w.ApplyCaptureVisibility(); // иначе чёлка спрятана от записи экрана
                 s.AiKey = "demo"; // строка «нужен API-ключ» в ролике не нужна — отвечает демо-ИИ
                 try { typeof(UpdateService).GetField("_notified", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, true); } catch { }
                 AudioService.DemoVolume = 0.42f; AudioService.DemoDevice = "Динамики (Realtek Audio)";
@@ -316,8 +317,8 @@ namespace Isle
                         _pos = (W / 2, (int)(H * 0.82));
                         await Wait(0.4);
                         Scene("mosaic");
-                        await MoveTo((int)(W * 0.465), (int)(H * 0.49), 700);
-                        await DragTo((int)(W * 0.655), (int)(H * 0.555), 1300);
+                        await MoveTo((int)(W * 0.474), (int)(H * 0.732), 700);
+                        await DragTo((int)(W * 0.648), (int)(H * 0.776), 1300);
                         await Wait(0.6);
                     }
                     Scene("save");
