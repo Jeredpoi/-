@@ -1,87 +1,184 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Isle.Services;
 
 namespace Isle
 {
     /// <summary>
-    /// Съёмка рекламного ролика: Isle.exe --promo &lt;папка&gt;. Показывает фишки по сценарию (плашки, загрузка,
-    /// панель, Клоди, снимок с мозаикой и полётом), а workflow пишет экран. Время каждой сцены — в promo-phases.txt,
-    /// по нему ролик потом монтируется.
+    /// Съёмка рекламного ролика: Isle.exe --promo &lt;папка&gt;. Демо-данные (трек, громкость, ответ ИИ) и сценарий
+    /// настоящей мышью и клавиатурой: плашки, раскрытие по краю, вкладки, громкость, чат с ИИ, заметка, погода,
+    /// снимок с мозаикой. Экран пишется своим захватом (видит и прозрачную чёлку) в rec.mp4 30 к/с,
+    /// положение курсора — в cursor.txt, время сцен — в promo-phases.txt.
     /// </summary>
     public static class Promo
     {
+        // ---------- ввод ----------
+        [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+        [DllImport("user32.dll")] private static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
         [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
-        private static StreamWriter _phases;
+        [DllImport("user32.dll")] private static extern uint SendInput(uint n, INPUT[] inputs, int size);
+        [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint type; public KEYBDINPUT ki; public long pad1; }
+        [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort vk, scan; public uint flags, time; public IntPtr extra; }
 
+        private static void Click() { mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); Thread.Sleep(40); mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); }
+        private static void Key(byte vk) { keybd_event(vk, 0, 0, UIntPtr.Zero); keybd_event(vk, 0, 2, UIntPtr.Zero); }
+
+        private static async Task TypeText(string text, int msPerChar = 55)
+        {
+            foreach (var ch in text)
+            {
+                var down = new INPUT { type = 1, ki = new KEYBDINPUT { scan = ch, flags = 0x0004 } };
+                var up = new INPUT { type = 1, ki = new KEYBDINPUT { scan = ch, flags = 0x0004 | 0x0002 } };
+                SendInput(2, new[] { down, up }, Marshal.SizeOf<INPUT>());
+                await Task.Delay(msPerChar + (ch == ' ' ? 30 : 0));
+            }
+        }
+
+        private static (int x, int y) _pos;
+        /// <summary>Плавный перевод курсора (как рукой: разгон и торможение).</summary>
+        private static async Task MoveTo(int x, int y, int ms)
+        {
+            var (x0, y0) = _pos;
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < ms)
+            {
+                double u = sw.ElapsedMilliseconds / (double)ms;
+                u = u < 0.5 ? 4 * u * u * u : 1 - Math.Pow(-2 * u + 2, 3) / 2;
+                SetCursorPos((int)(x0 + (x - x0) * u), (int)(y0 + (y - y0) * u));
+                await Task.Delay(8);
+            }
+            SetCursorPos(x, y);
+            _pos = (x, y);
+        }
+        private static async Task DragTo(int x, int y, int ms)
+        {
+            mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+            await Task.Delay(60);
+            await MoveTo(x, y, ms);
+            await Task.Delay(60);
+            mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+        }
+        private static Point Center(FrameworkElement el, double fx = 0.5, double fy = 0.5) => el.PointToScreen(new Point(el.ActualWidth * fx, el.ActualHeight * fy));
+        private static async Task ClickEl(FrameworkElement el, int ms = 600, double fx = 0.5, double fy = 0.5)
+        {
+            var p = Center(el, fx, fy);
+            await MoveTo((int)p.X, (int)p.Y, ms);
+            await Task.Delay(120);
+            Click();
+        }
+
+        // ---------- запись экрана (видит и прозрачные окна) ----------
+        [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr h);
+        [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr h, IntPtr dc);
+        [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
+        [DllImport("gdi32.dll")] private static extern IntPtr CreateDIBSection(IntPtr dc, ref BITMAPINFOHEADER bi, uint usage, out IntPtr bits, IntPtr sec, uint off);
+        [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+        [DllImport("gdi32.dll")] private static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
+        [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr o);
+        [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
+        [DllImport("user32.dll")] private static extern bool GetCursorInfo(ref CURSORINFO ci);
+        [DllImport("user32.dll")] private static extern bool DrawIconEx(IntPtr dc, int x, int y, IntPtr icon, int w, int h, uint step, IntPtr brush, uint flags);
+        [DllImport("user32.dll")] private static extern bool GetIconInfo(IntPtr icon, out ICONINFO info);
+        [StructLayout(LayoutKind.Sequential)] private struct BITMAPINFOHEADER { public int size, width, height; public short planes, bits; public int compression, sizeImage, xppm, yppm, clrUsed, clrImportant; }
+        [StructLayout(LayoutKind.Sequential)] private struct CURSORINFO { public int cbSize, flags; public IntPtr hCursor; public int x, y; }
+        [StructLayout(LayoutKind.Sequential)] private struct ICONINFO { public bool fIcon; public int xHotspot, yHotspot; public IntPtr hbmMask, hbmColor; }
+
+        private static volatile bool _recording;
+        private static Thread _recThread;
+        private static Process _ffmpeg;
+
+        private static void StartRecording(string dir, int W, int H)
+        {
+            _ffmpeg = Process.Start(new ProcessStartInfo("ffmpeg",
+                $"-hide_banner -loglevel error -y -f rawvideo -pix_fmt bgra -s {W}x{H} -framerate 30 -i - -c:v libx264 -preset ultrafast -crf 15 -pix_fmt yuv420p \"{Path.Combine(dir, "rec.mp4")}\"")
+            { UseShellExecute = false, RedirectStandardInput = true, CreateNoWindow = true });
+            var stdin = _ffmpeg.StandardInput.BaseStream;
+            var cursorLog = new StreamWriter(Path.Combine(dir, "cursor.txt"), false, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(dir, "rec-start.txt"), DateTime.UtcNow.ToString("O"));
+            _recording = true;
+            _recThread = new Thread(() =>
+            {
+                var screen = GetDC(IntPtr.Zero);
+                var mem = CreateCompatibleDC(screen);
+                var bi = new BITMAPINFOHEADER { size = Marshal.SizeOf<BITMAPINFOHEADER>(), width = W, height = -H, planes = 1, bits = 32 };
+                var bmp = CreateDIBSection(screen, ref bi, 0, out var bits, IntPtr.Zero, 0);
+                SelectObject(mem, bmp);
+                var buf = new byte[W * H * 4];
+                var sw = Stopwatch.StartNew();
+                long written = 0;
+                while (_recording)
+                {
+                    BitBlt(mem, 0, 0, W, H, screen, 0, 0, 0x00CC0020 | 0x40000000); // SRCCOPY | CAPTUREBLT — вместе с прозрачными окнами
+                    var ci = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+                    if (GetCursorInfo(ref ci) && (ci.flags & 1) != 0)
+                    {
+                        int hx = 0, hy = 0;
+                        if (GetIconInfo(ci.hCursor, out var ii)) { hx = ii.xHotspot; hy = ii.yHotspot; if (ii.hbmMask != IntPtr.Zero) DeleteObject(ii.hbmMask); if (ii.hbmColor != IntPtr.Zero) DeleteObject(ii.hbmColor); }
+                        DrawIconEx(mem, ci.x - hx, ci.y - hy, ci.hCursor, 0, 0, 0, IntPtr.Zero, 3);
+                    }
+                    Marshal.Copy(bits, buf, 0, buf.Length);
+                    for (int i = 3; i < buf.Length; i += 4) buf[i] = 255;
+                    // держим ровно 30 к/с: если кадр снимался дольше — дублируем его
+                    long due = (long)(sw.Elapsed.TotalSeconds * 30) + 1;
+                    while (written < due)
+                    {
+                        try { stdin.Write(buf, 0, buf.Length); } catch { _recording = false; break; }
+                        cursorLog.WriteLine(written + "\t" + ci.x + "\t" + ci.y);
+                        written++;
+                    }
+                    long next = (long)((written) * 1000.0 / 30);
+                    int wait = (int)(next - sw.ElapsedMilliseconds);
+                    if (wait > 0) Thread.Sleep(wait);
+                }
+                cursorLog.Dispose();
+                DeleteObject(bmp); DeleteDC(mem); ReleaseDC(IntPtr.Zero, screen);
+            }) { IsBackground = true, Priority = ThreadPriority.AboveNormal, Name = "promo rec" };
+            _recThread.Start();
+        }
+
+        private static void StopRecording()
+        {
+            _recording = false;
+            _recThread?.Join(3000);
+            try { _ffmpeg.StandardInput.Close(); _ffmpeg.WaitForExit(60000); } catch { }
+        }
+
+        // ---------- сцены ----------
+        private static StreamWriter _phases;
         private static void Scene(string name)
         {
             _phases.WriteLine(DateTime.UtcNow.ToString("O") + "\t" + name);
             _phases.Flush();
             Journal.Info("promo", "сцена: " + name);
         }
-
         private static Task Wait(double s) => Task.Delay(TimeSpan.FromSeconds(s));
+        private static void Show(Toast t) => ToastBus.Show(t);
 
-        // ---------- запись самой чёлки ----------
-        // Чёлка — прозрачное окно, обычная запись экрана его не видит. Поэтому Isle сам рисует своё окно в картинку
-        // 30 раз в секунду (вдвое крупнее, с прозрачным фоном); из кадров workflow собирает видео для монтажа.
-        private static System.Windows.Threading.DispatcherTimer _rec;
-        private static int _frame;
-        private static readonly System.Diagnostics.Stopwatch _recClock = new();
-        private static StreamWriter _frameLog;
-
-        private static void StartIslandRec(Window w, string dir)
+        private static BitmapImage Cover()
         {
-            var fdir = Path.Combine(dir, "island");
-            Directory.CreateDirectory(fdir);
-            _frameLog = new StreamWriter(Path.Combine(dir, "island-frames.txt"), false, new UTF8Encoding(false));
-            var root = (FrameworkElement)w.Content;
-            // только область вокруг чёлки (по центру, сверху) — так кадр рисуется быстро и запись идёт ~30 к/с
-            double rw = Math.Min(root.ActualWidth, 640), rh = Math.Min(root.ActualHeight, 520);
-            var region = new Rect((root.ActualWidth - rw) / 2, 0, rw, rh);
-            const double K = 1.25; // чуть мельче — зато кадров больше (машина без видеокарты)
-            int pw = (int)Math.Ceiling(rw * K), ph = (int)Math.Ceiling(rh * K);
-            var brush = new VisualBrush(root) { Viewbox = region, ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.Fill };
-            File.WriteAllText(Path.Combine(dir, "island-region.txt"), region + " ×" + K + " → " + pw + "×" + ph);
-            _recClock.Restart();
-            _rec = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
-            _rec.Tick += (_, __) =>
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
             {
-                try
-                {
-                    var dv = new DrawingVisual();
-                    using (var dc = dv.RenderOpen()) dc.DrawRectangle(brush, null, new Rect(0, 0, pw, ph));
-                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(pw, ph, 96, 96, PixelFormats.Pbgra32);
-                    rtb.Render(dv);
-                    rtb.Freeze();
-                    int n = _frame++;
-                    _frameLog.WriteLine(n + "\t" + _recClock.ElapsedMilliseconds + "\t" + DateTime.UtcNow.ToString("O"));
-                    var file = Path.Combine(fdir, "f" + n.ToString("00000") + ".png");
-                    Task.Run(() =>
-                    {
-                        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                        enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
-                        using var fs = File.Create(file);
-                        enc.Save(fs);
-                    });
-                }
-                catch (Exception ex) { Journal.Warn("promo", "кадр чёлки: " + ex.Message); }
-            };
-            _rec.Start();
-        }
-
-        private static void StopIslandRec()
-        {
-            _rec?.Stop();
-            try { _frameLog?.Flush(); _frameLog?.Dispose(); } catch { }
-            System.Threading.Thread.Sleep(1500); // дописываются последние кадры
+                dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0xFF, 0x6B, 0x9A), Color.FromRgb(0x5B, 0x3B, 0xFF), 45), null, new Rect(0, 0, 300, 300));
+                dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x90, 0xFF, 0xD1, 0x66)), null, new Point(205, 95), 70, 70);
+                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(0x60, 0x10, 0x08, 0x30)), null, new Rect(0, 200, 300, 100));
+            }
+            var rtb = new RenderTargetBitmap(300, 300, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(dv);
+            var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(rtb));
+            var ms = new MemoryStream(); enc.Save(ms); ms.Position = 0;
+            var bi = new BitmapImage(); bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.StreamSource = ms; bi.EndInit(); bi.Freeze();
+            return bi;
         }
 
         public static async Task RunAsync(MainWindow w, string dir)
@@ -90,105 +187,153 @@ namespace Isle
             _phases = new StreamWriter(Path.Combine(dir, "promo-phases.txt"), false, new UTF8Encoding(false));
             try
             {
-                AppSettings.Current.WelcomeShown = true;
-                AppSettings.Current.SaveScreenshots = true;
-                AppSettings.Current.HideInFullscreen = false;
-                // «доступна новая версия» в ролике не нужна
+                var s = AppSettings.Current;
+                s.WelcomeShown = true; s.SaveScreenshots = true; s.HideInFullscreen = false; s.ExpandOnHover = true;
+                s.AiKey = "demo"; // строка «нужен API-ключ» в ролике не нужна — отвечает демо-ИИ
                 try { typeof(UpdateService).GetField("_notified", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, true); } catch { }
-                await Wait(3);
-                var wall = ShowWallpaper();
+                AudioService.DemoVolume = 0.42f; AudioService.DemoDevice = "Динамики (Realtek Audio)";
+                AiService.Demo = q => q.Contains("таймер", StringComparison.OrdinalIgnoreCase)
+                    ? "Готово! Поставил таймер на 5 минут — он уже тикает в чёлке ⏱\n\n[[timer: 5m]]"
+                    : "Конечно! Вот что можно сделать:\n• выделить область и замазать лишнее\n• отправить снимок в чат";
                 await Wait(2.5);
+                var wall = ShowWallpaper();
+                await Wait(2);
 
-                int sw = (int)SystemParameters.PrimaryScreenWidth, sh = (int)SystemParameters.PrimaryScreenHeight;
                 var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
-                int W = (int)(sw * dev.M11), H = (int)(sh * dev.M22);
-                Journal.Info("promo", "экран " + W + "×" + H);
+                int W = (int)(SystemParameters.PrimaryScreenWidth * dev.M11), H = (int)(SystemParameters.PrimaryScreenHeight * dev.M22);
+                _pos = (W - 160, H - 220); SetCursorPos(_pos.x, _pos.y);
+                StartRecording(dir, W, H);
+                await Wait(0.6);
 
-                StartIslandRec(w, dir);
-                // 1. Клоди танцует в свёрнутой чёлке
-                Scene("idle");
-                try { w.Buddy.Mood = Helpers.Mood.Music; w.Buddy.Bpm = 120; w.Buddy.Energy = 0.6; w.Buddy.ForceDance(19); } catch { }
-                await Wait(3.2);
-                try { w.Buddy.ForceDance(6); } catch { }
-                await Wait(2.2);
+                // 1. музыка: в чёлке трек, Клоди танцует
+                Scene("music");
+                AppHost.Media.Demo(new MediaInfo
+                {
+                    Title = "Neon Nights", Artist = "Lumen", SourceApp = "Spotify", IsPlaying = true, HasSession = true,
+                    Duration = TimeSpan.FromSeconds(214), Position = TimeSpan.FromSeconds(71), PositionStamp = DateTime.Now, Cover = Cover()
+                });
+                try { w.Buddy.Bpm = 118; w.Buddy.Energy = 0.6; } catch { }
+                await Wait(5.5);
 
-                // 2. Caps Lock
+                // 2. Caps Lock, громкость
                 Scene("caps");
-                Show(new Toast { Kind = ToastKind.Caps, Title = "Caps Lock включён", Icon = Icons.Caps, On = true, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4) });
-                await Wait(1.1);
-                Show(new Toast { Kind = ToastKind.Caps, Title = "Caps Lock выключен", Icon = Icons.Caps, On = false, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.2) });
+                Show(new Toast { Kind = ToastKind.Caps, Title = "Caps Lock включён", Icon = Icons.Caps, On = true, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.3) });
+                await Wait(1.2);
+                Show(new Toast { Kind = ToastKind.Caps, Title = "Caps Lock выключен", Icon = Icons.Caps, On = false, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.1) });
+                await Wait(1.6);
+                Scene("volume");
+                for (int v = 42; v <= 74; v += 4) { AppHost.Audio.Volume = v / 100f; await Task.Delay(120); }
                 await Wait(1.6);
 
-                // 3. Громкость
-                Scene("volume");
-                for (int v = 30; v <= 80; v += 5)
-                {
-                    Show(new Toast { Kind = ToastKind.Volume, Title = "Громкость", SpeedText = v.ToString(), Icon = Icons.Volume, Progress = v / 100.0, ReplaceKey = "volume", Duration = TimeSpan.FromSeconds(1.2) });
-                    await Task.Delay(110);
-                }
-                await Wait(1.5);
-
-                // 4. Уведомление
+                // 3. сообщение, загрузка, ошибка
                 Scene("message");
                 Show(new Toast { Kind = ToastKind.Notification, Title = "Маша  ·  Telegram", Subtitle = "Идём сегодня в кино? 🍿", Icon = Icons.Bell, Duration = TimeSpan.FromSeconds(2.6) });
                 await Wait(3.0);
-
-                // 5. Загрузка
                 Scene("download");
                 for (int i = 0; i <= 20; i++)
                 {
                     double p = i / 20.0;
                     Show(new Toast { Kind = ToastKind.Download, Title = "Cyberpunk 2077", SpeedText = "48 МБ/с", EtaText = i < 20 ? (20 - i) * 3 + " с" : "", Subtitle = "Steam · " + (int)(p * 100) + "%",
                         Icon = Icons.Download, Progress = p, ReplaceKey = "dl-promo", Duration = TimeSpan.FromSeconds(1.5) });
-                    await Task.Delay(120);
+                    await Task.Delay(110);
                 }
-                Show(new Toast { Kind = ToastKind.Success, Title = "Загрузка завершена", Subtitle = "Cyberpunk 2077 · можно играть", Icon = Icons.Check, Important = true, ReplaceKey = "dl-promo", Duration = TimeSpan.FromSeconds(2.2) });
-                await Wait(2.6);
-
-                // 6. Ошибка — красная
+                Show(new Toast { Kind = ToastKind.Success, Title = "Загрузка завершена", Subtitle = "Cyberpunk 2077 · можно играть", Icon = Icons.Check, Important = true, ReplaceKey = "dl-promo", Duration = TimeSpan.FromSeconds(2.0) });
+                await Wait(2.4);
                 Scene("error");
-                Show(new Toast { Kind = ToastKind.Error, Title = "Нет подключения", Subtitle = "VPN отключился", Icon = Icons.Info, Important = true, Duration = TimeSpan.FromSeconds(2.0) });
-                await Wait(2.6);
+                Show(new Toast { Kind = ToastKind.Error, Title = "Нет подключения", Subtitle = "VPN отключился", Icon = Icons.Info, Important = true, Duration = TimeSpan.FromSeconds(1.8) });
+                await Wait(2.4);
 
-                // 7. Панель
-                Scene("panel");
-                w.Expand("home");
-                await Wait(3.6);
-                w.Collapse();
-                await Wait(1.4);
+                // 4. раскрытие: курсор упирается в верх экрана над чёлкой
+                Scene("expand");
+                await MoveTo(W / 2, 30, 900);
+                await MoveTo(W / 2, 0, 250);
+                await Wait(0.9);
+                if (w.State != IslandState.Expanded) w.Expand("home");
+                await Wait(0.8);
 
-                // 8. Снимок: выделение → мозаика → полёт в чёлку (его снимает обычная запись экрана)
+                // 5. главная: громкость ползунком
+                Scene("home");
+                var home = w.TabHost.Content as FrameworkElement;
+                if (home?.FindName("Volume") is Slider hv)
+                {
+                    var a = Center(hv, 0.42, 0.5); var b = Center(hv, 0.8, 0.5);
+                    await MoveTo((int)a.X, (int)a.Y, 800);
+                    await Task.Delay(150);
+                    await DragTo((int)b.X, (int)b.Y, 900);
+                }
+                await Wait(1.0);
+
+                // 6. чат с ИИ
+                Scene("chat");
+                await ClickEl(w.TabChat, 700);
+                await Wait(0.8);
+                if (w.TabHost.Content is FrameworkElement chat && chat.FindName("Input") is TextBox input)
+                {
+                    await ClickEl(input, 600, 0.3);
+                    await Wait(0.3);
+                    await TypeText("Поставь таймер на 5 минут");
+                    await Wait(0.4);
+                    Key(0x0D);
+                }
+                await Wait(4.2);
+
+                // 7. заметка
+                Scene("notes");
+                await ClickEl(w.TabNotes, 700);
+                await Wait(0.7);
+                if (w.TabHost.Content is FrameworkElement notes && notes.FindName("Editor") is FrameworkElement ed)
+                {
+                    await ClickEl(ed, 600, 0.3, 0.2);
+                    await Wait(0.3);
+                    await TypeText("Купить попкорн к кино 🍿", 60);
+                }
+                await Wait(1.2);
+
+                // 8. погода
+                Scene("weather");
+                await ClickEl(w.TabWeather, 700);
+                await Wait(2.4);
+
+                // 9. сворачиваем — в чёлке таймер и музыка
+                Scene("collapse");
+                await MoveTo(W / 2, (int)(H * 0.72), 900);
+                await Wait(0.6);
+                if (w.State == IslandState.Expanded) w.Collapse();
+                await Wait(3.0);
+
+                // 10. снимок: выделение → мозаика по строке с паролем → полёт в чёлку
                 Scene("shot");
                 _ = Tools.RegionShot();
                 var overlay = await Bench.WaitOverlay();
                 if (overlay != null)
                 {
+                    await Wait(0.5);
+                    await MoveTo((int)(W * 0.18), (int)(H * 0.22), 600);
+                    await DragTo((int)(W * 0.82), (int)(H * 0.78), 1000);
                     await Wait(0.6);
-                    await Bench.Drag((int)(W * 0.18), (int)(H * 0.22), (int)(W * 0.82), (int)(H * 0.78), 900);
-                    await Wait(0.7);
                     if (await Bench.ClickTool(overlay, "Mosaic"))
                     {
+                        _pos = (W / 2, (int)(H * 0.82));
                         await Wait(0.4);
                         Scene("mosaic");
-                        await Bench.Drag((int)(W * 0.465), (int)(H * 0.49), (int)(W * 0.655), (int)(H * 0.555), 1300); // строка с паролем
+                        await MoveTo((int)(W * 0.465), (int)(H * 0.49), 700);
+                        await DragTo((int)(W * 0.655), (int)(H * 0.555), 1300);
                         await Wait(0.6);
                     }
                     Scene("save");
-                    keybd_event(0x0D, 0, 0, UIntPtr.Zero);
-                    keybd_event(0x0D, 0, 2, UIntPtr.Zero);
+                    Key(0x0D);
                     await Wait(3.2);
                 }
-
                 Scene("end");
-                try { w.Buddy.ForceDance(20); } catch { }
-                await Wait(3);
-                StopIslandRec();
+                await Wait(2.5);
+                StopRecording();
                 wall.Close();
             }
             catch (Exception ex)
             {
                 File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString());
                 Scene("error: " + ex.Message);
+                try { StopRecording(); } catch { }
             }
             finally
             {
@@ -200,16 +345,13 @@ namespace Isle
             }
         }
 
-        private static void Show(Toast t) => ToastBus.Show(t);
-
-        /// <summary>Красивый «рабочий стол» за чёлкой: градиент и окно-чат (его скроет мозаика). Не во весь экран — иначе чёлка спрячется.</summary>
+        /// <summary>«Рабочий стол» за чёлкой: градиент и окно-чат (его потом замажет мозаика). Не во весь экран — иначе чёлка спрячется.</summary>
         private static Window ShowWallpaper()
         {
-            var bg = new LinearGradientBrush(
-                new GradientStopCollection
-                {
-                    new GradientStop(Color.FromRgb(0x2B, 0x1A, 0x5E), 0), new GradientStop(Color.FromRgb(0x8E, 0x2D, 0x7A), 0.55), new GradientStop(Color.FromRgb(0xF0, 0x8A, 0x4B), 1)
-                }, new Point(0, 0), new Point(1, 1));
+            var bg = new LinearGradientBrush(new GradientStopCollection
+            {
+                new GradientStop(Color.FromRgb(0x2B, 0x1A, 0x5E), 0), new GradientStop(Color.FromRgb(0x8E, 0x2D, 0x7A), 0.55), new GradientStop(Color.FromRgb(0xF0, 0x8A, 0x4B), 1)
+            }, new Point(0, 0), new Point(1, 1));
             var chat = new StackPanel { Margin = new Thickness(26) };
             string[] lines = { "Маша: идём сегодня в кино?", "Я: давай, во сколько?", "Маша: в 19:40, билеты уже взяла 🎟", "Я: пароль от вайфая — kino2024!", "Маша: ахах, отправила тебе адрес", "Я: ок, буду" };
             foreach (var l in lines)

@@ -142,8 +142,21 @@ namespace Isle.Services
         private void OnPlayback(WinMedia.GlobalSystemMediaTransportControlsSession s, WinMedia.PlaybackInfoChangedEventArgs e) { if (PreferredSource == null) Attach(); else _ = RefreshAsync(); }
         private void OnTimeline(WinMedia.GlobalSystemMediaTransportControlsSession s, WinMedia.TimelinePropertiesChangedEventArgs e) => _ = RefreshAsync();
 
+        /// <summary>Съёмка ролика (--promo): свой трек вместо системного плеера.</summary>
+        public bool DemoActive { get; private set; }
+        public void Demo(MediaInfo m)
+        {
+            DemoActive = true;
+            bool changed = m.Title + "|" + m.Artist != _lastKey;
+            _lastKey = m.Title + "|" + m.Artist;
+            Current = m;
+            Changed?.Invoke();
+            if (changed) TrackChanged?.Invoke(m);
+        }
+
         public async Task RefreshAsync()
         {
+            if (DemoActive) return;
             var info = new MediaInfo();
             var s = _session;
             Windows.Storage.Streams.IRandomAccessStreamReference thumb = null;

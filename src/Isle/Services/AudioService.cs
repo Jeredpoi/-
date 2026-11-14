@@ -54,11 +54,22 @@ namespace Isle.Services
             _ui.InvokeAsync(() => VolumeChanged?.Invoke(d.MasterVolume, d.Muted));
         }
 
+        /// <summary>Съёмка ролика (--promo): громкость и устройство без настоящей звуковой карты.</summary>
+        public static float? DemoVolume;
+        public static string DemoDevice;
+
         public float Volume
         {
-            get { try { return _device?.AudioEndpointVolume.MasterVolumeLevelScalar ?? 0; } catch { return 0; } }
+            get { if (DemoVolume.HasValue) return DemoVolume.Value; try { return _device?.AudioEndpointVolume.MasterVolumeLevelScalar ?? 0; } catch { return 0; } }
             set
             {
+                if (DemoVolume.HasValue)
+                {
+                    DemoVolume = Math.Clamp(value, 0f, 1f);
+                    var v = DemoVolume.Value;
+                    _ui.InvokeAsync(() => VolumeChanged?.Invoke(v, false));
+                    return;
+                }
                 try
                 {
                     if (_device == null) return;
@@ -158,7 +169,7 @@ namespace Isle.Services
 
         public string DeviceName
         {
-            get { try { return _device?.FriendlyName ?? "Нет устройства"; } catch { return ""; } }
+            get { if (DemoDevice != null) return DemoDevice; try { return _device?.FriendlyName ?? "Нет устройства"; } catch { return ""; } }
         }
 
         public string DeviceId
@@ -169,6 +180,7 @@ namespace Isle.Services
         public List<AudioDevice> OutputDevices()
         {
             var list = new List<AudioDevice>();
+            if (DemoDevice != null) { list.Add(new AudioDevice { Id = "demo", Name = DemoDevice }); return list; }
             try
             {
                 foreach (var d in _enum.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))

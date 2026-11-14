@@ -186,6 +186,16 @@ namespace Isle.Views
             }
             var shown = clean + (reports.Count > 0 ? (clean.Length > 0 ? "\n\n" : "") + string.Join("\n", reports) : "");
             var idx = _msgs.IndexOf(thinking);
+            if (AiService.Demo != null && idx >= 0 && shown.Length > 0)
+            {
+                // съёмка ролика: ответ «печатается» потоком, как у настоящих чатов
+                for (int n = 2; n < shown.Length; n += 3)
+                {
+                    _msgs[idx] = new ChatMessage { Role = "assistant", Text = shown.Substring(0, n) };
+                    Scroll.ScrollToEnd();
+                    await System.Threading.Tasks.Task.Delay(22);
+                }
+            }
             if (idx >= 0) _msgs[idx] = new ChatMessage { Role = "assistant", Text = string.IsNullOrWhiteSpace(shown) ? "(пустой ответ)" : shown };
             NameChatAsync(text, shown);
             foreach (var a in confirm) _msgs.Add(new ChatMessage { Role = "action", Text = "Нужно подтверждение", Pending = a });

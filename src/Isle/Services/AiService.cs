@@ -167,8 +167,16 @@ namespace Isle.Services
             catch { return null; }
         }
 
+        /// <summary>Съёмка ролика (--promo): заготовленный ответ на последний вопрос вместо настоящего запроса.</summary>
+        public static Func<string, string> Demo;
+
         public static async Task<string> AskAsync(IReadOnlyList<ChatMessage> history, CancellationToken ct = default)
         {
+            if (Demo != null)
+            {
+                await Task.Delay(650, ct);
+                return Demo(history.Count > 0 ? history[history.Count - 1].Text : "");
+            }
             var s = AppSettings.Current;
             if (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama")
                 return "Нужен API-ключ: открой Настройки → ИИ, выбери сервис (например, бесплатный Groq), вставь ключ и нажми «Проверить».";
