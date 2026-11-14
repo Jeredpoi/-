@@ -29,6 +29,7 @@ namespace Isle.Views
         private List<(int index, ClipItem item)> _undo;
         private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(6) };
         private string _renaming;
+        private bool _refreshQueued;
 
         private static readonly (ClipCategory cat, string name, string icon)[] Types =
         {
@@ -45,7 +46,13 @@ namespace Isle.Views
             _view = CollectionViewSource.GetDefaultView(Svc.Items);
             _view.Filter = o => o is ClipItem c && InFolder(c) && (_type == null || c.Category == _type) && Matches(c);
             List.ItemsSource = _view;
-            Svc.Items.CollectionChanged += (_, __) => Dispatcher.InvokeAsync(RefreshAll, DispatcherPriority.Background);
+            // очистка или отмена на N записей — одна перестройка, а не N
+            Svc.Items.CollectionChanged += (_, __) =>
+            {
+                if (_refreshQueued) return;
+                _refreshQueued = true;
+                Dispatcher.InvokeAsync(() => { _refreshQueued = false; RefreshAll(); }, DispatcherPriority.Background);
+            };
             Svc.Folders.CollectionChanged += (_, __) => RebuildFolders();
             Svc.ActiveFolderChanged += () => { RebuildFolders(); UpdateRecordBar(); };
             Svc.FolderAppsChanged += () => { RebuildFolders(); UpdateAppsBar(); };
@@ -91,7 +98,6 @@ namespace Isle.Views
             _view.Refresh();
             RebuildTypes();
             UpdateEmpty();
-            if (List.Items.Count > 0 && List.SelectedIndex >= List.Items.Count) List.SelectedIndex = -1;
         }
 
         // ---------- колонка папок ----------
@@ -149,12 +155,12 @@ namespace Isle.Views
             row.MouseLeftButtonUp += (_, __) => SelectFolder(key);
             // сюда можно перетащить запись из списка
             row.AllowDrop = true;
-            row.DragEnter += (_, e) => { if (IsOurDrag(e)) { row.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x33)); e.Effects = DragDropEffects.Move; } e.Handled = true; };
-            row.DragOver += (_, e) => { e.Effects = IsOurDrag(e) ? DragDropEffects.Move : DragDropEffects.None; e.Handled = true; };
+            row.DragEnter += (_, e) => { if (IsOurDrag(e)) { row.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x33)); e.Effects = DragDropEffects.Copy; } e.Handled = true; };
+            row.DragOver += (_, e) => { e.Effects = IsOurDrag(e) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
             row.DragLeave += (_, __) => row.Background = sel ? new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x21)) : Brushes.Transparent;
             row.Drop += (_, e) => { e.Handled = true; if (IsOurDrag(e) && _dragItem != null) DropInto(_dragItem, key); };
             var apps = key != AllKey && key != PinnedKey ? Svc.AppsOf(key) : Array.Empty<string>();
-            if (apps.Count > 0) row.ToolTip = "Снимки из " + string.Join(", ", apps.Select(AppTitle)) + " попадают сюда";
+            if (apps.Count > 0) row.ToolTip = "Снимки из " + string.Join(", ", apps.Select(CachedTitle)) + " попадают сюда";
             if (key != AllKey && key != PinnedKey) row.MouseRightButtonUp += (_, e) => { e.Handled = true; FolderContextMenu(key, row); };
             return row;
         }
@@ -186,7 +192,7 @@ namespace Isle.Views
             menu.Items.Add(new Separator());
             int n = Svc.Items.Count(x => x.Folder == folder);
             var del = new MenuItem { Header = n > 0 ? "Удалить папку (записи останутся в истории)" : "Удалить папку" };
-            del.Click += (_, __) => Svc.DeleteFolder(folder);
+            del.Click += (_, __) => DeleteFolderWithUndo(folder);
             menu.Items.Add(del);
             menu.IsOpen = true;
         }
@@ -217,7 +223,14 @@ namespace Isle.Views
             {
                 if (Svc.AddFolder(name)) SelectFolder(name);
             }
-            else if (Svc.RenameFolder(_renaming, name) && _folder == _renaming) { _folder = name; RebuildFolders(); Apply(); }
+            else
+            {
+                // открытая папка остаётся открытой: новое имя ставим до переименования (оно сразу перестраивает колонку)
+                bool wasSel = _folder == _renaming;
+                if (wasSel) _folder = name;
+                if (!Svc.RenameFolder(_renaming, name) && wasSel) _folder = _renaming;
+                RebuildFolders(); UpdateAppsBar(); Apply();
+            }
         }
 
         private void OnFolderNameKey(object s, KeyEventArgs e)
@@ -259,7 +272,7 @@ namespace Isle.Views
             bool user = _folder != AllKey && _folder != PinnedKey;
             var apps = user ? Svc.AppsOf(_folder) : Array.Empty<string>();
             AppsBar.Visibility = apps.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (apps.Count > 0) AppsText.Text = "Снимки из " + string.Join(", ", apps.Select(AppTitle)) + " сами попадают сюда";
+            if (apps.Count > 0) AppsText.Text = "Снимки из " + string.Join(", ", apps.Select(CachedTitle)) + " сами попадают сюда";
         }
 
         private void OnEditApps(object s, RoutedEventArgs e) => AppsMenu(_folder, AppsBar);
@@ -268,12 +281,14 @@ namespace Isle.Views
         /// Список приложений с окнами (и уже выбранных для этой папки): отметил — снимки, сделанные в нём,
         /// сами попадают в папку. У приложения одна папка: выбор здесь снимает его с другой.
         /// </summary>
-        private void AppsMenu(string folder, FrameworkElement target)
+        private async void AppsMenu(string folder, FrameworkElement target)
         {
+            // перебор процессов и чтение описаний exe — не в потоке интерфейса
+            var running = await System.Threading.Tasks.Task.Run(RunningApps);
+            if (!Svc.Folders.Contains(folder)) return;
             var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom, MaxHeight = 440, MinWidth = 280 };
             menu.Items.Add(new MenuItem { Header = "Снимки из этих приложений попадут в «" + folder + "»", IsEnabled = false });
             menu.Items.Add(new Separator());
-            var running = RunningApps();
             var mine = Svc.AppsOf(folder);
             var all = mine.Select(a => (name: a, path: running.FirstOrDefault(r => r.name.Equals(a, StringComparison.OrdinalIgnoreCase)).path))
                 .Concat(running.Where(r => !mine.Contains(r.name, StringComparer.OrdinalIgnoreCase)))
@@ -307,9 +322,12 @@ namespace Isle.Views
             menu.IsOpen = true;
         }
 
-        private static readonly Dictionary<string, string> Titles = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Titles = new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Понятное имя приложения: описание из exe («Google Chrome»), иначе имя процесса.</summary>
+        /// <summary>Имя без обращения к процессам (для колонки, которая перестраивается часто).</summary>
+        private static string CachedTitle(string process) => Titles.TryGetValue(process, out var t) ? t : process;
+
+        /// <summary>Понятное имя приложения: описание из exe («Google Chrome»), иначе имя процесса. Запоминается и неудача.</summary>
         private static string AppTitle(string process)
         {
             if (Titles.TryGetValue(process, out var t)) return t;
@@ -326,7 +344,7 @@ namespace Isle.Views
                 }
             }
             catch { }
-            if (t != process) Titles[process] = t;
+            Titles[process] = t;
             return t;
         }
 
@@ -370,6 +388,7 @@ namespace Isle.Views
         private void OnRowMove(object sender, MouseEventArgs e)
         {
             if (e.LeftButton != MouseButtonState.Pressed || _pressed == null || _dragItem != null) return;
+            if (!ReferenceEquals((sender as FrameworkElement)?.Tag, _pressed)) return; // нажали на другой строке или мимо списка
             if (e.OriginalSource is DependencyObject d && IsInsideButton(d)) return;
             var p = e.GetPosition(this);
             if (Math.Abs(p.X - _downAt.X) < 6 && Math.Abs(p.Y - _downAt.Y) < 6) return;
@@ -382,7 +401,9 @@ namespace Isle.Views
             else data.SetText(item.Text);
             _dragItem = item; _dragged = true;
             AppHost.Window.SuppressAutoCollapse = true;
-            try { DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy | DragDropEffects.Move); }
+            // только «копировать»: с «переместить» Проводник забирал сам файл — у картинки ломалась запись,
+            // а у записи «Файлы» уезжали оригиналы пользователя
+            try { DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy); }
             catch (Exception ex) { App.Log("перетаскивание записи: " + ex.Message); }
             finally
             {
@@ -479,6 +500,7 @@ namespace Isle.Views
         // ---------- записи ----------
         private void OnItemClick(object sender, MouseButtonEventArgs e)
         {
+            _pressed = null; // кнопку отпустили — следующее движение мыши уже не перетаскивание этой записи
             if (e.OriginalSource is DependencyObject d && IsInsideButton(d)) return;
             if (_dragged) { _dragged = false; return; } // это было перетаскивание, а не клик
             if ((sender as FrameworkElement)?.Tag is not ClipItem item) return;
@@ -618,6 +640,22 @@ namespace Isle.Views
             menu.IsOpen = true;
         }
 
+        private ClipboardService.FolderUndo _folderUndo;
+
+        /// <summary>Удаление папки — с «Отменить», как и очистка: записи уходят в историю, лишние старые — с возвратом.</summary>
+        private void DeleteFolderWithUndo(string folder)
+        {
+            FinishUndo();
+            var u = Svc.DeleteFolder(folder);
+            _folderUndo = u;
+            UndoText.Text = "Папка «" + folder + "» удалена" + (u.Evicted.Count > 0 ? " · " + u.Evicted.Count + " старых записей не поместились в историю" : "");
+            UndoBar.Visibility = Visibility.Visible;
+            Hint.Visibility = Visibility.Hidden;
+            _undoTimer.Stop(); _undoTimer.Start();
+            RebuildFolders();
+            Apply();
+        }
+
         private void DeleteWithUndo(IEnumerable<ClipItem> items, string verb)
         {
             FinishUndo();
@@ -634,6 +672,14 @@ namespace Isle.Views
 
         private void OnUndo(object s, RoutedEventArgs e)
         {
+            if (_folderUndo != null)
+            {
+                var fu = _folderUndo; _folderUndo = null;
+                _undoTimer.Stop();
+                Svc.UndoDeleteFolder(fu);
+                HideUndo(); RebuildFolders(); UpdateAppsBar(); Apply();
+                return;
+            }
             if (_undo == null) return;
             var u = _undo; _undo = null;
             _undoTimer.Stop();
@@ -648,6 +694,7 @@ namespace Isle.Views
         {
             _undoTimer.Stop();
             if (_undo != null) { Svc.Purge(_undo); _undo = null; }
+            if (_folderUndo != null) { Svc.Purge(_folderUndo.Evicted); _folderUndo = null; }
             HideUndo();
         }
 

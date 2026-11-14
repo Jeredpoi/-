@@ -82,6 +82,7 @@ namespace Isle.Views
         {
             var a = UpdateService.Available;
             if (a == null) return;
+            if (UpdateService.Installing) { UpdStatus.Text = "Обновление уже скачивается — смотри чёлку"; return; }
             UpdInstallBtn.IsEnabled = UpdCheckBtn.IsEnabled = false;
             UpdProgress.Visibility = Visibility.Visible;
             var bar = UpdBar;

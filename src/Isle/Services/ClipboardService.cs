@@ -199,6 +199,7 @@ namespace Isle.Services
         /// <summary>Включить или выключить «снимки из приложения → в папку». У приложения может быть только одна папка.</summary>
         public void SetFolderApp(string folder, string app, bool on)
         {
+            if (on && !Folders.Contains(folder)) return; // папку удалили, пока было открыто меню
             foreach (var kv in FolderApps) kv.Value.RemoveAll(a => a.Equals(app, StringComparison.OrdinalIgnoreCase));
             if (on)
             {
@@ -312,6 +313,7 @@ namespace Isle.Services
         private static readonly Regex ColorRx = new(@"^(#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*[\d.]+\s*)?\))$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex EmailRx = new(@"^[^@\s]+@[^@\s]+\.[a-zа-я]{2,}$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex PhoneRx = new(@"^\+?[\d\s\-()]{7,20}$", RegexOptions.Compiled);
+        private static readonly Regex DateRx = new(@"^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$", RegexOptions.Compiled);
         private static readonly HashSet<string> CodeApps = new(StringComparer.OrdinalIgnoreCase)
             { "Code", "devenv", "rider64", "idea64", "pycharm64", "webstorm64", "clion64", "sublime_text", "notepad++", "Cursor", "zed" };
 
@@ -327,7 +329,9 @@ namespace Isle.Services
             }
             if (oneLine && s.Length <= 40 && ColorRx.IsMatch(s)) return ClipKind.Color;
             if (oneLine && s.Length <= 254 && EmailRx.IsMatch(s)) return ClipKind.Email;
-            if (oneLine && PhoneRx.IsMatch(s) && s.Count(char.IsDigit) >= 7) return ClipKind.Phone;
+            // телефон: с «+» или 10–15 цифр; дата «2024-01-15» и просто длинные числа — не телефон
+            if (oneLine && PhoneRx.IsMatch(s) && !DateRx.IsMatch(s) && (s.StartsWith("+") ? s.Count(char.IsDigit) >= 7 : s.Count(char.IsDigit) is >= 10 and <= 15)
+                && (s.Any(ch => !char.IsDigit(ch)) || (s.Length == 11 && (s[0] == '7' || s[0] == '8')))) return ClipKind.Phone;
             var lines = s.Split('\n');
             if (CodeApps.Contains(source ?? "") && (lines.Length > 1 || s.IndexOfAny(new[] { '(', '{', ';', '=' }) >= 0)) return ClipKind.Code;
             if (lines.Length >= 2)
@@ -377,21 +381,64 @@ namespace Isle.Services
             name = (name ?? "").Trim();
             int i = Folders.IndexOf(old);
             if (i < 0 || name.Length == 0 || (name != old && Folders.Contains(name, StringComparer.CurrentCultureIgnoreCase) && !string.Equals(name, old, StringComparison.CurrentCultureIgnoreCase))) return false;
-            Folders[i] = name;
+            // сначала записи, приложения и «запись в папку», и только потом сам список: его изменение сразу
+            // перестраивает колонку — раньше она успевала увидеть папку пустой и без значка снимка
             foreach (var it in Items.Where(x => x.Folder == old)) it.Folder = name;
-            if (FolderApps.Remove(old, out var apps)) FolderApps[name] = apps;
-            if (_activeFolder == old) { _activeFolder = name; ActiveFolderChanged?.Invoke(); }
-            Save(); return true;
+            bool hadApps = FolderApps.Remove(old, out var apps);
+            if (hadApps) FolderApps[name] = apps;
+            bool wasActive = _activeFolder == old;
+            if (wasActive) _activeFolder = name;
+            Folders[i] = name;
+            Save();
+            if (wasActive) ActiveFolderChanged?.Invoke();
+            if (hadApps) FolderAppsChanged?.Invoke();
+            return true;
         }
 
-        /// <summary>Удалить папку: её записи остаются в общей истории.</summary>
-        public void DeleteFolder(string name)
+        /// <summary>Что вернуть, если удаление папки отменили.</summary>
+        public class FolderUndo
         {
-            foreach (var it in Items.Where(x => x.Folder == name)) it.Folder = null;
+            public string Name; public int Index; public List<ClipItem> Moved; public List<string> Apps; public bool WasActive;
+            public List<(int index, ClipItem item)> Evicted;
+        }
+
+        /// <summary>
+        /// Удалить папку: её записи переходят в общую историю. Если история от этого перерастает лимит,
+        /// самые старые обычные записи убираются сразу (а не молча при следующем копировании) — и всё это
+        /// можно отменить: <see cref="UndoDeleteFolder"/>, файлы картинок — <see cref="Purge"/>.
+        /// </summary>
+        public FolderUndo DeleteFolder(string name)
+        {
+            var u = new FolderUndo { Name = name, Index = Folders.IndexOf(name), Moved = Items.Where(x => x.Folder == name).ToList(), WasActive = _activeFolder == name };
+            if (FolderApps.Remove(name, out var apps)) u.Apps = apps;
+            foreach (var it in u.Moved) it.Folder = null;
+            if (u.WasActive) _activeFolder = null;
             Folders.Remove(name);
-            if (FolderApps.Remove(name)) FolderAppsChanged?.Invoke();
-            if (_activeFolder == name) { _activeFolder = null; ActiveFolderChanged?.Invoke(); }
+            u.Evicted = SoftRemove(OverLimit());
             Save();
+            if (u.WasActive) ActiveFolderChanged?.Invoke();
+            if (u.Apps != null) FolderAppsChanged?.Invoke();
+            return u;
+        }
+
+        public void UndoDeleteFolder(FolderUndo u)
+        {
+            Restore(u.Evicted);
+            if (!Folders.Contains(u.Name)) Folders.Insert(Math.Clamp(u.Index, 0, Folders.Count), u.Name);
+            foreach (var it in u.Moved) it.Folder = u.Name;
+            if (u.Apps != null) FolderApps[u.Name] = u.Apps;
+            if (u.WasActive) _activeFolder = u.Name;
+            Save();
+            if (u.WasActive) ActiveFolderChanged?.Invoke();
+            if (u.Apps != null) FolderAppsChanged?.Invoke();
+        }
+
+        /// <summary>Обычные (не закреплённые и не в папках) записи сверх лимита истории — самые старые.</summary>
+        private List<ClipItem> OverLimit()
+        {
+            int limit = Math.Max(5, AppSettings.Current.ClipboardLimit);
+            var loose = Items.Where(x => !x.Pinned && x.Folder == null).ToList();
+            return loose.Count > limit ? loose.Skip(limit).ToList() : new List<ClipItem>();
         }
 
         public void MoveToFolder(ClipItem item, string folder) { item.Folder = folder; Save(); }
