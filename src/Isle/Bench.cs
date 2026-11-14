@@ -66,12 +66,12 @@ namespace Isle
                     var l = sh.CreateShortcut(Path.Combine(desk, name + ".lnk")); l.TargetPath = target; l.Save();
                 }
                 var win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-                Lnk("Блокнот", Path.Combine(win, "notepad.exe"));
-                Lnk("Проводник", Path.Combine(win, "explorer.exe"));
+                Lnk("Notepad", Path.Combine(win, "notepad.exe"));
+                Lnk("Explorer", Path.Combine(win, "explorer.exe"));
                 Lnk("Paint", Path.Combine(win, "System32", "mspaint.exe"));
-                Lnk("Калькулятор", Path.Combine(win, "System32", "calc.exe"));
+                Lnk("Calculator", Path.Combine(win, "System32", "calc.exe"));
                 File.WriteAllText(Path.Combine(desk, "Cyberpunk 2077.url"), "[InternetShortcut]\nURL=steam://rungameid/1091500\nIconIndex=0\nIconFile=" + Path.Combine(win, "System32", "shell32.dll") + "\n");
-                AppSettings.Current.Launcher = new() { Path.Combine(desk, "Блокнот.lnk"), Path.Combine(desk, "Проводник.lnk"), Path.Combine(desk, "Paint.lnk"), Path.Combine(desk, "Cyberpunk 2077.url") };
+                AppSettings.Current.Launcher = new() { Path.Combine(desk, "Notepad.lnk"), Path.Combine(desk, "Explorer.lnk"), Path.Combine(desk, "Paint.lnk"), Path.Combine(desk, "Cyberpunk 2077.url") };
                 await Task.Delay(3500);
                 w.SuppressAutoCollapse = true;
                 w.Expand("home");
