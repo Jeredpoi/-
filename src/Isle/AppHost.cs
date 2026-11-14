@@ -21,6 +21,7 @@ namespace Isle
         public static WeatherNow Weather;
         public static event Action WeatherChanged;
         public static MainWindow Window;
+        public static TrayIcon Tray;
 
         public static void SetWeather(WeatherNow w)
         {

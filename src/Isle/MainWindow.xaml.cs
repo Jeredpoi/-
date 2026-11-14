@@ -840,6 +840,7 @@ namespace Isle
             Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
             if (_welcomeHidden) return; // идёт знакомство — чёлка появится в его конце
+            GlowStatus(null); // панель раскрывается — цветная подсветка всплывашки не нужна
             _leaveClose.Stop();
             _oledHide.Stop();
             if (_oledHidden) OledReveal(false);
@@ -911,6 +912,7 @@ namespace Isle
                     _currentToast = null;
                     if (!_toasts.Any(t => t.ReplaceKey == downloadToast.ReplaceKey)) _toasts.Enqueue(downloadToast);
                 }
+                else _currentToast = null; // прежняя плашка не «оживает» в свёрнутой чёлке (громкость, Caps Lock)
                 if (_toasts.Count > 0) { NextToast(); return; }
                 ShowCollapsedContent(false);
                 ScheduleOledHide(TimeSpan.FromSeconds(1.2));
@@ -1587,7 +1589,7 @@ namespace Isle
             bool on = AppSettings.Current.DoNotDisturb;
             ToastBus.Show(new Toast
             {
-                Title = on ? "Не беспокоить" : "Уведомления включены", Subtitle = on ? "Уведомления приложений не покажутся" : "Снова показываю уведомления",
+                Title = on ? "Не беспокоить включено" : "Не беспокоить выключено", Subtitle = on ? "Уведомления приложений не покажутся" : "Снова показываю уведомления",
                 Icon = Icons.Moon, On = on, ReplaceKey = "dnd", Important = true, Duration = TimeSpan.FromSeconds(2.5)
             });
         }
@@ -1613,7 +1615,7 @@ namespace Isle
                 NextToast();
                 return;
             }
-            if (t.ReplaceKey != null && _currentToast?.ReplaceKey == t.ReplaceKey)
+            if (t.ReplaceKey != null && _currentToast?.ReplaceKey == t.ReplaceKey && State == IslandState.Toast)
             {
                 RenderToast(t);
                 _toastTimer.Stop();
@@ -1636,6 +1638,7 @@ namespace Isle
             if (State == IslandState.Expanded) { _currentToast = null; return; }
             if (_toasts.Count == 0)
             {
+                GlowStatus(null); // плашки кончились — подсветка гаснет
                 if (_currentToast?.Kind == ToastKind.Alarm) AlarmService.Stop();
                 StopAlarmPulse();
                 _currentToast = null;
@@ -1683,8 +1686,8 @@ namespace Isle
             ToastEta.Text = t.EtaText ?? "";
             ToastEta.Visibility = string.IsNullOrEmpty(t.EtaText) ? Visibility.Collapsed : Visibility.Visible;
             ToastIcon.Data = t.Icon;
-            ToastIcon.Foreground = t.Icon == Icons.Pipette || t.Icon == Icons.Shield
-                ? new SolidColorBrush(t.Accent)
+            ToastIcon.Foreground = t.Kind == ToastKind.Alarm ? new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71))
+                : t.Icon == Icons.Pipette || t.Icon == Icons.Shield ? new SolidColorBrush(t.Accent)
                 : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
             bool weatherIcon = !string.IsNullOrEmpty(t.WeatherKind);
@@ -1704,7 +1707,7 @@ namespace Isle
             ToastIcon.Visibility = t.Image == null && !weatherIcon && !swatch ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
-            ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
+            if (!download) ToastRing.Data = null;
             ToastRing.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             bool compact = string.IsNullOrEmpty(t.Subtitle) && !t.Progress.HasValue;
             // плитка-значок: скруглённый квадрат 36 (одна строка) / 40 (две строки) / 48 (пипетка), как в макете
@@ -1712,7 +1715,7 @@ namespace Isle
             ToastIconBox.Width = ToastIconBox.Height = tile;
             ToastIconBox.CornerRadius = new CornerRadius(download || t.RoundImage ? tile / 2 : swatch ? 14 : 12);
             ToastIcon.Width = ToastIcon.Height = tile >= 40 ? 18 : 17;
-            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2, tile / 2, tile / 2 - 1);
+            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2, tile / 2, tile / 2 + 2); // по дорожке (она снаружи плитки)
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
             ToastFolderButton.Tag = t;
             bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
@@ -1741,7 +1744,7 @@ namespace Isle
             ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
             ToastImage.Clip = t.Image == null ? null : t.RoundImage
                 ? new EllipseGeometry(new Point(imageSize / 2, imageSize / 2), imageSize / 2, imageSize / 2)
-                : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
+                : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), ToastIconBox.CornerRadius.TopLeft - 1, ToastIconBox.CornerRadius.TopLeft - 1);
             if (t.Progress.HasValue)
             {
                 double barW = w - 16 * 2 - tile - 12;
@@ -1962,6 +1965,31 @@ namespace Isle
         /// Итог действия видно сразу: получилось — значок зелёный и «подпрыгивает»,
         /// не вышло — красный и качается из стороны в сторону (как «нет» головой).
         /// </summary>
+        /// <summary>
+        /// Цветная подсветка чёлки под всплывашку: вспышка (180 мс) → мягко гаснет до едва заметной, пока плашка видна.
+        /// null — погасить (обычная всплывашка или плашек больше нет).
+        /// </summary>
+        private void GlowStatus(Color? c)
+        {
+            if (c is not Color col)
+            {
+                StatusGlow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new SineEase() });
+                return;
+            }
+            StatusGlow.BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, col.R, col.G, col.B));
+            StatusGlow.Background = new LinearGradientBrush(new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(0x00, col.R, col.G, col.B), 0.0),
+                new GradientStop(Color.FromArgb(0x14, col.R, col.G, col.B), 0.55),
+                new GradientStop(Color.FromArgb(0x3C, col.R, col.G, col.B), 1.0),
+            }, 90);
+            var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(1400) };
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(StatusGlow.Opacity, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0.45, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            StatusGlow.BeginAnimation(OpacityProperty, a);
+        }
+
         private void PlayToastStatus(Toast t)
         {
             // надпись вместо значка (раскладка) и «включено / выключено» для переключателей
@@ -1991,6 +2019,11 @@ namespace Isle
             // Получилось — зелёная плитка, не получилось — красная, «внимание» — янтарная; значок на ней тёмный.
             bool plainTile = !t.On.HasValue && !badge && ToastIcon.Visibility == Visibility.Visible && t.Icon != Icons.Pipette
                              && !(t.Kind == ToastKind.Alarm);
+            GlowStatus(error ? Color.FromRgb(0xF8, 0x71, 0x71) : warning ? Color.FromRgb(0xFB, 0xBF, 0x24) : success ? Color.FromRgb(0x4A, 0xDE, 0x80) : (Color?)null);
+            // заголовок — в цвет состояния (светлый оттенок, чтобы читался на тёмном)
+            if (error) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xA5, 0xA5));
+            else if (warning) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFD, 0xE6, 0x8A));
+            else if (success) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x86, 0xEF, 0xAC));
             if (plainTile && (error || success || warning))
             {
                 var (bg, fg) = error ? (Color.FromRgb(0xF8, 0x71, 0x71), Color.FromRgb(0x2B, 0x0A, 0x0A))

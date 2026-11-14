@@ -427,7 +427,7 @@ namespace Isle.Views
             var v = AppHost.Audio.Volume * 100;
             Volume.Value = v;
             VolText.Text = ((int)Math.Round(v)).ToString();
-            VolIcon.Kind = AppHost.Audio.Muted ? "Mute" : "Volume";
+            VolIcon.Kind = AppHost.Audio.Muted || v < 0.5 ? "Mute" : "Volume"; // как на «Управлении»: на нуле — перечёркнутый
             _settingVolume = false;
         }
 
