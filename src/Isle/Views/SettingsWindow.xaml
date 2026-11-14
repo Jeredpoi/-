@@ -528,10 +528,11 @@
                                 <Button Grid.Column="2" Style="{StaticResource SFlat}" Content="Как в OBS" Margin="8,0,0,0" VerticalAlignment="Center" Click="OnObsFolderReset"/>
                             </Grid>
                             <TextBlock Style="{StaticResource RowNote}" Text="Порт по умолчанию 4455. Пароль — тот, что показан в настройках сервера WebSocket (если включена аутентификация)."/>
-                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                <Button Style="{StaticResource Primary}" Content="Проверить подключение" Click="OnObsTest" Padding="16,8"/>
-                                <TextBlock x:Name="ObsResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                            </StackPanel>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <Button Style="{StaticResource Primary}" Content="Проверить подключение" Click="OnObsTest" Padding="16,8" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" x:Name="ObsResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

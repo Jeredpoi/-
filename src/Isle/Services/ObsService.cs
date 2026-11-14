@@ -143,7 +143,25 @@ namespace Isle.Services
             try
             {
                 var d = await RequestAsync("GetVersion");
-                return "Подключено: OBS " + (d.TryGetProperty("obsVersion", out var v) ? v.GetString() : "");
+                var text = "Подключено: OBS " + (d.TryGetProperty("obsVersion", out var v) ? v.GetString() : "");
+                // куда лягут записи: своя папка из Настроек Isle (её Isle выставит в OBS при старте записи)
+                // или та, что сейчас задана в самом OBS
+                string dir = AppSettings.Current.ObsRecordFolder;
+                if (string.IsNullOrWhiteSpace(dir))
+                {
+                    try
+                    {
+                        var rd = await RequestAsync("GetRecordDirectory");
+                        dir = rd.TryGetProperty("recordDirectory", out var r) ? r.GetString() : null;
+                    }
+                    catch { }
+                }
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    try { dir = System.IO.Path.GetFullPath(dir.Replace('/', '\\')); } catch { }
+                    text += "\nЗаписи сохраняются в: " + dir;
+                }
+                return text;
             }
             catch (Exception ex) { return "Ошибка: " + ex.Message; }
         }

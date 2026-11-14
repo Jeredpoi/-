@@ -34,6 +34,11 @@ namespace Isle.Overlays
             // прямоугольников) нет. Только когда видеокарта занята игрой (чёлка сама ушла на процессор) — рисует
             // процессор, и тогда окошко сразу поменьше: большое прозрачное окно процессор не тянет.
             bool soft = AppHost.Window?.SoftRender ?? false;
+            if (!soft)
+            {
+                try { FlyGlass(id, hz, image, from, shown, done); return; }
+                catch (Exception ex) { Journal.Warn("capture", "полёт через DWM не запустился, обычным окошком: " + ex.Message); }
+            }
             if (soft)
             {
                 double k0 = Math.Min(1, 640 / Math.Max(1, Math.Max(from.Width, from.Height)));
@@ -163,5 +168,150 @@ namespace Isle.Overlays
             win.ContentRendered += (_, __) => Begin();
             if (win.IsLoaded && win.IsVisible) win.Dispatcher.BeginInvoke(new Action(Begin), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
-    }
+    
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct Margins { public int L, R, T, B; }
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins m);
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+        /// <summary>Куда летит снимок: середина чёлки, высота — 80% чёлки, пропорции снимка (пиксели экрана).</summary>
+        private static Rect Target(Rect from)
+        {
+            try
+            {
+                var isl = AppHost.Window.IslandScreenRect(out _);
+                double h = Math.Max(20, isl.Height * 0.8);
+                double w = Math.Min(isl.Width * 0.8, h * from.Width / Math.Max(1, from.Height));
+                return new Rect(isl.X + isl.Width / 2 - w / 2, isl.Y + isl.Height / 2 - h / 2, w, h);
+            }
+            catch
+            {
+                double cx = Isle.Native.Win32.GetSystemMetrics(0) / 2.0;
+                return new Rect(cx - 30, 10, 60, 34);
+            }
+        }
+
+        /// <summary>
+        /// Полёт без «прозрачного» (layered) окна. Такое окно Windows каждый кадр целиком копирует из видеокарты
+        /// в память — на большом снимке это десятки мегабайт за кадр, отсюда рывки. Здесь одно обычное окно на всю
+        /// траекторию, прозрачность даёт сам DWM (рамка «стекла» на всё окно), а снимок двигается и уменьшается
+        /// внутри него трансформацией: окно не двигается и не меняет размер, видеокарта рисует только снимок —
+        /// с частотой монитора.
+        /// </summary>
+        private static void FlyGlass(int id, int hz, BitmapSource image, Rect from, Action shown, Action done)
+        {
+            Rect to = Target(from);
+            var area = Rect.Union(from, to);
+            area.Inflate(24, 24);
+            int ax = (int)Math.Floor(area.X), ay = (int)Math.Floor(area.Y), aw = (int)Math.Ceiling(area.Width), ah = (int)Math.Ceiling(area.Height);
+
+            var win = new Window
+            {
+                WindowStyle = WindowStyle.None, AllowsTransparency = false, Background = Brushes.Transparent,
+                Topmost = true, ShowInTaskbar = false, ShowActivated = false, ResizeMode = ResizeMode.NoResize,
+                Left = -32000, Top = -32000, Width = 10, Height = 10, Focusable = false, IsHitTestVisible = false
+            };
+            var canvas = new Canvas { IsHitTestVisible = false, ClipToBounds = true };
+            win.Content = canvas;
+            var brush = new ImageBrush(image) { Stretch = Stretch.Fill };
+            RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.Linear);
+            var scale = new ScaleTransform(1, 1);
+            var move = new TranslateTransform();
+            var tg = new TransformGroup();
+            tg.Children.Add(scale); tg.Children.Add(move);
+            var card = new Border
+            {
+                Background = brush, CornerRadius = new CornerRadius(10),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(110, 255, 255, 255)), BorderThickness = new Thickness(1),
+                RenderTransformOrigin = new Point(0, 0), RenderTransform = tg
+            };
+            canvas.Children.Add(card);
+
+            IntPtr hwnd = IntPtr.Zero;
+            double dpi = 1;
+            win.SourceInitialized += (_, __) =>
+            {
+                hwnd = new WindowInteropHelper(win).Handle;
+                var hs = HwndSource.FromHwnd(hwnd);
+                hs.CompositionTarget.BackgroundColor = Colors.Transparent; // фон окна — прозрачный, его «пробивает» стекло DWM
+                dpi = hs.CompositionTarget.TransformToDevice.M11;
+                // чистое всплывающее окно: без рамки, тени, скругления Windows 11 и без анимации появления
+                SetWindowLongPtr(hwnd, -16, new IntPtr(unchecked((int)0x80000000)));                       // WS_POPUP
+                long ex = GetWindowLongPtr(hwnd, -20).ToInt64() | 0x80 | 0x08000000 | 0x20;                  // TOOLWINDOW | NOACTIVATE | TRANSPARENT
+                SetWindowLongPtr(hwnd, -20, new IntPtr(ex));
+                var m = new Margins { L = -1, R = -1, T = -1, B = -1 };
+                Marshal(DwmExtendFrameIntoClientArea(hwnd, ref m));
+                int one = 1, none = unchecked((int)0xFFFFFFFE);
+                DwmSetWindowAttribute(hwnd, 3, ref one, 4);    // DWMWA_TRANSITIONS_FORCEDISABLED
+                DwmSetWindowAttribute(hwnd, 33, ref one, 4);   // DWMWA_WINDOW_CORNER_PREFERENCE = DONOTROUND
+                DwmSetWindowAttribute(hwnd, 34, ref none, 4);  // DWMWA_BORDER_COLOR = нет рамки
+                SetWindowPos(hwnd, new IntPtr(-1), ax, ay, aw, ah, NoActivate | 0x0020 /* FRAMECHANGED */);
+            };
+
+            const double Hold = 160, Ms = 900;
+            var sw = Stopwatch.StartNew();
+            int frames = 0; double last = 0, worst = 0;
+            static double Lerp(double a, double b, double t) => a + (b - a) * t;
+            void Place(double u, double pop)
+            {
+                double ks = (1 - Math.Cos(Math.PI * u)) / 2;                                             // размер — плавно на всём пути
+                double km = u < 0.5 ? 4 * u * u * u : 1 - Math.Pow(-2 * u + 2, 3) / 2;                  // путь — с разгоном
+                double w = Lerp(from.Width, to.Width, ks) * pop, h = Lerp(from.Height, to.Height, ks) * pop;
+                double cx = Lerp(from.X + from.Width / 2, to.X + to.Width / 2, km);
+                double cy = Lerp(from.Y + from.Height / 2, to.Y + to.Height / 2, km);
+                // всё — в точках окна (DIP): пиксели экрана минус угол окна, делённые на масштаб
+                scale.ScaleX = w / from.Width; scale.ScaleY = h / from.Height;
+                move.X = (cx - w / 2 - ax) / dpi; move.Y = (cy - h / 2 - ay) / dpi;
+                card.Opacity = u > 0.82 ? Math.Max(0, 1 - (u - 0.82) / 0.18) : 1;
+            }
+
+            bool finished = false, inTick = false, begun = false;
+            TimeSpan lastRT = TimeSpan.Zero;
+            EventHandler tick = null;
+            tick = (_, e) =>
+            {
+                if (e is RenderingEventArgs re) { if (re.RenderingTime == lastRT) return; lastRT = re.RenderingTime; }
+                if (finished || inTick) return;
+                inTick = true;
+                try
+                {
+                    double held = sw.Elapsed.TotalMilliseconds;
+                    double pop = held < Hold ? 1 - 0.03 * Math.Sin(Math.PI * held / Hold) : 1;
+                    double t = Math.Max(0, held - Hold);
+                    frames++;
+                    worst = Math.Max(worst, held - last);
+                    last = held;
+                    double u = Math.Min(1, t / Ms);
+                    Place(u, pop);
+                    if (u < 1) return;
+                    finished = true;
+                    CompositionTarget.Rendering -= tick;
+                    win.Close();
+                    try { AppHost.Window?.Gulp(); } catch { }
+                    Journal.Info("capture", "полёт #" + id + " в чёлку (DWM): кадров " + frames + " за " + Math.Round(held) + " мс (~"
+                        + Math.Round(frames * 1000.0 / Math.Max(1, held)) + " к/с, монитор " + hz + " Гц), худший кадр " + Math.Round(worst) + " мс");
+                    done?.Invoke();
+                }
+                finally { inTick = false; }
+            };
+            try { win.Show(); }
+            catch { try { win.Close(); } catch { } throw; } // запасной путь — обычное окошко (см. Fly)
+            card.Width = from.Width / dpi; card.Height = from.Height / dpi;
+            Place(0, 1);
+            void Begin()
+            {
+                if (begun) return;
+                begun = true;
+                try { shown?.Invoke(); } catch (Exception ex) { Journal.Warn("capture", "полёт: " + ex.Message); }
+                sw.Restart();
+                CompositionTarget.Rendering += tick;
+            }
+            win.ContentRendered += (_, __) => Begin();
+            if (win.IsLoaded && win.IsVisible) win.Dispatcher.BeginInvoke(new Action(Begin), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+
+        private static void Marshal(int hr) { if (hr < 0) throw new InvalidOperationException("DWM: 0x" + hr.ToString("X8")); }
+}
 }
