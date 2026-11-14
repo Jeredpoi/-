@@ -653,7 +653,7 @@
                 <!-- ============ КЛАВИШИ ============ -->
                 <StackPanel x:Name="SecKeys" Visibility="Collapsed">
                     <TextBlock Style="{StaticResource H1}" Text="Клавиши"/>
-                    <TextBlock Style="{StaticResource RowNote}" Margin="0,0,0,10" Text="Нажми на сочетание, затем введи новое. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если глобальную комбинацию заняла Windows или другое приложение."/>
+                    <TextBlock Style="{StaticResource RowNote}" Margin="0,0,0,10" Text="Нажми на сочетание и введи новое; ↺ — вернуть как было, ✕ — убрать совсем. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если глобальную комбинацию заняла Windows или другое приложение."/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,8" x:Name="KeysList"/>
                     </Border>
