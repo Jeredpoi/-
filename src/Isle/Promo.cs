@@ -309,16 +309,16 @@ namespace Isle
                 if (overlay != null)
                 {
                     await Wait(0.5);
-                    await MoveTo((int)(W * 0.18), (int)(H * 0.22), 600);
-                    await DragTo((int)(W * 0.82), (int)(H * 0.78), 1000);
+                    await MoveTo((int)(W * 0.27), (int)(H * 0.42), 600);
+                    await DragTo((int)(W * 0.73), (int)(H * 0.95), 1000);
                     await Wait(0.6);
                     if (await Bench.ClickTool(overlay, "Mosaic"))
                     {
                         _pos = (W / 2, (int)(H * 0.82));
                         await Wait(0.4);
                         Scene("mosaic");
-                        await MoveTo((int)(W * 0.474), (int)(H * 0.769), 700);
-                        await DragTo((int)(W * 0.648), (int)(H * 0.813), 1300);
+                        await MoveTo((int)(W * 0.474), (int)(H * 0.818), 700);
+                        await DragTo((int)(W * 0.648), (int)(H * 0.872), 1300);
                         await Wait(0.6);
                     }
                     Scene("save");
