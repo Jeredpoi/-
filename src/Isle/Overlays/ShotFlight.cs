@@ -34,6 +34,10 @@ namespace Isle.Overlays
             // прямоугольников) нет. Только когда видеокарта занята игрой (чёлка сама ушла на процессор) — рисует
             // процессор, и тогда окошко сразу поменьше: большое прозрачное окно процессор не тянет.
             bool soft = AppHost.Window?.SoftRender ?? false;
+            // 1) графический слой Windows: анимацию ведёт сам DWM — частота монитора, даже если Isle занят
+            try { FlyComp(id, hz, image, from, shown, done); return; }
+            catch (Exception ex) { Journal.Warn("capture", "полёт на графическом слое не запустился: " + ex); }
+            // 2) запасной путь — окно со «стеклом» DWM, 3) — обычное прозрачное окошко
             if (!soft)
             {
                 try { FlyGlass(id, hz, image, from, shown, done); return; }
@@ -331,6 +335,145 @@ namespace Isle.Overlays
         }
 
         [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmFlush();
+
+        /// <summary>Окно без собственной картинки (WS_EX_NOREDIRECTIONBITMAP): всё, что на нём видно, рисует графический слой.</summary>
+        private sealed class CompHost : System.Windows.Forms.NativeWindow
+        {
+            public CompHost(int x, int y, int w, int h)
+            {
+                CreateHandle(new System.Windows.Forms.CreateParams
+                {
+                    Style = unchecked((int)0x80000000),                                  // WS_POPUP
+                    ExStyle = 0x00200000 | 0x08 | 0x80 | 0x08000000 | 0x20,              // NOREDIRECTIONBITMAP | TOPMOST | TOOLWINDOW | NOACTIVATE | TRANSPARENT
+                    X = x, Y = y, Width = w, Height = h
+                });
+            }
+        }
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int cmd);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        /// <summary>
+        /// Полёт на графическом слое Windows. Снимок — картинка на видеокарте, путь, уменьшение и затухание —
+        /// анимации, которые ведёт DWM (как анимации самой Windows): ни одного кадра не считает Isle, поэтому
+        /// плавно на любой частоте монитора, даже если поток интерфейса чем-то занят. Выглядит так же, как раньше:
+        /// скругление 10, тонкая светлая рамка, лёгкое «нажатие» на старте, плавное уменьшение и затухание в конце.
+        /// </summary>
+        private static void FlyComp(int id, int hz, BitmapSource image, Rect from, Action shown, Action done)
+        {
+            var c = Isle.Helpers.Comp.Compositor;
+            Rect to = Target(from);
+            var area = Rect.Union(from, to);
+            area.Inflate(24, 24);
+            int ax = (int)Math.Floor(area.X), ay = (int)Math.Floor(area.Y), aw = (int)Math.Ceiling(area.Width), ah = (int)Math.Ceiling(area.Height);
+
+            var host = new CompHost(ax, ay, aw, ah);
+            Windows.UI.Composition.Desktop.DesktopWindowTarget target = null;
+            Windows.UI.Composition.CompositionDrawingSurface surface = null;
+            try
+            {
+                target = Isle.Helpers.Comp.Target(host.Handle, true);
+                double dpi = Math.Max(1, GetDpiForWindow(host.Handle) / 96.0);
+                var root = c.CreateContainerVisual();
+                target.Root = root;
+
+                surface = Isle.Helpers.Comp.Surface(image);
+                var brush = c.CreateSurfaceBrush(surface);
+                brush.Stretch = Windows.UI.Composition.CompositionStretch.Fill;
+                brush.BitmapInterpolationMode = Windows.UI.Composition.CompositionBitmapInterpolationMode.Linear;
+
+                float fw = (float)from.Width, fh = (float)from.Height, radius = (float)(10 * dpi);
+                var size = new System.Numerics.Vector2(fw, fh);
+                var card = c.CreateSpriteVisual();
+                card.Brush = brush;
+                card.Size = size;
+                var clipGeo = c.CreateRoundedRectangleGeometry();
+                clipGeo.Size = size; clipGeo.CornerRadius = new System.Numerics.Vector2(radius, radius);
+                card.Clip = c.CreateGeometricClip(clipGeo);
+                // тонкая светлая рамка, как у окошка раньше
+                var frame = c.CreateShapeVisual();
+                frame.Size = size;
+                var frameGeo = c.CreateRoundedRectangleGeometry();
+                frameGeo.Offset = new System.Numerics.Vector2(0.5f, 0.5f);
+                frameGeo.Size = size - new System.Numerics.Vector2(1, 1); frameGeo.CornerRadius = new System.Numerics.Vector2(radius, radius);
+                var stroke = c.CreateSpriteShape(frameGeo);
+                stroke.StrokeBrush = c.CreateColorBrush(Windows.UI.Color.FromArgb(110, 255, 255, 255));
+                stroke.StrokeThickness = (float)Math.Max(1, dpi);
+                frame.Shapes.Add(stroke);
+                card.Children.InsertAtTop(frame);
+                card.CenterPoint = new System.Numerics.Vector3(fw / 2, fh / 2, 0);
+                var start = new System.Numerics.Vector3((float)(from.X - ax), (float)(from.Y - ay), 0);
+                card.Offset = start;
+                root.Children.InsertAtTop(card);
+
+                const float Hold = 160, Ms = 900, T = Hold + Ms;
+                var end = new System.Numerics.Vector3((float)(to.X + to.Width / 2 - fw / 2 - ax), (float)(to.Y + to.Height / 2 - fh / 2 - ay), 0);
+                var easePath = c.CreateCubicBezierEasingFunction(new System.Numerics.Vector2(0.65f, 0f), new System.Numerics.Vector2(0.35f, 1f));   // разгон и торможение
+                var easeSize = c.CreateCubicBezierEasingFunction(new System.Numerics.Vector2(0.37f, 0f), new System.Numerics.Vector2(0.63f, 1f));   // плавно на всём пути
+                var linear = c.CreateLinearEasingFunction();
+
+                var off = c.CreateVector3KeyFrameAnimation();
+                off.Duration = TimeSpan.FromMilliseconds(T);
+                off.InsertKeyFrame(0, start); off.InsertKeyFrame(Hold / T, start, linear); off.InsertKeyFrame(1, end, easePath);
+                var sc = c.CreateVector3KeyFrameAnimation();
+                sc.Duration = TimeSpan.FromMilliseconds(T);
+                float sx = (float)(to.Width / fw), sy = (float)(to.Height / fh);
+                sc.InsertKeyFrame(0, System.Numerics.Vector3.One);
+                sc.InsertKeyFrame(Hold / 2 / T, new System.Numerics.Vector3(0.97f, 0.97f, 1), easeSize);   // лёгкое «нажатие»
+                sc.InsertKeyFrame(Hold / T, System.Numerics.Vector3.One, easeSize);
+                sc.InsertKeyFrame(1, new System.Numerics.Vector3(sx, sy, 1), easeSize);
+                var op = c.CreateScalarKeyFrameAnimation();
+                op.Duration = TimeSpan.FromMilliseconds(T);
+                op.InsertKeyFrame(0, 1); op.InsertKeyFrame((Hold + 0.82f * Ms) / T, 1, linear); op.InsertKeyFrame(1, 0, linear);
+
+                ShowWindow(host.Handle, 4 /* SW_SHOWNOACTIVATE */);
+                Journal.Debug("flight", "#" + id + ": графический слой, окно " + aw + "×" + ah + " px в " + ax + "," + ay + ", масштаб " + dpi);
+
+                var sw = Stopwatch.StartNew();
+                bool finished = false;
+                void Finish(string how)
+                {
+                    if (finished) return;
+                    finished = true;
+                    try { target.Root = null; } catch { }
+                    try { target.Dispose(); surface.Dispose(); } catch { }
+                    try { host.DestroyHandle(); } catch { }
+                    try { AppHost.Window?.Gulp(); } catch { }
+                    Journal.Info("capture", "полёт #" + id + " в чёлку (графический слой Windows" + how + "): " + sw.ElapsedMilliseconds + " мс, монитор " + hz + " Гц");
+                    done?.Invoke();
+                }
+
+                // Сначала снимок должен реально появиться на экране — и только потом прячем слой выделения (без мигания)
+                int warm = 0;
+                TimeSpan lastRT = TimeSpan.Zero;
+                EventHandler warmTick = null;
+                warmTick = (_, e) =>
+                {
+                    if (e is RenderingEventArgs re) { if (re.RenderingTime == lastRT) return; lastRT = re.RenderingTime; }
+                    if (++warm < 3) return;
+                    CompositionTarget.Rendering -= warmTick;
+                    try { DwmFlush(); } catch { }
+                    try { shown?.Invoke(); } catch (Exception ex) { Journal.Warn("capture", "полёт: " + ex.Message); }
+                    sw.Restart();
+                    var batch = c.CreateScopedBatch(Windows.UI.Composition.CompositionBatchTypes.Animation);
+                    card.StartAnimation("Offset", off);
+                    card.StartAnimation("Scale", sc);
+                    card.StartAnimation("Opacity", op);
+                    batch.End();
+                    batch.Completed += (_, __) => Application.Current?.Dispatcher.BeginInvoke(new Action(() => Finish("")));
+                    // страховка: если DWM не сообщил о конце анимации
+                    var guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(T + 600) };
+                    guard.Tick += (_, __) => { guard.Stop(); Finish(", по страховке"); };
+                    guard.Start();
+                };
+                CompositionTarget.Rendering += warmTick;
+            }
+            catch
+            {
+                try { target?.Dispose(); surface?.Dispose(); } catch { }
+                try { host.DestroyHandle(); } catch { }
+                throw;
+            }
+        }
 
         private static void Marshal(int hr) { if (hr < 0) throw new InvalidOperationException("DWM: 0x" + hr.ToString("X8")); }
 }
