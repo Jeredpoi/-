@@ -35,7 +35,94 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        /// <summary>Снимки вкладки буфера с тестовыми записями (временная проверка вёрстки).</summary>
+        private static void Snap(MainWindow w, string dir, string name)
+        {
+            w.UpdateLayout();
+            var dpi = VisualTreeHelper.GetDpi(w);
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(w.ActualWidth * dpi.DpiScaleX), (int)(w.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, w.ActualWidth, w.ActualHeight)); dc.DrawRectangle(new VisualBrush(w.Content as Visual), null, new Rect(0, 0, w.ActualWidth, w.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png"));
+            enc.Save(fs);
+        }
+
+        private static object Call(object o, string m, params object[] a) =>
+            o.GetType().GetMethod(m, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(o, a);
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                await Task.Delay(3000);
+                var c = AppHost.Clipboard;
+                var tmp = Path.Combine(Path.GetTempPath(), "isle-clip-test"); Directory.CreateDirectory(tmp);
+                string MakePng(string path, Color col)
+                {
+                    var wb = new System.Windows.Media.Imaging.RenderTargetBitmap(320, 200, 96, 96, PixelFormats.Pbgra32);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new LinearGradientBrush(col, Color.FromRgb(240, 138, 75), 30), null, new Rect(0, 0, 320, 200)); dc.DrawEllipse(Brushes.White, null, new Point(220, 70), 30, 30); }
+                    wb.Render(dv);
+                    var e = new System.Windows.Media.Imaging.PngBitmapEncoder(); e.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(wb));
+                    using (var f = File.Create(path)) e.Save(f);
+                    return path;
+                }
+                Directory.CreateDirectory(ClipboardService.ImagesDir);
+                MakePng(Path.Combine(ClipboardService.ImagesDir, "test1.png"), Color.FromRgb(90, 50, 200));
+                var photo = MakePng(Path.Combine(tmp, "отпуск.png"), Color.FromRgb(40, 140, 200));
+                var video = Path.Combine(tmp, "запись экрана.mp4"); File.WriteAllBytes(video, new byte[100]);
+                var doc = Path.Combine(tmp, "отчёт.pdf"); File.WriteAllBytes(doc, new byte[100]);
+                c.AddFolder("Работа"); c.AddFolder("Мемы");
+                var now = DateTime.Now;
+                ClipItem T(string text, string src, int min, string folder = null, bool pin = false)
+                    => new ClipItem { Text = text, Source = src, Time = now.AddMinutes(-min), Kind = ClipboardService.Classify(text, src), Folder = folder, Pinned = pin };
+                var items = new[]
+                {
+                    T("https://github.com/Jeredpoi/isle/releases", "chrome", 1),
+                    T("Встреча в 19:40 у кинотеатра, билеты уже взяла", "Telegram", 3),
+                    new ClipItem { Kind = ClipKind.Files, Files = new() { video }, Text = video, Source = "explorer", Time = now.AddMinutes(-5), Folder = "Работа" },
+                    T("#8E5BFF", "figma", 7),
+                    T("var view = CollectionViewSource.GetDefaultView(items);\nview.Filter = o => o is ClipItem c;\nList.ItemsSource = view;", "Code", 12, "Работа"),
+                    new ClipItem { Kind = ClipKind.Image, Text = "Изображение 320×200", ImageFile = "test1.png", Source = "SnippingTool", Time = now.AddMinutes(-15) },
+                    new ClipItem { Kind = ClipKind.Files, Files = new() { photo }, Text = photo, Source = "explorer", Time = now.AddMinutes(-20) },
+                    T("hello@isle.app", "Outlook", 30, pin: true),
+                    new ClipItem { Kind = ClipKind.Files, Files = new() { doc, photo }, Text = doc, Source = "explorer", Time = now.AddMinutes(-40), Folder = "Работа" },
+                    T("+7 999 123-45-67", "WhatsApp", 55),
+                };
+                foreach (var it in items) c.Items.Add(it);
+                c.ActiveFolder = "Работа";
+                w.SuppressAutoCollapse = true;
+                w.Expand("clip");
+                await Task.Delay(1500);
+                var v = (Isle.Views.ClipboardView)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "clip" });
+                Snap(w, dir, "clip-1-all");
+                v.List.SelectedIndex = 1; await Task.Delay(300);
+                Snap(w, dir, "clip-2-selected");
+                v.GetType().GetField("_type", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(v, (ClipCategory?)ClipCategory.Image);
+                Call(v, "Apply"); await Task.Delay(300);
+                Snap(w, dir, "clip-3-photo");
+                Call(v, "SelectFolder", "Работа"); await Task.Delay(300);
+                Snap(w, dir, "clip-4-folder");
+                Call(v, "SelectFolder", "Мемы"); await Task.Delay(300);
+                Snap(w, dir, "clip-5-empty");
+                Call(v, "SelectFolder", "\u0001all"); await Task.Delay(200);
+                Call(v, "DeleteWithUndo", new[] { items[1] }, "Удалено"); await Task.Delay(300);
+                Snap(w, dir, "clip-6-undo");
+                v.Search.Text = "кино"; await Task.Delay(300);
+                Snap(w, dir, "clip-7-search");
+                v.Search.Text = ""; v.Search.Focus(); await Task.Delay(300);
+                Snap(w, dir, "clip-8-searchfocus");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
