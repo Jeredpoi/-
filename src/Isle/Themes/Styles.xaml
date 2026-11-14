@@ -279,6 +279,13 @@
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter Property="BorderBrush" Value="#3A3A42"/>
                         </Trigger>
+                        <!-- однострочное поле фиксированной высоты (поиск): текст и подсказка ровно по центру -->
+                        <Trigger Property="VerticalContentAlignment" Value="Center">
+                            <Setter TargetName="ph" Property="VerticalAlignment" Value="Center"/>
+                            <Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Center"/>
+                            <!-- TextBox сам добавляет Padding внутри; второй отступ (Margin) уводил текст правее подсказки -->
+                            <Setter TargetName="PART_ContentHost" Property="Margin" Value="0"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
