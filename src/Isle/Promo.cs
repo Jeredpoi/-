@@ -317,8 +317,8 @@ namespace Isle
                         _pos = (W / 2, (int)(H * 0.82));
                         await Wait(0.4);
                         Scene("mosaic");
-                        await MoveTo((int)(W * 0.474), (int)(H * 0.732), 700);
-                        await DragTo((int)(W * 0.648), (int)(H * 0.776), 1300);
+                        await MoveTo((int)(W * 0.474), (int)(H * 0.769), 700);
+                        await DragTo((int)(W * 0.648), (int)(H * 0.813), 1300);
                         await Wait(0.6);
                     }
                     Scene("save");
@@ -361,7 +361,7 @@ namespace Isle
         {
             var bg = WallBrush(0, 0);
             var chat = new StackPanel { Margin = new Thickness(26) };
-            string[] lines = { "Маша: идём сегодня в кино?", "Я: давай, во сколько?", "Маша: в 19:40, билеты уже взяла 🎟", "Я: пароль от вайфая — kino2024!", "Маша: ахах, отправила тебе адрес", "Я: ок, буду" };
+            string[] lines = { "Маша: идём сегодня в кино?", "Я: давай, во сколько?", "Маша: в 19:40, билеты уже взяла 🎟", "Я: пароль от вайфая — kino2024!", "Маша: ахах, отправила тебе адрес" };
             foreach (var l in lines)
                 chat.Children.Add(new Border
                 {
@@ -372,7 +372,7 @@ namespace Isle
             var card = new Border
             {
                 Width = 620, Background = new SolidColorBrush(Color.FromArgb(0xB0, 0x10, 0x10, 0x16)), CornerRadius = new CornerRadius(22),
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 90), Child = chat
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 50), Child = chat
             };
             double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
             var win = new Window
