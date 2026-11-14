@@ -544,6 +544,12 @@ namespace Isle.Tests
         [InlineData("telegram", false)]
         [InlineData("https://youtube.com", false)]
         [InlineData(@"C:\Users\me\Documents", false)]
+        [InlineData(@"C:\Users\me\Pictures\cat.png", false)]
+        [InlineData("file:///C:/Users/u/Downloads/x.exe", true)]
+        [InlineData(@"C:\x\evil.cpl", true)]
+        [InlineData("evil.scr", true)]
+        [InlineData("search-ms:query=x", true)]
+        [InlineData("калькулятор", false)]
         public void OpenOfScriptNeedsConfirm(string arg, bool confirm) =>
             Assert.Equal(confirm, new AiAction { Name = "open", Arg = arg }.NeedsConfirm);
     }

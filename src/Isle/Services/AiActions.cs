@@ -13,13 +13,29 @@ namespace Isle.Services
         /// <summary>Опасные действия выполняются только после нажатия «Выполнить».</summary>
         public bool NeedsConfirm => Name == "cmd" || Name == "lock" || Name == "sleep" || (Name == "open" && IsRunnableFile(Arg));
 
-        /// <summary>Скрипт или программа по прямому пути (не по названию) — запускаем только после подтверждения.</summary>
+        /// <summary>
+        /// Сразу открываем только сайты (http/https) и программы простым названием («блокнот», «obs»).
+        /// Всё остальное — путь к файлу, file://, любой другой протокол — только после «Выполнить»:
+        /// ответ ИИ мог прийти из чужого текста, который его попросили обработать.
+        /// </summary>
         private static bool IsRunnableFile(string arg)
         {
-            var p = (arg ?? "").Trim().Trim('"', '«', '»');
-            if (!(p.Contains('\\') || p.Contains('/')) || p.Contains("://")) return false;
+            var p = (arg ?? "").Trim().Trim('"', '«', '»', '.');
+            if (p.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || p.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return p.Contains('"') || p.Contains(' '); // адрес с кавычками/пробелами — подозрительно
+            if (AppLauncher.IsAlias(p)) return false;
             var ext = System.IO.Path.GetExtension(p).ToLowerInvariant();
-            return ext is ".exe" or ".bat" or ".cmd" or ".ps1" or ".vbs" or ".js" or ".jse" or ".wsf" or ".msi" or ".scr" or ".com" or ".lnk" or ".reg" or ".hta";
+            if (p.Contains("://")) return true;                       // file://, smb:// и прочие протоколы
+            if (p.Contains('\\') || p.Contains('/'))
+            {
+                // папка (без расширения) и обычные документы/картинки открываются сразу, всё остальное — по кнопке
+                if (ext.Length == 0) return false;
+                return !(ext is ".txt" or ".pdf" or ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".bmp" or ".mp4" or ".mkv" or ".mov"
+                    or ".mp3" or ".wav" or ".flac" or ".md" or ".csv" or ".log");
+            }
+            if (p.Contains(':')) return true;                          // неизвестный протокол вида «xxx:»
+            return ext is ".exe" or ".bat" or ".cmd" or ".ps1" or ".vbs" or ".js" or ".jse" or ".wsf" or ".msi" or ".scr" or ".com" or ".lnk" or ".reg" or ".hta"
+                or ".cpl" or ".msc" or ".pif" or ".jar" or ".url" or ".application" or ".appref-ms" or ".settingcontent-ms" or ".library-ms";
         }
         public string Label => Name switch
         {
@@ -116,6 +132,7 @@ namespace Isle.Services
                             var u = m.Groups[2].Value;
                             span = u == "s" || u == "с" ? TimeSpan.FromSeconds(n) : u == "h" || u == "ч" ? TimeSpan.FromHours(n) : TimeSpan.FromMinutes(n);
                         }
+                        if (span < TimeSpan.FromSeconds(1) || span > TimeSpan.FromHours(100)) return "✗ Таймер — от 1 секунды до 100 часов";
                         AppHost.Timer.StartNew(span);
                         _lastTimer = (DateTime.Now, span);
                         return "✓ Таймер на " + TimerService.Format(span);

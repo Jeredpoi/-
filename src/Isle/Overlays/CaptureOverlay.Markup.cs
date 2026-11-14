@@ -440,9 +440,11 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    // плитка мозаики тянется за мышью — квадраты видны сразу
-                    ShowPatch(r);
-                    PlaceFrame(r);
+                    // Мышь присылает движения чаще, чем монитор показывает кадры (до 1000 в секунду).
+                    // Запоминаем последнюю рамку, а квадраты и контур обновляем один раз за кадр монитора —
+                    // ровно с его частотой (60/144/240 Гц), и рамка не отстаёт от квадратов.
+                    _pendingMosaic = r;
+                    HookMosaicFrame();
                     break;
                 case Mark.Rect when _shape != null:
                     Canvas.SetLeft(_shape, r.X); Canvas.SetTop(_shape, r.Y); _shape.Width = r.Width; _shape.Height = r.Height;
@@ -466,6 +468,7 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
+                    UnhookMosaicFrame();
                     if (_mosaicFrame != null) { _ink.Children.Remove(_mosaicFrame); _mosaicFrame = null; }
                     if (_livePatch != null)
                     {
@@ -474,7 +477,7 @@ namespace Isle.Overlays
                         Journal.Info("capture", "мозаика: рамка " + _livePx.Width + "×" + _livePx.Height + " px, квадрат " + _patchBlock + " px, обновлений " + _patchUpdates
                             + ", кусочков " + patch.Count + " (пересчитано за всё время " + _tilesRebuilt + ")"
                             + ", расчёт в среднем " + (_patchUpdates > 0 ? Math.Round(_patchMsSum / _patchUpdates, 1) : 0) + " мс, макс " + Math.Round(_patchMsMax, 1)
-                            + " мс; кадры интерфейса: " + _meter.Stop());
+                            + " мс; кадры интерфейса: " + _meter.Stop() + "; монитор " + MonitorHz() + " Гц");
                         if (r.Width >= 3 && r.Height >= 3 && patch.Count > 0)
                             _markUndo.Push(() => _patches.Children.Remove(patch)); // итоговая плитка — та же, что была видна
                         else _patches.Children.Remove(patch);
@@ -503,7 +506,50 @@ namespace Isle.Overlays
             _cropPx ??= ScreenTools.Bgra(_crop, out _, out _);
         }
 
-        private long _patchAt; // когда плитка обновлялась последний раз — не чаще кадра
+        private Rect? _pendingMosaic;   // последняя рамка от мыши, ещё не показанная
+        private bool _mosaicHooked;
+        private TimeSpan _mosaicFrameTime;
+
+        private void HookMosaicFrame()
+        {
+            if (_mosaicHooked) return;
+            _mosaicHooked = true;
+            CompositionTarget.Rendering += OnMosaicFrame;
+        }
+
+        private void UnhookMosaicFrame()
+        {
+            _pendingMosaic = null;
+            if (!_mosaicHooked) return;
+            _mosaicHooked = false;
+            CompositionTarget.Rendering -= OnMosaicFrame;
+        }
+
+        /// <summary>Кадр монитора: показать последнюю рамку мозаики (одно обновление на кадр, не больше и не меньше).</summary>
+        private void OnMosaicFrame(object s, EventArgs e)
+        {
+            if (e is RenderingEventArgs re)
+            {
+                if (re.RenderingTime == _mosaicFrameTime) return; // Rendering бывает несколько раз за кадр
+                _mosaicFrameTime = re.RenderingTime;
+            }
+            if (_pendingMosaic is not Rect r) return;
+            _pendingMosaic = null;
+            if (!_drawing || _livePatch == null) return;
+            ShowPatch(r);
+            PlaceFrame(r);
+        }
+
+        private int _hz = -1;
+        private int MonitorHz()
+        {
+            if (_hz < 0)
+            {
+                var c = System.Windows.Forms.Cursor.Position;
+                _hz = Helpers.Display.RefreshHz(c.X, c.Y);
+            }
+            return _hz;
+        }
         private readonly Helpers.FrameMeter _meter = new();
         private int _patchUpdates; private double _patchMsSum, _patchMsMax; private int _patchBlock;
 
@@ -518,23 +564,15 @@ namespace Isle.Overlays
         {
             patch ??= _livePatch;
             if (patch == null || _cropPx == null) return;
-            long now = Environment.TickCount64;
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
-            // Чем больше рамка, тем реже обновляем квадраты (до ~12 раз в секунду на весь 4K-экран): каждое обновление
-            // процессор перерисовывает полосой у края, и на огромной рамке он не успевал — отставал даже уголок рамки.
-            // Сама рамка двигается за курсором всегда, без задержки.
-            double mpx = (double)(x1 - x0) * (y1 - y0) / 1_000_000.0;
-            long every = (long)Math.Clamp(16 + mpx * 12, 16, 80);
-            if (!force && now - _patchAt < every) return;
-            if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Children.Clear(); return; }
+            if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Reset(); _livePx = Int32Rect.Empty; return; }
             // размер квадрата — ступеньками (6, 8, 12…24): пока тянешь, он меняется редко, и квадраты не «дрожат»
             int want = Mosaic.BlockForPatch(x1 - x0, y1 - y0), block = BlockSteps[0];
             foreach (var b in BlockSteps) if (b <= want) block = b;
             var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
             if (ir.Equals(_livePx) && patch.Count > 0 && !force) return;
-            _patchAt = now;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             // сетка привязана к точке начала: меняются и перерисовываются только кусочки у края рамки
             int ax = Math.Clamp((int)Math.Round(_from.X * k), 0, _cropW), ay = Math.Clamp((int)Math.Round(_from.Y * k), 0, _cropH);
@@ -649,7 +687,9 @@ namespace Isle.Overlays
             content.Measure(new Size(_area.Width, _area.Height));
             content.Arrange(new Rect(0, 0, _area.Width, _area.Height));
             content.UpdateLayout();
-            double k = Math.Min(1, 900.0 / Math.Max(_cropW, _cropH));
+            // копия для полёта: снимок стартует с настоящего размера — копия почти полная, чтобы не было мыла;
+            // когда рисует процессор (игра), окошко маленькое — хватит и 900 px
+            double k = Math.Min(1, ((AppHost.Window?.SoftRender ?? false) ? 900.0 : 1600.0) / Math.Max(_cropW, _cropH));
             var preview = RenderFlat(content, Math.Max(1, (int)(_cropW * k)), Math.Max(1, (int)(_cropH * k)));
             _page.Children.Add(new Image { Source = preview, Stretch = Stretch.Fill });
             Journal.Info("capture", "сохранение: копия для полёта " + preview.PixelWidth + "×" + preview.PixelHeight + " за " + t0.ElapsedMilliseconds + " мс");
@@ -664,10 +704,15 @@ namespace Isle.Overlays
                 if (saved) return;
                 saved = true;
                 var t1 = System.Diagnostics.Stopwatch.StartNew();
-                Hide();
-                var full = RenderFlat(content, _cropW, _cropH);
-                Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс" + how);
-                Finish(full);
+                BitmapSource full = null;
+                try
+                {
+                    Hide();
+                    full = RenderFlat(content, _cropW, _cropH);
+                    Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс" + how);
+                }
+                catch (Exception ex) { Journal.Error("capture", "склейка не удалась: " + ex); }
+                finally { Finish(full); } // слой обязательно закрывается — иначе снимки «залипали» до перезапуска
             }
             // страховка: если окошко полёта почему-то не появилось — всё равно сохраняем (иначе слой завис бы без Esc)
             var guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
@@ -676,7 +721,12 @@ namespace Isle.Overlays
             try
             {
                 // сначала на экране появляется окошко с копией, и только потом прячется слой — без «провала»
-                ShotFlight.Fly(preview, fromPx, Hide, () => { guard.Stop(); Complete(""); });
+                // окошко на экране: прячем слой и сразу возвращаем чёлку — снимок летит в неё, а не в пустоту
+                ShotFlight.Fly(preview, fromPx, () =>
+                {
+                    if (!saved) Hide();
+                    try { AppHost.Window.Visibility = Visibility.Visible; } catch { }
+                }, () => { guard.Stop(); Complete(""); });
             }
             catch (Exception ex)
             {
@@ -691,7 +741,13 @@ namespace Isle.Overlays
         {
             var dv = new DrawingVisual();
             using (var dc = dv.RenderOpen())
-                dc.DrawRectangle(new VisualBrush(content) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
+                // Viewbox — ровно размер снимка: иначе пометка у края (маркер, текст) расширяла рамку
+                // содержимого, и вся картинка сжималась и сдвигалась
+                dc.DrawRectangle(new VisualBrush(content)
+                {
+                    Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute,
+                    Viewbox = new Rect(0, 0, content.Width, content.Height)
+                }, null, new Rect(0, 0, w, h));
             var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(dv);
             rtb.Freeze();

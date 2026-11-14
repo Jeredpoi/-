@@ -163,8 +163,10 @@ namespace Isle
             {
                 _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen;
                 ApplyVisibility();
-                // игра на весь экран занимает видеокарту — чёлку рисуем процессором, иначе она раскрывается рывками
-                SetSoftRender(fs, fs ? "полноэкранное приложение" : "полноэкранное приложение закрыто");
+                // Сам по себе полноэкранный режим — не повод уходить на процессор (видео, развёрнутый браузер,
+                // мощная видеокарта — на процессоре чёлка на 144 Гц как раз подлагивала). Решает замер раскрытия.
+                _slowExpands = 0;
+                if (!fs) SetSoftRender(false, "полноэкранное приложение закрыто");
             };
             AppHost.WeatherChanged += UpdateWeatherMini;
 
@@ -384,8 +386,8 @@ namespace Isle
                     _kbHook = IntPtr.Zero;
                 }) { IsBackground = true, Name = "Isle keyboard hook" };
                 _kbThread.Start();
-                ready.Wait(2000);
-                if (_kbHook == IntPtr.Zero) _kbThread = null;
+                // не дождались (тяжёлый старт) — поток всё равно поставит перехват позже; второй не запускаем
+                if (ready.Wait(2000) && _kbHook == IntPtr.Zero) _kbThread = null;
             }
             else if (!want && _kbThread != null)
             {
@@ -510,8 +512,13 @@ namespace Isle
         private bool _softRender;
         private System.Windows.Media.Effects.Effect _shadowEffect;
         private DateTime _softUntil = DateTime.MinValue; // до какого времени держать процессор после медленного раскрытия
+        private bool _expandWarm;    // первое раскрытие (прогрев) уже было
+        private int _slowExpands;    // медленных раскрытий подряд
         private readonly Helpers.FrameMeter _expandMeter = new();
         private DispatcherTimer _expandMeterStop;
+
+        /// <summary>Чёлка рисуется процессором — видеокарта занята (игра). Полёт снимка тогда тоже идёт процессором.</summary>
+        public bool SoftRender => _softRender;
 
         private void SetSoftRender(bool soft, string why)
         {
@@ -544,10 +551,16 @@ namespace Isle
                 _expandMeterStop.Stop();
                 var (fps, _, text) = _expandMeter.StopStats();
                 Journal.Info("render", "раскрытие (" + (_softRender ? "процессор" : "видеокарта") + "): " + text);
-                if (!_softRender && fps > 0 && fps < 20)
+                // первое раскрытие после запуска всегда медленное (программа «прогревается») — его не считаем
+                if (!_expandWarm) { _expandWarm = true; return; }
+                bool fullscreen = AppHost.Watchers?.IsFullscreen ?? false;
+                if (!_softRender && fps > 0 && fps < 20) _slowExpands++; else if (fps >= 20) _slowExpands = 0;
+                // видеокарта занята: в игре хватает одного медленного раскрытия, на обычном столе — двух подряд
+                if (!_softRender && _slowExpands >= (fullscreen ? 1 : 2))
                 {
-                    _softUntil = DateTime.Now.AddMinutes(10);
-                    SetSoftRender(true, "раскрытие шло " + Math.Round(fps) + " к/с — видеокарта занята (на 10 минут)");
+                    _slowExpands = 0;
+                    _softUntil = DateTime.Now.AddMinutes(fullscreen ? 10 : 3);
+                    SetSoftRender(true, "раскрытие шло " + Math.Round(fps) + " к/с — видеокарта занята (на " + (fullscreen ? 10 : 3) + " мин)");
                 }
                 else if (_softRender && DateTime.Now >= _softUntil && !(AppHost.Watchers?.IsFullscreen ?? false))
                     SetSoftRender(false, "видеокарта снова свободна");
@@ -581,7 +594,7 @@ namespace Isle
                 return true;
             }
             if (!TryParseHotkey(gesture, out uint mods, out uint key, name == "collapse"))
-            { error = name == "collapse" ? "Выбери клавишу или сочетание клавиш." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
+            { error = name == "collapse" ? "Выбери Esc, F1–F24 или сочетание с Ctrl, Alt, Shift или Win." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
             var settings = AppSettings.Current;
             var bindings = HotkeySpecs(settings);
             foreach (var b in bindings.Where(b => b.Name != name))
@@ -638,6 +651,8 @@ namespace Isle
                 if (parsed != Key.None || !Enum.TryParse(parts[i], true, out parsed) || parsed == Key.None || parsed == Key.System) return false;
             }
             if (parsed == Key.None || (!allowNoModifier && modifiers == 0)) return false;
+            // одиночная клавиша (для «свернуть») — только Esc или F1–F24: буква или пробел мешали бы печатать в острове
+            if (modifiers == 0 && parsed != Key.Escape && !(parsed >= Key.F1 && parsed <= Key.F24)) return false;
             key = (uint)KeyInterop.VirtualKeyFromKey(parsed);
             return key is > 0 and <= 0xFF;
         }
@@ -2595,7 +2610,10 @@ namespace Isle
         /// </summary>
         private void CheckTopPush()
         {
-            if (State == IslandState.Expanded || !Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
+            // пока открыта — «упор» считаем уже засчитанным: после сворачивания с клавиатуры курсор у края
+            // не должен сразу открыть её снова, сначала уведи его от края
+            if (State == IslandState.Expanded) { _pushTicks = 1; return; }
+            if (!Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
             bool atTop = false;
             try
             {

@@ -32,6 +32,13 @@ namespace Isle.Views
             _loading = false;
             UpdateService.Changed += RenderUpdate;
             Closed += (_, __) => UpdateService.Changed -= RenderUpdate;
+            // поля ИИ, голоса и OBS сохраняются при уходе из поля — а при закрытии окна фокус не уходит
+            Closing += (_, __) =>
+            {
+                try { OnAiFieldsChanged(this, null); } catch { }
+                try { OnVoiceFields(this, null); } catch { }
+                try { OnObsFields(this, null); } catch { }
+            };
             RenderUpdate();
         }
 
@@ -259,7 +266,9 @@ namespace Isle.Views
             SteamActivateRow.Visibility = Visibility.Collapsed;
             if (!S.SteamExactSpeed || S.SteamExactActivated) return;
             if (Services.SteamDownloadService.SteamRoot() == null) return; // Steam не установлен
-            if (await Services.SteamClientApi.IsWorkingAsync())
+            bool working = await Services.SteamClientApi.IsWorkingAsync();
+            if (!S.SteamExactSpeed || S.SteamExactActivated) return; // пока ждали ответа, настройку могли выключить
+            if (working)
             {
                 S.SteamExactActivated = true;
                 S.Save();
@@ -272,7 +281,9 @@ namespace Isle.Views
         {
             SteamActivateBtn.IsEnabled = false;
             var progress = new Progress<string>(t => SteamExactStatus.Text = t);
-            bool ok = await Services.SteamClientApi.ActivateAsync(progress);
+            bool ok;
+            try { ok = await Services.SteamClientApi.ActivateAsync(progress); }
+            catch (Exception ex) { SteamExactStatus.Text = "Ошибка: " + ex.Message; ok = false; }
             if (ok)
             {
                 S.SteamExactActivated = true;
@@ -821,8 +832,10 @@ namespace Isle.Views
                 host.PreviewKeyDown += (_, e) =>
                 {
                     if (!recording) return;
-                    e.Handled = true;
                     var k = e.Key == Key.System ? e.SystemKey : e.Key;
+                    // Tab — уйти из поля, Alt+F4 — закрыть окно: не перехватываем, запись отменяется
+                    if (k == Key.Tab || (k == Key.F4 && Keyboard.Modifiers == ModifierKeys.Alt)) { Show(); return; }
+                    e.Handled = true;
                     if (k is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
                     var mods = Keyboard.Modifiers;
                     if (k == Key.Escape && mods == ModifierKeys.None && name != "collapse") { Show(); return; }

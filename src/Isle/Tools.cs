@@ -82,7 +82,7 @@ namespace Isle
         private static void Done(BitmapSource bmp)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            ScreenTools.CopyImage(bmp);
+            bool copied = ScreenTools.CopyImage(bmp);
             long copyMs = sw.ElapsedMilliseconds;
             string path = null;
             if (AppSettings.Current.SaveScreenshots)
@@ -101,8 +101,8 @@ namespace Isle
             Journal.Info("capture", "снимок " + bmp.PixelWidth + "×" + bmp.PixelHeight + " в буфере за " + copyMs + " мс");
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = "Снимок скопирован",
-                Subtitle = path != null ? "Сохранён в Изображения\\Isle" : "В буфере обмена",
+                Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Снимок скопирован" : "Буфер обмена занят",
+                Subtitle = path != null ? "Сохранён в Изображения\\Isle" : copied ? "В буфере обмена" : "Снимок не скопировался — попробуй ещё раз",
                 Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
                 FilePath = path, EditImage = bmp
             });

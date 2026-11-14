@@ -39,6 +39,15 @@ namespace Isle
                 return;
             }
 
+            // «покажись» от второго запуска слушаем сразу: пока первый ещё грузится, второй иначе решал, что Isle «не отвечает»
+            _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            var t = new Thread(() =>
+            {
+                while (_showEvent.WaitOne())
+                    Dispatcher.InvokeAsync(() => AppHost.Window?.BringUp());
+            }) { IsBackground = true, Name = "Isle.ShowListener" };
+            t.Start();
+
             if (_benchDir == null && SwitchToInstalledCopy()) { Shutdown(); return; }
 
             try { SystemControls.RepairAutostartPath(); }
@@ -68,13 +77,6 @@ namespace Isle
 
             try { _tray = new TrayIcon(); } catch (Exception ex) { Log("tray: " + ex); }
 
-            _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-            var t = new Thread(() =>
-            {
-                while (_showEvent.WaitOne())
-                    Dispatcher.InvokeAsync(() => AppHost.Window?.BringUp());
-            }) { IsBackground = true, Name = "Isle.ShowListener" };
-            t.Start();
         }
 
         /// <summary>Шапка сессии в подробном журнале: версия, система, экраны, язык, настройки (без ключей).</summary>
