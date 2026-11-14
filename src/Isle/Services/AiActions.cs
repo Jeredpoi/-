@@ -24,8 +24,16 @@ namespace Isle.Services
             if (p.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || p.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 return p.Contains('"') || p.Contains(' '); // адрес с кавычками/пробелами — подозрительно
             if (AppLauncher.IsAlias(p)) return false;
-            if (p.Contains('\\') || p.Contains('/') || p.Contains(':')) return true;
             var ext = System.IO.Path.GetExtension(p).ToLowerInvariant();
+            if (p.Contains("://")) return true;                       // file://, smb:// и прочие протоколы
+            if (p.Contains('\\') || p.Contains('/'))
+            {
+                // папка (без расширения) и обычные документы/картинки открываются сразу, всё остальное — по кнопке
+                if (ext.Length == 0) return false;
+                return !(ext is ".txt" or ".pdf" or ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".bmp" or ".mp4" or ".mkv" or ".mov"
+                    or ".mp3" or ".wav" or ".flac" or ".md" or ".csv" or ".log");
+            }
+            if (p.Contains(':')) return true;                          // неизвестный протокол вида «xxx:»
             return ext is ".exe" or ".bat" or ".cmd" or ".ps1" or ".vbs" or ".js" or ".jse" or ".wsf" or ".msi" or ".scr" or ".com" or ".lnk" or ".reg" or ".hta"
                 or ".cpl" or ".msc" or ".pif" or ".jar" or ".url" or ".application" or ".appref-ms" or ".settingcontent-ms" or ".library-ms";
         }
