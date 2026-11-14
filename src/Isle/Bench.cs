@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -36,6 +37,43 @@ namespace Isle
         }
 
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                await Task.Delay(3500);
+                var c = AppHost.Clipboard;
+                c.AddFolder("Игра");
+                c.SetFolderApp("Игра", "notepad", true);
+                string Last() { var t = c.Items.FirstOrDefault(); return t == null ? "—" : t.Text + " · источник " + t.Source + " · папка " + (t.Folder ?? "нет"); }
+                async Task Front(System.Diagnostics.Process p) { for (int i = 0; i < 20 && p.MainWindowHandle == IntPtr.Zero; i++) { await Task.Delay(250); p.Refresh(); } Isle.Native.Win32.ForceForeground(p.MainWindowHandle); await Task.Delay(1000); L("впереди: " + Isle.Native.Win32.ForegroundProcessName()); }
+                var game = System.Diagnostics.Process.Start("notepad.exe");
+                await Front(game);
+                await Tools.FullShot(); await Task.Delay(3000);
+                L("1) снимок Isle при «игре»: " + Last());
+                var other = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe", "-NoExit -Command \"$host.UI.RawUI.WindowTitle='Discord'\"") { UseShellExecute = true });
+                await Task.Delay(2500);
+                var fgName = Isle.Native.Win32.ForegroundProcessName();
+                L("впереди после запуска второго: " + fgName);
+                await Tools.FullShot(); await Task.Delay(3000);
+                L("2) снимок Isle при «Discord»: " + Last());
+                var m = typeof(ClipboardService).GetMethod("ImageSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                L("3) «Ножницы» (ScreenClippingHost) при «Discord» → приложение: " + m.Invoke(null, new object[] { "ScreenClippingHost" }));
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(64, 64, 96, 96, PixelFormats.Pbgra32);
+                var dv = new DrawingVisual(); using (var dc = dv.RenderOpen()) dc.DrawRectangle(Brushes.Teal, null, new Rect(0, 0, 64, 64)); bmp.Render(dv); bmp.Freeze();
+                ScreenTools.CopyImage(bmp); await Task.Delay(2500);
+                L("4) копия картинки из Isle (как из редактора): " + Last());
+                try { game.Kill(); } catch { }
+                try { System.Diagnostics.Process.GetProcessesByName("powershell").ToList().ForEach(p => { if (p.Id != Environment.ProcessId) try { p.Kill(); } catch { } }); } catch { }
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
