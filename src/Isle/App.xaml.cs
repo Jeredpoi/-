@@ -18,11 +18,14 @@ namespace Isle
 
         /// <summary>Стенд проверки снимков (--bench папка): сценарий настоящей мышью, после него выходим.</summary>
         private string _benchDir;
+        private bool _promo;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             int bi = Array.IndexOf(e.Args, "--bench");
             if (bi >= 0 && bi + 1 < e.Args.Length) _benchDir = Path.GetFullPath(e.Args[bi + 1]);
+            int pi = Array.IndexOf(e.Args, "--promo");
+            if (pi >= 0 && pi + 1 < e.Args.Length) { _benchDir = Path.GetFullPath(e.Args[pi + 1]); _promo = true; }
             _single = new Mutex(true, MutexName, out bool first);
             Trace("запуск " + typeof(App).Assembly.GetName().Version + ", " + Environment.OSVersion + ", " + Environment.ProcessPath, first);
             if (!first)
@@ -70,7 +73,7 @@ namespace Isle
                 _started = true;
                 try { DebugProbe.Start(); } catch (Exception ex) { Log("debug probe: " + ex.Message); }
                 Helpers.MemoryTrim.Soon("запуск", 25000); // после запуска остаётся мусор загрузки модулей
-                if (_benchDir != null) _ = Bench.RunAsync(w, _benchDir);
+                if (_benchDir != null) _ = _promo ? Promo.RunAsync(w, _benchDir) : Bench.RunAsync(w, _benchDir);
             }
             catch (Exception ex)
             {

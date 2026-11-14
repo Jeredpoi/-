@@ -187,7 +187,7 @@ namespace Isle
             return win;
         }
 
-        private static async Task<object> WaitOverlay()
+        internal static async Task<object> WaitOverlay()
         {
             var f = typeof(CaptureOverlay).GetField("_open", BindingFlags.NonPublic | BindingFlags.Static);
             for (int i = 0; i < 60; i++)
@@ -200,7 +200,7 @@ namespace Isle
         }
 
         /// <summary>Нажать кнопку инструмента на панели пометок настоящим кликом.</summary>
-        private static async Task<bool> ClickTool(object overlay, string mark)
+        internal static async Task<bool> ClickTool(object overlay, string mark)
         {
             var f = typeof(CaptureOverlay).GetField("_markButtons", BindingFlags.NonPublic | BindingFlags.Instance);
             if (f?.GetValue(overlay) is not IDictionary dict) return false;
@@ -219,7 +219,7 @@ namespace Isle
         }
 
         /// <summary>Перетаскивание настоящей мышью: ~125 движений в секунду, как у обычной мыши.</summary>
-        private static async Task Drag(int x0, int y0, int x1, int y1, int ms)
+        internal static async Task Drag(int x0, int y0, int x1, int y1, int ms)
         {
             SetCursorPos(x0, y0);
             await Task.Delay(80);
@@ -237,7 +237,7 @@ namespace Isle
             mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
         }
 
-        private static async Task Squiggle(int x0, int y0, int width, int ms)
+        internal static async Task Squiggle(int x0, int y0, int width, int ms)
         {
             SetCursorPos(x0, y0);
             await Task.Delay(60);
