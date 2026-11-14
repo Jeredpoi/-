@@ -65,7 +65,9 @@ namespace Isle.Helpers
             for (int i = 0; i < _spec.Length; i++)
             {
                 float target = spec != null ? spec[i] : 0;
-                _spec[i] += (target - _spec[i]) * (float)FrameClock.Lerp(0.45);
+                // всплеск — быстро, спад — мягче: спектр приходит реже кадров монитора (на 144–240 Гц),
+                // и при одинаково резком спуске край опускался ступеньками
+                _spec[i] += (target - _spec[i]) * (float)FrameClock.Lerp(target > _spec[i] ? 0.4 : 0.16);
             }
 
             // курсор рядом → край тянется к нему
@@ -172,7 +174,9 @@ namespace Isle.Helpers
                 {
                     c.BeginFigure(new Point(r - 2, -1), true, true);
                     var pts = _pts;
-                    for (int i = 0; i < Samples; i++) pts[i] = new Point(r + i / (double)(Samples - 1) * span, _depth[i] - 0.5);
+                    // заливка доходит ровно до середины обводки (depth + 0.5, как у обводки ниже). Раньше она
+                    // кончалась на 1 px выше обводки — в эту щель просвечивал рабочий стол, и край казался неровным
+                    for (int i = 0; i < Samples; i++) pts[i] = new Point(r + i / (double)(Samples - 1) * span, _depth[i] + 0.5);
                     // гладкая кривая через точки (Катмулл-Ром → Безье); когда шипы — острые ломаные
                     for (int i = 0; i < pts.Length - 1; i++)
                     {
@@ -191,7 +195,8 @@ namespace Isle.Helpers
                 var outline = new StreamGeometry();
                 using (var c = outline.Open())
                 {
-                    c.BeginFigure(new Point(r - 2, -0.5), false, false);
+                    // ровно по линии нижнего контура острова (он на 0,5 px ниже верха края), без двойной полоски
+                    c.BeginFigure(new Point(r - 2, 0.5), false, false);
                     c.LineTo(_pts[0], true, true);
                     for (int i = 0; i < _pts.Length - 1; i++)
                     {
@@ -200,12 +205,10 @@ namespace Isle.Helpers
                         c.BezierTo(new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6),
                                    new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6), p2, true, true);
                     }
-                    c.LineTo(new Point(w - r + 2, -0.5), true, true);
+                    c.LineTo(new Point(w - r + 2, 0.5), true, true);
                 }
                 outline.Freeze();
-                dc.PushTransform(new TranslateTransform(0, 1)); // ровно на линии нижнего контура острова, без двойной полоски
                 dc.DrawGeometry(null, OutlinePen, outline);
-                dc.Pop();
 
                 // кончики всплесков светятся цветом обложки
                 double musicLevel = 0;
