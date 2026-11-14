@@ -45,7 +45,7 @@ namespace Isle.Overlays
             Cursor = Cursors.Cross;
             Left = 0; Top = 0; Width = 100; Height = 100;
 
-            var img = new Image { Source = shot, Stretch = Stretch.Fill };
+            var img = _shotImage = new Image { Source = shot, Stretch = Stretch.Fill };
             // снимок лежит пиксель в пиксель с экраном: без сглаживания процессору при перерисовке остаётся простое копирование
             RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
             var root = _root = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
@@ -70,6 +70,8 @@ namespace Isle.Overlays
             };
             root.Children.Add(_hint);
             Content = root;
+            // снимок, затемнение и мозаику — на графический слой Windows (окно под этим), если он доступен
+            if (mode != CaptureMode.Pipette) TryEnableComp(img);
 
             _hintText.Text = mode switch
             {
@@ -95,6 +97,10 @@ namespace Isle.Overlays
                 Activate();
                 Focus();
                 Keyboard.Focus(this);
+                // прозрачное окно поверх графического слоя: процессор перерисовывает только изменившиеся кусочки
+                // (видеокарте пришлось бы каждый кадр возвращать картинку всего окна в память)
+                if (_comp)
+                    try { if (PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null) hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly; } catch { }
                 UpdateDim(Rect.Empty);
                 _escPoll.Start();
             };
@@ -158,6 +164,8 @@ namespace Isle.Overlays
         }
 
         private Grid _root;
+        private Image _shotImage;
+        private int _cropX, _cropY; // начало области в пикселях экрана (для мозаики на графическом слое)
         /// <summary>Размер экрана в точках слоя (окно на 1 px выше — лишняя строка не в счёт).</summary>
         private double ScreenW => _root != null && _root.ActualWidth > 0 ? _root.ActualWidth : ActualWidth;
         private double ScreenH => _root != null && _root.ActualHeight > 0 ? _root.ActualHeight : ActualHeight;
@@ -214,6 +222,7 @@ namespace Isle.Overlays
             if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
+            _cropX = crop.X; _cropY = crop.Y;
             // обычный снимок области — сначала пометки прямо на месте (мозаика, стрелки…), «Сохранить» — в чёлку
             if (_mode == CaptureMode.Region) { EnterMarkup(r, cb); return; }
             Finish(cb);
@@ -236,6 +245,7 @@ namespace Isle.Overlays
             }
             _dimOuter.Rect = new Rect(0, 0, Math.Max(1, ScreenW), Math.Max(1, ScreenH));
             _dimHole.Rect = hole.IsEmpty ? Rect.Empty : hole;
+            CompDim(hole);
         }
 
         private Color ColorAt(Point p)

@@ -116,6 +116,13 @@ namespace Isle.Overlays
             _page.Children.Add(_outline);
             Canvas.SetLeft(_page, area.X); Canvas.SetTop(_page, area.Y);
             _canvas.Children.Add(_page);
+            if (_comp)
+            {
+                // снимок и мозаику на экране показывает графический слой; WPF-копии невидимы (из них склеится картинка)
+                _baseImage.Visibility = Visibility.Hidden;
+                _patches.Visibility = Visibility.Hidden;
+                CompClipPatches(area);
+            }
             _page.MouseLeftButtonDown += MarkDown;
             _page.MouseMove += MarkMove;
             _page.MouseLeftButtonUp += MarkUp;
@@ -124,7 +131,8 @@ namespace Isle.Overlays
 
             // Пометки рисует процессор: видеокарта на части ПК при частичной перерисовке (а при рисовании так и есть)
             // оставляет чёрные прямоугольники. Видеокарту можно включить в Настройках.
-            bool gpu = AppSettings.Current.CaptureGpuRender;
+            // на графическом слое тяжёлое рисует видеокарта, а прозрачное окно WPF с лёгкими пометками — процессор
+            bool gpu = AppSettings.Current.CaptureGpuRender && !_comp;
             if (!gpu)
             {
                 try
@@ -329,6 +337,8 @@ namespace Isle.Overlays
 
             _area = a;
             _crop = cb; _cropW = crop.Width; _cropH = crop.Height;
+            _cropX = crop.X; _cropY = crop.Y;
+            CompClipPatches(a);
             _cropPx = null;                                    // пиксели для мозаики возьмутся из новой области
             _baseImage.Source = cb;
             _page.Width = a.Width; _page.Height = a.Height;
@@ -405,6 +415,7 @@ namespace Isle.Overlays
                     _meter.Start();
                     _livePatch = new Helpers.MosaicTiles();
                     _patches.Children.Add(_livePatch);
+                    CompMirror(_livePatch, _cropX, _cropY);
                     _tilesRebuilt = 0;
                     _livePx = Int32Rect.Empty;
                     // рамка выделения: тонкий чёрный контур и белый пунктир поверх — видна на любом фоне, ничего не затемняет
@@ -489,8 +500,8 @@ namespace Isle.Overlays
                             + ", расчёт в среднем " + (_patchUpdates > 0 ? Math.Round(_patchMsSum / _patchUpdates, 1) : 0) + " мс, макс " + Math.Round(_patchMsMax, 1)
                             + " мс; кадры интерфейса: " + _meter.Stop() + "; монитор " + MonitorHz() + " Гц");
                         if (r.Width >= 3 && r.Height >= 3 && patch.Count > 0)
-                            _markUndo.Push(() => _patches.Children.Remove(patch)); // итоговая плитка — та же, что была видна
-                        else _patches.Children.Remove(patch);
+                            _markUndo.Push(() => RemovePatch(patch)); // итоговая плитка — та же, что была видна
+                        else RemovePatch(patch);
                     }
                     break;
                 case Mark.Rect:
@@ -702,6 +713,9 @@ namespace Isle.Overlays
             Journal.Info("capture", "сохранение: слоёв пометок " + _ink.Children.Count + ", плиток мозаики " + _patches.Children.Count);
             _outline.Visibility = Visibility.Hidden;
             foreach (var hd in _handles) hd.Visibility = Visibility.Collapsed;
+            // невидимые на экране WPF-копии снимка и мозаики — нужны для склейки картинки
+            _baseImage.Visibility = Visibility.Visible;
+            _patches.Visibility = Visibility.Visible;
             _page.UpdateLayout();
 
             // Пометки переносим в отдельный (невидимый) контейнер — из него после полёта склеится полная картинка.
