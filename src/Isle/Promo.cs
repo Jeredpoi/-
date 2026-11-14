@@ -43,15 +43,23 @@ namespace Isle
             Directory.CreateDirectory(fdir);
             _frameLog = new StreamWriter(Path.Combine(dir, "island-frames.txt"), false, new UTF8Encoding(false));
             var root = (FrameworkElement)w.Content;
-            int pw = (int)Math.Ceiling(root.ActualWidth * 2), ph = (int)Math.Ceiling(Math.Min(root.ActualHeight, 560) * 2);
+            // только область вокруг чёлки (по центру, сверху) — так кадр рисуется быстро и запись идёт ~30 к/с
+            double rw = Math.Min(root.ActualWidth, 640), rh = Math.Min(root.ActualHeight, 520);
+            var region = new Rect((root.ActualWidth - rw) / 2, 0, rw, rh);
+            const double K = 1.6;
+            int pw = (int)Math.Ceiling(rw * K), ph = (int)Math.Ceiling(rh * K);
+            var brush = new VisualBrush(root) { Viewbox = region, ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.Fill };
+            File.WriteAllText(Path.Combine(dir, "island-region.txt"), region + " ×" + K + " → " + pw + "×" + ph);
             _recClock.Restart();
             _rec = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
             _rec.Tick += (_, __) =>
             {
                 try
                 {
-                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(pw, ph, 192, 192, PixelFormats.Pbgra32);
-                    rtb.Render(root);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen()) dc.DrawRectangle(brush, null, new Rect(0, 0, pw, ph));
+                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(pw, ph, 96, 96, PixelFormats.Pbgra32);
+                    rtb.Render(dv);
                     rtb.Freeze();
                     int n = _frame++;
                     _frameLog.WriteLine(n + "\t" + _recClock.ElapsedMilliseconds + "\t" + DateTime.UtcNow.ToString("O"));
@@ -85,6 +93,8 @@ namespace Isle
                 AppSettings.Current.WelcomeShown = true;
                 AppSettings.Current.SaveScreenshots = true;
                 AppSettings.Current.HideInFullscreen = false;
+                // «доступна новая версия» в ролике не нужна
+                try { typeof(UpdateService).GetField("_notified", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, true); } catch { }
                 await Wait(3);
                 var wall = ShowWallpaper();
                 await Wait(2.5);
