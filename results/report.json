@@ -1,0 +1,104 @@
+{
+ "capture_fps": 38.4,
+ "phases": [
+  {
+   "phase": "open",
+   "start_s": 7.09,
+   "len_s": 0.32,
+   "changes": 2,
+   "first_change_ms": 192,
+   "fps_active": 20.0,
+   "worst_gap_ms": 50,
+   "gaps_over_50ms": 0,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "select",
+   "start_s": 8.11,
+   "len_s": 1.08,
+   "changes": 33,
+   "first_change_ms": 36,
+   "fps_active": 31.0,
+   "worst_gap_ms": 67,
+   "gaps_over_50ms": 5,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "mosaic-small",
+   "start_s": 10.89,
+   "len_s": 1.66,
+   "changes": 40,
+   "first_change_ms": 180,
+   "fps_active": 27.5,
+   "worst_gap_ms": 83,
+   "gaps_over_50ms": 7,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "mosaic-medium",
+   "start_s": 13.25,
+   "len_s": 2.01,
+   "changes": 54,
+   "first_change_ms": 216,
+   "fps_active": 30.9,
+   "worst_gap_ms": 83,
+   "gaps_over_50ms": 4,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "mosaic-big",
+   "start_s": 15.96,
+   "len_s": 2.58,
+   "changes": 71,
+   "first_change_ms": 159,
+   "fps_active": 30.0,
+   "worst_gap_ms": 83,
+   "gaps_over_50ms": 9,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "pen",
+   "start_s": 19.82,
+   "len_s": 1.59,
+   "changes": 46,
+   "first_change_ms": 62,
+   "fps_active": 29.7,
+   "worst_gap_ms": 67,
+   "gaps_over_50ms": 3,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "save",
+   "start_s": 22.02,
+   "len_s": 1.6,
+   "changes": 30,
+   "first_change_ms": 17,
+   "fps_active": 28.1,
+   "worst_gap_ms": 50,
+   "gaps_over_50ms": 7,
+   "gaps_over_100ms": 0
+  },
+  {
+   "phase": "toast-ok",
+   "start_s": 27.07,
+   "len_s": 1.8,
+   "changes": 4,
+   "first_change_ms": 130,
+   "fps_active": 1.8,
+   "worst_gap_ms": 550,
+   "gaps_over_50ms": 3,
+   "gaps_over_100ms": 3
+  },
+  {
+   "phase": "toast-err",
+   "start_s": 28.87,
+   "len_s": 1.8,
+   "changes": 3,
+   "first_change_ms": 513,
+   "fps_active": 1.8,
+   "worst_gap_ms": 567,
+   "gaps_over_50ms": 2,
+   "gaps_over_100ms": 2
+  }
+ ]
+}

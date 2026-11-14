@@ -1,0 +1,80 @@
+2026-11-14 11:46:42.264 INFO  [trace] t1  запуск 0.1.0.0, Microsoft Windows NT 10.0.26100.0, D:\a\-\-\out\app\Isle.exe
+2026-11-14 11:46:42.268 INFO  [session] t1  ==================== запуск Isle 0.1.0.0 ====================
+2026-11-14 11:46:42.268 INFO  [session] t1  ОС Microsoft Windows NT 10.0.26100.0, .NET 8.0.33, 64-бит True, ядер 4, культура en-US, UI en-US, путь D:\a\-\-\out\app\Isle.exe
+2026-11-14 11:46:42.374 INFO  [session] t1  экран (DIP) 1024×768, рабочая область 0,0,1024,720, виртуальный 1024×768, рендер tier 2
+2026-11-14 11:46:42.413 INFO  [session] t1  настройки {"MediaEnabled":true,"LyricsEnabled":true,"VolumeToasts":true,"LayoutToasts":true,"CapsToasts":true,"BatteryToasts":true,"NotificationToasts":true,"NotificationsOnlyInIsland":false,"ClipboardHistory":true,"ClipboardLimit":50,"HideInFullscreen":true,"ExpandOnHover":true,"DoNotDisturb":false,"OledMode":false,"OledRevealSeconds":10,"Scale":1,"ShowInCaptures":false,"VpnStatus":true,"ClipboardImages":true,"Launcher":[],"City":"\u041C\u043E\u0441\u043A\u0432\u0430","Latitude":55.7558,"Longitude":37.6173,"AiPreset":"groq","AiBaseUrl":"https://api.groq.com/openai/v1","AiKeyProtected":"***","AiModel":"llama-3.3-70b-versatile","VoicePreset":"groq","VoiceBaseUrl":"https://api.groq.com/openai/v1","VoiceModel":"whisper-large-v3","VoiceKeyProtected":"***","VoiceLanguage":"","VoiceAutoPaste":true,"VoicePunctuate":true,"ObsPort":4455,"ObsRecordFolder":"","ObsPasswordProtected":"***","AccentHex":"#ECECF1","IslandOpacity":1,"MaxFps":60,"Character":"pixel","BuddyOutfit":"auto","FirstRunDone":false,"WelcomeShown":false,"TrayHintShown":false,"AutoUpdateCheck":true,"ScaleFixV2":false,"ObsStatus":true,"SteamExactSpeed":true,"SteamExactActivated":false,"VoiceDefaultsV2":false,"MusicPill":"title","HomePlayer":"mirror","LyricsOnHome":true,"ShowClock":true,"ClockSeconds":false,"Hotkey":"Ctrl\u002BAlt\u002BSpace","HotkeyCommand":"Ctrl\u002BAlt\u002BK","HotkeyClipboard":"Ctrl\u002BAlt\u002BV","HotkeyScreenshot":"Ctrl\u002BAlt\u002BS","HotkeyVoice":"Ctrl\u002BAlt\u002BD","HotkeyVoiceCommand":"Ctrl\u002BAlt\u002BA","HotkeyCollapse":"Escape","PrintScreenIsle":false,"SaveScreenshots":true,"CaptureGpuRender":false,"CaptureComposition":true,"DebugLog":true,"Use24h":true}
+2026-11-14 11:46:42.551 INFO  [settings] t1  FirstRunDone: «False» → «True»
+2026-11-14 11:46:42.551 INFO  [settings] t1  ScaleFixV2: «False» → «True»
+2026-11-14 11:46:42.556 INFO  [settings] t1  VoiceDefaultsV2: «False» → «True»
+2026-11-14 11:46:42.559 INFO  [trace] t1  окно создано
+2026-11-14 11:46:42.679 INFO  [trace] t1  остров на экране: 7,0, экран 1024×768
+2026-11-14 11:46:42.921 INFO  [trace] t1  окно показано: 7,0 1010×660
+2026-11-14 11:46:42.921 INFO  [debug] t1  подробный журнал включён (временная отладка) — его можно выключить в Настройках → Обновления
+2026-11-14 11:46:42.928 DEBUG [display] t1  выходы: \\.\DISPLAY1 — Microsoft Hyper-V Video (основной)
+2026-11-14 11:46:42.934 DEBUG [display] t1  монитор \\.\DISPLAY1 (основной): 1024×768 в 0,0, рабочая область 1024×720, 64 Гц, 32 бит
+2026-11-14 11:46:42.934 DEBUG [display] t1  WPF: tier 2, аппаратная отрисовка есть, макс. текстура 16384,16384
+2026-11-14 11:46:43.020 INFO  [settings] t1  WelcomeShown: «False» → «True»
+2026-11-14 11:46:43.020 INFO  [settings] t1  TrayHintShown: «False» → «True»
+2026-11-14 11:46:43.069 INFO  [weather] t1  запрос Москва (55.756,37.617)
+2026-11-14 11:46:43.087 DEBUG [exception] t13  InvalidOperationException: «Operation is not valid due to the current state of the object.» @ ExceptionHelpers.<ThrowExceptionForHR>g__Throw|38_0 t13
+2026-11-14 11:46:43.087 DEBUG [exception] t13  TargetInvocationException: «Exception has been thrown by the target of an invocation.» @ MethodBaseInvoker.InvokeWithNoArgs t13
+2026-11-14 11:46:43.092 INFO  [caps] t1  состояние: Caps Lock выкл (начальное)
+2026-11-14 11:46:43.856 INFO  [trace] t1  все модули запущены
+2026-11-14 11:46:46.798 DEBUG [ui] t1  поток интерфейса был занят ~350 мс (чёлка Collapsed, видеокарта)
+2026-11-14 11:46:48.298 INFO  [bench] t1  экран 1024×768 px, масштаб 1
+2026-11-14 11:46:48.299 INFO  [bench] t1  этап: open
+2026-11-14 11:46:48.438 INFO  [capture] t1  Region: слой открыт, экран 0,0 1024×768, снимок 1024×768 Bgr32
+2026-11-14 11:46:48.442 INFO  [comp] t1  графический слой Windows готов
+2026-11-14 11:46:48.483 INFO  [comp] t1  устройство картинок: Direct3D Level_11_1
+2026-11-14 11:46:48.491 INFO  [capture] t1  слой: снимок, затемнение и мозаика — на графическом слое Windows (51 мс)
+2026-11-14 11:46:48.570 INFO  [capture] t1  слой: окно 1024×768 px, 1024×768 точек, tier 2, открыт через 132 мс
+2026-11-14 11:46:48.620 INFO  [bench] t1  этап: idle
+2026-11-14 11:46:48.620 DEBUG [ui] t1  поток интерфейса был занят ~283 мс (чёлка Collapsed, видеокарта)
+2026-11-14 11:46:49.320 INFO  [bench] t1  этап: select
+2026-11-14 11:46:50.401 INFO  [bench] t1  этап: idle
+2026-11-14 11:46:50.405 INFO  [capture] t1  пометки: отрисовка процессором
+2026-11-14 11:46:50.409 INFO  [trace] t1  пометки: экран 0,0 1024×768, окно 1024×768, масштаб 1, область 40,38 943×637, панель 591×48 в 216,689, слоёв 1
+2026-11-14 11:46:52.093 INFO  [bench] t1  этап: mosaic-small
+2026-11-14 11:46:52.212 INFO  [capture] t1  мозаика: пиксели снимка 943×637 подготовлены за 19 мс
+2026-11-14 11:46:53.756 INFO  [bench] t1  этап: idle
+2026-11-14 11:46:53.758 INFO  [capture] t1  мозаика: рамка 260×60 px, квадрат 6 px, обновлений 44, кусочков 12 (пересчитано за всё время 63), расчёт в среднем 0.7 мс, макс 5.3 мс; кадры интерфейса: кадров 62 за 1545 мс (~40 к/с), худший кадр 62 мс, рывков >50 мс: 1; монитор 64 Гц
+2026-11-14 11:46:54.457 INFO  [bench] t1  этап: mosaic-medium
+2026-11-14 11:46:56.463 INFO  [bench] t1  этап: idle
+2026-11-14 11:46:56.463 INFO  [capture] t1  мозаика: рамка 410×230 px, квадрат 20 px, обновлений 59, кусочков 6 (пересчитано за всё время 111), расчёт в среднем 0.5 мс, макс 2 мс; кадры интерфейса: кадров 72 за 1868 мс (~39 к/с), худший кадр 62 мс, рывков >50 мс: 3; монитор 64 Гц
+2026-11-14 11:46:57.164 INFO  [bench] t1  этап: mosaic-big
+2026-11-14 11:46:59.739 INFO  [bench] t1  этап: idle
+2026-11-14 11:46:59.740 INFO  [capture] t1  мозаика: рамка 901×584 px, квадрат 24 px, обновлений 78, кусочков 20 (пересчитано за всё время 181), расчёт в среднем 0.6 мс, макс 2.1 мс; кадры интерфейса: кадров 102 за 2469 мс (~41 к/с), худший кадр 62 мс, рывков >50 мс: 2; монитор 64 Гц
+2026-11-14 11:47:01.028 INFO  [bench] t1  этап: pen
+2026-11-14 11:47:02.621 INFO  [bench] t1  этап: idle
+2026-11-14 11:47:03.222 INFO  [bench] t1  этап: save
+2026-11-14 11:47:03.226 INFO  [capture] t1  сохранение: слоёв пометок 1, плиток мозаики 3
+2026-11-14 11:47:03.260 INFO  [capture] t1  сохранение: копия для полёта 943×637 за 33 мс
+2026-11-14 11:47:03.262 INFO  [capture] t1  полёт #1: старт, снимок 943×637, окно 943×637 px
+2026-11-14 11:47:03.279 DEBUG [flight] t1  #1: графический слой, окно 991×720 px в 16,-21, масштаб 1
+2026-11-14 11:47:03.369 INFO  [trace] t1  Клоди: занятие сидит
+2026-11-14 11:47:03.984 INFO  [toast] t1  Info «Доступна новая версия Isle 0.2.456» · «Настройки → Обновления → «Обновить»»
+2026-11-14 11:47:03.985 DEBUG [toast] t1  в очередь: «Доступна новая версия Isle 0.2.456», сейчас Collapsed, в очереди 0
+2026-11-14 11:47:03.985 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 11:47:04.449 INFO  [capture] t1  полёт #1 в чёлку (графический слой Windows): 1083 мс, монитор 64 Гц
+2026-11-14 11:47:04.469 INFO  [capture] t1  сохранение: картинка 943×637 склеена за 20 мс
+2026-11-14 11:47:04.470 INFO  [capture] t1  Region: готово 943×637 (с пометками) через 16032 мс
+2026-11-14 11:47:04.588 INFO  [capture] t1  снимок 943×637 в буфере за 112 мс
+2026-11-14 11:47:04.592 INFO  [toast] t1  Success «Снимок скопирован» · «Сохранён в Изображения\Isle»
+2026-11-14 11:47:04.596 DEBUG [toast] t1  в очередь: «Снимок скопирован», сейчас Toast (««Доступна новая версия Isle 0.2.456»»), в очереди 0
+2026-11-14 11:47:04.604 INFO  [capture] t7  PNG сохранён за 16 мс: Снимок 2026-11-14 11.47.04.png
+2026-11-14 11:47:04.661 INFO  [clipboard] t1  новое: картинка, из Isle
+2026-11-14 11:47:04.723 INFO  [clipboard] t1  повтор — поднят наверх: картинка, из Isle
+2026-11-14 11:47:04.823 INFO  [bench] t1  этап: idle
+2026-11-14 11:47:07.763 INFO  [memory] t1  уборка после «картинка в буфере»: память 243 → 0 МБ, управляемая 13 → 7 МБ, за 38 мс
+2026-11-14 11:47:08.276 INFO  [bench] t1  этап: toast-ok
+2026-11-14 11:47:08.276 INFO  [toast] t1  Success «Снимок скопирован» · «Сохранён в Изображения\Isle»
+2026-11-14 11:47:08.276 DEBUG [toast] t1  в очередь: «Снимок скопирован», сейчас Toast (««Доступна новая версия Isle 0.2.456»»), в очереди 1
+2026-11-14 11:47:10.076 INFO  [bench] t1  этап: toast-err
+2026-11-14 11:47:10.076 INFO  [toast] t1  Error «Не удалось сохранить» · «Нет доступа к папке»
+2026-11-14 11:47:10.076 DEBUG [toast] t1  в очередь: «Не удалось сохранить», сейчас Toast (««Снимок скопирован»»), в очереди 1
+2026-11-14 11:47:11.877 INFO  [bench] t1  этап: idle
+2026-11-14 11:47:12.929 DEBUG [stats] t1  процессор Isle 7.6%, память 75 МБ (управляемая 11 МБ, сборок 11/10/10), потоков 32; такт анимаций 28 к/с, худший кадр 337 мс, ограничение 60 к/с (чёлка Toast, видеокарта), полноэкранное False, впереди WindowsTerminal
+2026-11-14 11:47:17.708 INFO  [island] t1  состояние Toast → Collapsed
+2026-11-14 11:47:37.486 INFO  [bench] t1  память перед уборкой: 97 МБ, управляемая 9 МБ
+2026-11-14 11:47:37.517 INFO  [memory] t1  уборка после «стенд»: память 97 → 1 МБ, управляемая 9 → 7 МБ, за 30 мс
+2026-11-14 11:47:38.018 INFO  [bench] t1  этап: done
