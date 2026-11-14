@@ -219,6 +219,7 @@ namespace Isle.Views
             Battery.IsChecked = S.BatteryToasts;
             Notif.IsChecked = S.NotificationToasts;
             NotifOnly.IsChecked = S.NotificationsOnlyInIsland;
+            RefreshHotkeyNotes();
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
             Vpn.IsChecked = S.VpnStatus;
             SteamExact.IsChecked = S.SteamExactSpeed;
@@ -232,6 +233,7 @@ namespace Isle.Views
         private void OnToggle(object s, RoutedEventArgs e)
         {
             if (_loading) return;
+            Dispatcher.BeginInvoke(new Action(UpdatePreview), System.Windows.Threading.DispatcherPriority.Background); // превью — по новым настройкам
             S.HideInFullscreen = Fullscreen.IsChecked == true;
             S.ExpandOnHover = Hover.IsChecked == true;
             S.CaptureGpuRender = CaptureSoft.IsChecked == true;
@@ -471,7 +473,7 @@ namespace Isle.Views
             PreviewBuddy.Outfit = MainWindow.OutfitForWeather();
             PreviewEyes.Visibility = S.Character == "eyes" ? Visibility.Visible : Visibility.Collapsed;
             Preview.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * Math.Clamp(S.IslandOpacity, 0.5, 1)), 0, 0, 0));
-            PreviewTime.Text = DateTime.Now.ToString("HH:mm");
+            PreviewTime.Text = DateTime.Now.ToString((S.Use24h ? "HH:mm" : "h:mm") + (S.ClockSeconds ? ":ss" : "")); // как в самой чёлке
         }
 
         // ---------- ИИ ----------
@@ -831,8 +833,8 @@ namespace Isle.Views
                 }
                 void Apply(string next)
                 {
-                    if (AppHost.Window.TrySetHotkey(name, next, out var error)) Show();
-                    else { Show(); MessageBox.Show(error, "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information); }
+                    if (AppHost.Window.TrySetHotkey(name, next, out var error)) { Show(); RefreshHotkeyNotes(); AppHost.Tray?.Refresh(); }
+                    else { Show(); ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Сочетание не подошло", Subtitle = error, Icon = Icons.Keyboard, Important = true, Duration = TimeSpan.FromSeconds(4) }); }
                 }
                 Show();
                 host.MouseEnter += (_, __) => { if (!recording) host.Background = HostHover; };
@@ -881,8 +883,9 @@ namespace Isle.Views
                 if (!AppHost.Window.SetPrintScreen(prt.IsChecked == true))
                 {
                     prt.IsChecked = false;
-                    MessageBox.Show("Windows не дал занять PrintScreen. Выключи «Использовать PrintScreen для открытия Ножниц» в Параметры → Специальные возможности → Клавиатура и попробуй снова.",
-                                    "Горячие клавиши", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Windows не дал занять PrintScreen",
+                        Subtitle = "Выключи «PrintScreen открывает Ножницы» в Параметры → Специальные возможности → Клавиатура",
+                        Icon = Icons.Keyboard, Important = true, Duration = TimeSpan.FromSeconds(6) });
                 }
             };
             KeysList.Children.Add(prtRow);
@@ -897,6 +900,17 @@ namespace Isle.Views
             Grid.SetColumn(save, 1);
             saveRow.Children.Add(save);
             KeysList.Children.Add(saveRow);
+        }
+
+        private static string KeyName(string hotkey) => hotkey.Replace("Space", "Пробел");
+
+        /// <summary>Подсказки с сочетаниями клавиш — по текущим настройкам (их можно поменять или убрать).</summary>
+        private void RefreshHotkeyNotes()
+        {
+            HoverNote.Text = "Подведи курсор к самому верху экрана над чёлкой. Просто водить по чёлке можно — она не откроется. Если выключить — только кликом"
+                + (string.IsNullOrWhiteSpace(S.Hotkey) ? "." : " или " + KeyName(S.Hotkey) + ".");
+            VoiceNote.Text = (string.IsNullOrWhiteSpace(S.HotkeyVoice) ? "Назначь сочетание в «Клавишах», нажми его" : "Нажми " + KeyName(S.HotkeyVoice))
+                + ", скажи и нажми ещё раз: текст окажется в буфере. Запись уходит в выбранный сервис распознавания (Whisper).";
         }
 
         private string GetHotkey(string name) => name switch

@@ -74,7 +74,7 @@
                             <!-- середина: название / строка песни / полоса времени (зависит от вида пилюли) -->
                             <StackPanel x:Name="MiniCenter" Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="MiniTitle" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="MiniSub" FontSize="11" Foreground="#A1A1AB" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
+                                <TextBlock x:Name="MiniSub" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
                                 <Grid x:Name="MiniBar" Height="3" Margin="0,5,0,0" Visibility="Collapsed">
                                     <Border CornerRadius="1.5" Background="#2A2A30"/>
                                     <Border x:Name="MiniBarFill" CornerRadius="1.5" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
@@ -84,7 +84,7 @@
                             <!-- кнопки мини-плеера -->
                             <StackPanel x:Name="MiniButtons" Orientation="Horizontal" Margin="0,0,10,0" Visibility="Collapsed">
                                 <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniPrev" ToolTip="Предыдущий"><h:Icon Kind="Prev" Width="13" Height="13"/></Button>
-                                <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay" ToolTip="Пауза / играть">
+                                <Button Style="{StaticResource Bare}" Width="32" Height="32" Padding="0" Margin="2,0" Click="OnMiniPlay" ToolTip="Пауза / играть">
                                     <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Fg}"><h:Icon x:Name="MiniPlayIcon" Kind="Pause" Width="12" Height="12" StrokeWidth="2.4" Foreground="Black"/></Border>
                                 </Button>
                                 <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnMiniNext" ToolTip="Следующий"><h:Icon Kind="Next" Width="13" Height="13"/></Button>
@@ -109,11 +109,14 @@
                                 <h:Icon Kind="Timer" Width="15" Height="15" Foreground="{DynamicResource Accent}"/>
                                 <TextBlock Text="Таймер" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Margin="7,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock x:Name="MiniTimer" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
-                            <Button x:Name="TimerCancel" HorizontalAlignment="Right" Width="24" Height="24" Padding="0" Margin="0,0,56,0"
-                                    Style="{StaticResource Ghost}" Click="OnTimerCancel" ToolTip="Отменить таймер" Visibility="Collapsed">
-                                <h:Icon Kind="Close" Width="11" Height="11" Foreground="{DynamicResource Muted}"/>
-                            </Button>
+                            <!-- «×» перед временем, в одном ряду: длинный текст («пауза · 4:59») на неё не налезает -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button x:Name="TimerCancel" Width="24" Height="24" Padding="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                        Style="{StaticResource Ghost}" Click="OnTimerCancel" ToolTip="Отменить таймер" Visibility="Collapsed">
+                                    <h:Icon Kind="Close" Width="11" Height="11" Foreground="{DynamicResource Muted}"/>
+                                </Button>
+                                <TextBlock x:Name="MiniTimer" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Grid>
 
                         <!-- загрузка (Steam / браузер): обложка в кольце прогресса, название, скорость, проценты -->
@@ -205,7 +208,7 @@
                                 <Grid Grid.Row="1" Margin="0,2,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock x:Name="ToastSub" FontSize="13" Foreground="#8B8B95" TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"/>
-                                    <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="#B9B9C3" Margin="10,0,0,0"/>
+                                    <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="{StaticResource Muted}" Margin="10,0,0,0"/>
                                 </Grid>
                                 <!-- волна голоса во время диктовки (Ctrl+Alt+D / Ctrl+Alt+A / микрофон в чате) -->
                                 <h:VoiceWave x:Name="VoiceWave" Grid.Row="2" Height="34" Margin="0,6,0,0" Visibility="Collapsed"/>
@@ -295,7 +298,7 @@
                                         </StackPanel>
                                     </Border>
                                 </Button>
-                                <ToggleButton x:Name="DndChip" Style="{StaticResource Chip}" Click="OnDnd" ToolTip="Не беспокоить: всплывашки не показываются">
+                                <ToggleButton x:Name="DndChip" Style="{StaticResource Chip}" Click="OnDnd" ToolTip="Не беспокоить: уведомления приложений не показываются">
                                     <h:Icon Kind="Moon" Width="13" Height="13"/>
                                 </ToggleButton>
                                 <ToggleButton x:Name="PinChip" Style="{StaticResource Chip}" Margin="6,0,0,0" Click="OnPin" ToolTip="Закрепить: остров не сворачивается">

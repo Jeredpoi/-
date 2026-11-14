@@ -78,7 +78,7 @@ namespace Isle
                 return;
             }
 
-            try { _tray = new TrayIcon(); } catch (Exception ex) { Log("tray: " + ex); }
+            try { _tray = new TrayIcon(); AppHost.Tray = _tray; } catch (Exception ex) { Log("tray: " + ex); }
 
         }
 

@@ -11,6 +11,12 @@ namespace Isle
         private readonly Forms.NotifyIcon _icon;
         private readonly Drawing.Icon _img;
 
+        private static string HintText() => string.IsNullOrWhiteSpace(AppSettings.Current.Hotkey)
+            ? "Isle — чёлка работает" : "Isle — чёлка работает. " + AppSettings.Current.Hotkey.Replace("Space", "Пробел") + " — открыть";
+
+        /// <summary>Сочетание клавиш поменяли — подсказка у значка тоже.</summary>
+        public void Refresh() { try { if (_icon != null) _icon.Text = HintText(); } catch { } }
+
         public TrayIcon()
         {
             _img = LoadAppIcon() ?? MakeIcon();
@@ -24,7 +30,7 @@ namespace Isle
             _icon = new Forms.NotifyIcon
             {
                 Icon = _img,
-                Text = string.IsNullOrWhiteSpace(AppSettings.Current.Hotkey) ? "Isle — чёлка работает" : "Isle — чёлка работает. " + AppSettings.Current.Hotkey + " — открыть",
+                Text = HintText(),
                 ContextMenuStrip = menu,
                 Visible = true
             };

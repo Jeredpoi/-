@@ -16,13 +16,13 @@
             </Button>
             <Button x:Name="HistoryBtn" Grid.Column="1" Style="{StaticResource Flat}" Height="40" Padding="12,0" Margin="8,0,0,0" Click="OnHistory" ToolTip="История разговоров">
                 <StackPanel Orientation="Horizontal">
-                    <h:Icon Kind="Clipboard" Width="15" Height="15"/>
+                    <h:Icon Kind="History" Width="15" Height="15"/>
                     <TextBlock Text="История" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 </StackPanel>
             </Button>
             <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Сообщение для ИИ…" AcceptsReturn="True" TextWrapping="Wrap"
                      MaxHeight="90" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey"/>
-            <Button x:Name="MicBtn" Grid.Column="3" Style="{StaticResource Flat}" Height="40" Width="40" Padding="0" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать (Ctrl+Alt+D)">
+            <Button x:Name="MicBtn" Grid.Column="3" Style="{StaticResource Flat}" Height="40" Width="40" Padding="0" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать голосом">
                 <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
             </Button>
             <Button x:Name="SendBtn" Grid.Column="4" Height="40" Style="{StaticResource Primary}" Width="40" Click="OnSend" ToolTip="Отправить (Enter)">

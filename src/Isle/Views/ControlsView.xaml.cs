@@ -450,6 +450,8 @@ namespace Isle.Views
             _armed = key;
             var (btn, text, bar, _) = Parts(key);
             btn.Background = DangerBg;
+            // подсветка при наведении в шаблоне перекрывает фон кнопки — красим сам элемент шаблона
+            if (btn.Template?.FindName("b", btn) is Border tb) tb.Background = DangerBg;
             btn.BorderBrush = DangerFg;
             btn.Foreground = DangerFg;
             text.Text = "Нажми ещё раз";
@@ -466,6 +468,7 @@ namespace Isle.Views
             {
                 var (btn, text, bar, label) = Parts(k);
                 btn.ClearValue(BackgroundProperty);
+                if (btn.Template?.FindName("b", btn) is Border tb) tb.ClearValue(Border.BackgroundProperty);
                 btn.ClearValue(BorderBrushProperty);
                 btn.ClearValue(ForegroundProperty);
                 text.Text = label;
