@@ -126,48 +126,88 @@ namespace Isle.Services
         {
             _timer.Tick += async (_, __) => await Check();
             _timer.Start();
+            // сеть поменялась (VPN включили или выключили) — проверяем сразу, а не ждём до 10 секунд
+            var disp = Dispatcher.CurrentDispatcher;
+            NetworkChange.NetworkAddressChanged += (_, __) => disp.InvokeAsync(async () =>
+            {
+                int v = ++_changeVersion;
+                await Task.Delay(800); // адреса меняются пачкой — ждём, пока улягутся
+                if (v == _changeVersion) await Check();
+            });
             _ = Check();
         }
+
+        private int _changeVersion;
+        private bool _checking;
 
         private async Task Check()
         {
             if (!AppSettings.Current.VpnStatus) { _last = null; if (Active) { Active = false; Changed?.Invoke(); } return; } // включат снова — проверим заново
             // Список сетевых адаптеров Windows отдаёт медленно (до десятков мс) — не в потоке интерфейса, иначе раз в 10 с подлагивает анимация
-            var nic = await Task.Run(Find);
-            bool active = nic != null;
-            if (active == _last) return;
-            bool first = _last == null;
-            _last = active;
-            Active = active;
-            Name = nic?.Name ?? "";
-            _type = nic?.NetworkInterfaceType ?? NetworkInterfaceType.Unknown;
-            Country = ""; CountryName = ""; Ip = "";
-            Changed?.Invoke();
-            if (active || !first) (Country, CountryName, Ip) = await LookupCountry();
-            Changed?.Invoke();
-            if (!first)
-                ToastBus.Show(new Toast
+            if (_checking) return;
+            _checking = true;
+            try
+            {
+                var nic = await Task.Run(Find);
+                bool active = nic != null;
+                if (active == _last) return;
+                bool first = _last == null;
+                _last = active;
+                Active = active;
+                Name = nic?.Name ?? "";
+                _type = nic?.NetworkInterfaceType ?? NetworkInterfaceType.Unknown;
+                Country = ""; CountryName = ""; Ip = "";
+                Changed?.Invoke();
+                Journal.Info("vpn", (active ? "подключён: " + Name : "отключён") + (first ? " (при запуске)" : ""));
+                // Плашку показываем сразу. Раньше она ждала страну по IP, а в момент отключения сеть
+                // перестраивается: запрос висел до таймаута, и «VPN отключён» не появлялось вовсе.
+                if (!first) ShowToast(active);
+                if (active || !first)
                 {
-                    Kind = ToastKind.Info,
-                    Title = active ? "VPN подключён" + (Country.Length > 0 ? " · " + Country : "") : "VPN отключён",
-                    Subtitle = active ? (CountryName.Length > 0 ? CountryName + " · " : "") + Name : (CountryName.Length > 0 ? "Сейчас вы: " + CountryName : ""),
-                    Icon = Icons.Shield, On = active,
-                    Accent = active ? System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80) : System.Windows.Media.Color.FromRgb(0xA1, 0xA1, 0xAB)
-                });
+                    (Country, CountryName, Ip) = await LookupCountry();
+                    if (Active != active) return; // пока узнавали страну, состояние снова поменялось
+                    Changed?.Invoke();
+                    if (!first && CountryName.Length > 0) ShowToast(active); // та же плашка, уже со страной
+                }
+            }
+            finally { _checking = false; }
         }
+
+        private void ShowToast(bool active) => ToastBus.Show(new Toast
+        {
+            Kind = ToastKind.Info,
+            Title = active ? "VPN подключён" + (Country.Length > 0 ? " · " + Country : "") : "VPN отключён",
+            Subtitle = active ? (CountryName.Length > 0 ? CountryName + " · " : "") + Name : (CountryName.Length > 0 ? "Сейчас вы: " + CountryName : "Трафик идёт напрямую"),
+            Icon = Icons.Shield, On = active, ReplaceKey = "vpn",
+            Accent = active ? System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80) : System.Windows.Media.Color.FromRgb(0xA1, 0xA1, 0xAB)
+        });
 
         private static NetworkInterface Find()
         {
             try
             {
                 return NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
-                    n.OperationalStatus == OperationalStatus.Up &&
+                    n.OperationalStatus == OperationalStatus.Up && HasAddress(n) &&
                     (n.NetworkInterfaceType == NetworkInterfaceType.Ppp ||
                      Markers.Any(m => (n.Description + " " + n.Name).ToLowerInvariant().Contains(m))) &&
                     !n.Description.ToLowerInvariant().Contains("hyper-v") &&
                     !n.Description.ToLowerInvariant().Contains("teredo"));
             }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// Есть настоящий адрес. Некоторые клиенты при отключении оставляют свой адаптер «включённым», но без адреса —
+        /// раньше такой считался работающим VPN, и «VPN отключён» не приходило.
+        /// </summary>
+        private static bool HasAddress(NetworkInterface n)
+        {
+            try
+            {
+                return n.GetIPProperties().UnicastAddresses.Any(a =>
+                    a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !a.Address.ToString().StartsWith("169.254."));
+            }
+            catch { return true; }
         }
 
         private static async Task<(string code, string name, string ip)> LookupCountry()
