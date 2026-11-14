@@ -840,6 +840,7 @@ namespace Isle
             Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
             if (_welcomeHidden) return; // идёт знакомство — чёлка появится в его конце
+            GlowStatus(null); // панель раскрывается — цветная подсветка всплывашки не нужна
             _leaveClose.Stop();
             _oledHide.Stop();
             if (_oledHidden) OledReveal(false);
@@ -1636,6 +1637,7 @@ namespace Isle
             if (State == IslandState.Expanded) { _currentToast = null; return; }
             if (_toasts.Count == 0)
             {
+                GlowStatus(null); // плашки кончились — подсветка гаснет
                 if (_currentToast?.Kind == ToastKind.Alarm) AlarmService.Stop();
                 StopAlarmPulse();
                 _currentToast = null;
@@ -1962,6 +1964,31 @@ namespace Isle
         /// Итог действия видно сразу: получилось — значок зелёный и «подпрыгивает»,
         /// не вышло — красный и качается из стороны в сторону (как «нет» головой).
         /// </summary>
+        /// <summary>
+        /// Цветная подсветка чёлки под всплывашку: вспышка (180 мс) → мягко гаснет до едва заметной, пока плашка видна.
+        /// null — погасить (обычная всплывашка или плашек больше нет).
+        /// </summary>
+        private void GlowStatus(Color? c)
+        {
+            if (c is not Color col)
+            {
+                StatusGlow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new SineEase() });
+                return;
+            }
+            StatusGlow.BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, col.R, col.G, col.B));
+            StatusGlow.Background = new LinearGradientBrush(new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(0x00, col.R, col.G, col.B), 0.0),
+                new GradientStop(Color.FromArgb(0x14, col.R, col.G, col.B), 0.55),
+                new GradientStop(Color.FromArgb(0x3C, col.R, col.G, col.B), 1.0),
+            }, 90);
+            var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(1400) };
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(StatusGlow.Opacity, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0.45, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            StatusGlow.BeginAnimation(OpacityProperty, a);
+        }
+
         private void PlayToastStatus(Toast t)
         {
             // надпись вместо значка (раскладка) и «включено / выключено» для переключателей
@@ -1991,6 +2018,11 @@ namespace Isle
             // Получилось — зелёная плитка, не получилось — красная, «внимание» — янтарная; значок на ней тёмный.
             bool plainTile = !t.On.HasValue && !badge && ToastIcon.Visibility == Visibility.Visible && t.Icon != Icons.Pipette
                              && !(t.Kind == ToastKind.Alarm);
+            GlowStatus(error ? Color.FromRgb(0xF8, 0x71, 0x71) : warning ? Color.FromRgb(0xFB, 0xBF, 0x24) : success ? Color.FromRgb(0x4A, 0xDE, 0x80) : (Color?)null);
+            // заголовок — в цвет состояния (светлый оттенок, чтобы читался на тёмном)
+            if (error) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xA5, 0xA5));
+            else if (warning) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFD, 0xE6, 0x8A));
+            else if (success) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x86, 0xEF, 0xAC));
             if (plainTile && (error || success || warning))
             {
                 var (bg, fg) = error ? (Color.FromRgb(0xF8, 0x71, 0x71), Color.FromRgb(0x2B, 0x0A, 0x0A))

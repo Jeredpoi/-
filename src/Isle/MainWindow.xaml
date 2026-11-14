@@ -34,6 +34,10 @@
                     Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
                     SnapsToDevicePixels="True">
                 <Grid>
+                    <!-- Подсветка всплывашки: получилось — зелёная, ошибка — красная, «внимание» — янтарная
+                         (тонкий край и мягкое свечение снизу; вспыхивает и остаётся едва заметной, пока висит плашка) -->
+                    <Border x:Name="StatusGlow" IsHitTestVisible="False" Opacity="0" BorderThickness="1.5"
+                            CornerRadius="{Binding CornerRadius, ElementName=Island}"/>
                     <!-- ===== Свёрнутая чёлка ===== -->
                     <Grid x:Name="CollapsedView" Margin="16,0">
                         <!-- покой: «глаза», время, погода -->

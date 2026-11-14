@@ -209,9 +209,26 @@ namespace Isle.Helpers
         public double Energy { get; set; }
         private DateTime _nextDance = DateTime.Now.AddSeconds(6); // первым всегда классический танец
         private double _danceStart;
-        public const int DanceCount = 13;
+        public const int DanceCount = 21;
         private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка", "брейк-данс",
-            "волна", "хлопки", "твист", "флосс" };
+            "волна", "хлопки", "твист", "флосс", "чарльстон", "макарена", "джампинг-джек", "наездник", "шаффл", "тектоник", "сальто", "дэб" };
+
+        /// <summary>Сальто, цикл ~2,2 с: присед → прыжок с полным оборотом → приземление. Угол, подъём (минус — выше), фаза.</summary>
+        private (double angle, double down, double phase) Flip()
+        {
+            double ph = ((_dtime - _danceStart) * 0.45) % 1;
+            if (ph < 0.25) { double k = ph / 0.25; return (0, Math.Sin(k * Math.PI / 2) * 1.2, ph); }              // присел
+            if (ph < 0.75)
+            {
+                double k = (ph - 0.25) / 0.5;
+                double ease = k < 0.5 ? 2 * k * k : 1 - Math.Pow(-2 * k + 2, 2) / 2;
+                return (ease * 360, 1.2 * (1 - k) - Math.Sin(k * Math.PI) * 4.5, ph);                                 // в воздухе — оборот
+            }
+            { double k = (ph - 0.75) / 0.25; return (0, Math.Sin(k * Math.PI) * 0.8, ph); }                         // приземлился, пружинит
+        }
+
+        /// <summary>Макарена: 8 поз подряд (руки вперёд, за голову, на бёдра…), на последней — покачивание бёдрами.</summary>
+        private int MacarenaPose() => (int)(_dtime * 2.6) % 8;
 
         /// <summary>
         /// Брейк-данс, цикл ~6 с: падает на спину → крутится на спине, болтая ножками → вскакивает в «фриз» с руками вверх.
@@ -238,6 +255,14 @@ namespace Isle.Helpers
         }
         public string DanceName => DanceNames[_dance];
 
+        /// <summary>Включить конкретный танец надолго (для съёмки и демонстраций).</summary>
+        public void ForceDance(int dance)
+        {
+            _dance = Math.Clamp(dance, 0, DanceCount - 1);
+            _danceStart = _dtime;
+            _nextDance = DateTime.Now.AddHours(1);
+        }
+
         /// <summary>Сдвиг ручки по вертикали в пикселях спрайта для текущего танца (минус — выше).</summary>
         /// <summary>
         /// Танец по музыке: медленная — покачивание и лунная походка, средняя — классика, диско и робот,
@@ -247,11 +272,11 @@ namespace Isle.Helpers
         public static int PickDance(double bpm, double energy, int current, Random rnd)
         {
             int[] pool;
-            if (bpm <= 0) pool = new[] { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
-            else if (bpm < 95) pool = new[] { 1, 1, 7, 7, 5, 0, 6, 9, 9 };
-            else if (bpm < 122) pool = new[] { 0, 0, 6, 6, 3, 3, 1, 5, 7, 9, 10, 12 };
-            else if (bpm < 150 && energy < 0.55) pool = new[] { 0, 0, 2, 2, 6, 3, 4, 8, 10, 11, 11, 12, 12 };
-            else pool = new[] { 4, 4, 2, 2, 8, 8, 0, 11, 11, 10 };
+            if (bpm <= 0) pool = new[] { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };
+            else if (bpm < 95) pool = new[] { 1, 1, 7, 7, 5, 0, 6, 9, 9, 14, 20 };
+            else if (bpm < 122) pool = new[] { 0, 0, 6, 6, 3, 3, 1, 5, 7, 9, 10, 12, 13, 14, 16, 20 };
+            else if (bpm < 150 && energy < 0.55) pool = new[] { 0, 0, 2, 2, 6, 3, 4, 8, 10, 11, 11, 12, 12, 13, 15, 16, 17, 18 };
+            else pool = new[] { 4, 4, 2, 2, 8, 8, 0, 11, 11, 10, 15, 17, 18, 19 };
             int d = current;
             for (int i = 0; i < 8 && d == current; i++) d = pool[rnd.Next(pool.Length)];
             return d;
@@ -280,6 +305,23 @@ namespace Isle.Helpers
                 case 10: return (_dtime * 2.2) % 1 < 0.5 ? -3 : -1;                                          // хлопки над головой
                 case 11: return Math.Sin(_dtime * 8 + side) > 0 ? -1 : 1;                                    // твист: ручки навстречу бёдрам
                 case 12: return Math.Sin(_dtime * 7 + side) > 0 ? 0.5 : -0.5;                                // флосс: ручки качаются против бёдер
+                case 13: return Math.Sin(_dtime * 1.8 * 2 * Math.PI + side) > 0 ? -1 : 1;                     // чарльстон: ручки навстречу ногам
+                case 14:                                                                                       // макарена: позы по очереди
+                {
+                    int p = MacarenaPose();
+                    double[] l = { -1, -1, -1, -1, -2, -2, 0.5, 1 }, r = { 0, -1, -1, -1, -2, -2, 0.5, 1 };
+                    return left ? l[p] : r[p];
+                }
+                case 15: return (_dtime * 2.0) % 1 < 0.5 ? -3 : 1;                                             // джампинг-джек: руки вверх в прыжке
+                case 16: return left ? ((_dtime * 6) % 1 < 0.5 ? -3 : -2) : 0;                                  // наездник: одна рука крутит «лассо»
+                case 17: return Math.Sin(_dtime * 9 + side) > 0 ? -0.5 : 0.5;                                  // шаффл
+                case 18: return ((int)(_dtime * 6) % 2 == 0) == left ? -3 : -1;                                  // тектоник: руки по очереди вверх
+                case 19:                                                                                       // сальто
+                {
+                    var ph = Flip().phase;
+                    return ph < 0.25 ? 1 : ph < 0.75 ? -1 : -2;
+                }
+                case 20: return (_dtime * 1.1) % 1 >= 0.6 ? (left ? -3 : -1) : (Math.Sin(_dtime * 6 + side) > 0 ? -1 : 0); // дэб: поза на долю
                 default: return Math.Sin(_dtime * 10 + side) > 0 ? -1 : 0;
             }
         }
@@ -481,7 +523,7 @@ namespace Isle.Helpers
                 _dance = PickDance(Bpm, Energy, _dance, _rnd); // по темпу и «плотности» музыки
                 _danceStart = _dtime;
                 // брейк-данс — ровно два полных круга (падение → вращение → фриз), чтобы не обрывался посреди
-                _nextDance = DateTime.Now.AddSeconds(_dance == 8 ? 2 / 0.17 : 7 + _rnd.NextDouble() * 5);
+                _nextDance = DateTime.Now.AddSeconds(_dance == 8 ? 2 / 0.17 : _dance == 19 ? 3 / 0.45 : 7 + _rnd.NextDouble() * 5);
             }
             if (mood == Mood.Music && (_dance == 4)) { _lookY += (0.8 - _lookY) * FrameClock.Lerp(0.3); } // хедбэнг — смотрит в пол
         }
@@ -1154,6 +1196,60 @@ namespace Isle.Helpers
                             dy = -_bob * 0.6 * px;
                             step = Math.Sin(_dtime * 7) > 0;
                             break;
+                        case 13: // чарльстон: выбрасывает ножки вперёд-назад, корпус качается навстречу
+                        {
+                            double ph = (_dtime * 1.8) % 1;
+                            dx = Math.Sin(ph * 2 * Math.PI) * 1.2 * px;
+                            tilt = Math.Sin(ph * 2 * Math.PI) * 8;
+                            dy = -(Math.Abs(Math.Sin(ph * 4 * Math.PI)) * 0.8 + _bob * 0.6) * px;
+                            step = ph < 0.5;
+                            break;
+                        }
+                        case 14: // макарена: стоит, на последней позе крутит бёдрами
+                        {
+                            int p = MacarenaPose();
+                            dy = -(_bob * 0.6 + (p % 2) * 0.2) * px;
+                            if (p == 7) { dx = Math.Sin(_dtime * 14) * 0.8 * px; tilt = Math.Sin(_dtime * 14) * 6; }
+                            step = p == 7 && Math.Sin(_dtime * 14) > 0;
+                            break;
+                        }
+                        case 15: // джампинг-джек: прыжок — ноги врозь, руки вверх
+                        {
+                            double ph = (_dtime * 2.0) % 1;
+                            dy = -(Math.Sin(ph * Math.PI) * 1.6 + _bob * 0.6) * px;
+                            step = ph < 0.5;
+                            break;
+                        }
+                        case 16: // наездник: подскоки боком, будто скачет на лошади
+                        {
+                            double ph = (_dtime * 2.4) % 1;
+                            dy = -(Math.Abs(Math.Sin(ph * 2 * Math.PI)) * 1.0 + _bob * 0.5) * px;
+                            dx = Math.Sin(_dtime * 1.2) * 1.0 * px;
+                            tilt = Math.Sin(_dtime * 2.4) * 4;
+                            step = ph < 0.5;
+                            break;
+                        }
+                        case 17: // шаффл: быстрые шаги на месте, скольжение из стороны в сторону
+                            dx = Math.Sin(_dtime * 9) * 0.9 * px;
+                            tilt = Math.Sin(_dtime * 9) * 3;
+                            dy = -_bob * 0.5 * px;
+                            step = Math.Sin(_dtime * 18) > 0;
+                            break;
+                        case 18: // тектоник: подпрыгивает в такт рукам
+                            dy = -(Math.Abs(Math.Sin(_dtime * 6 * Math.PI / 2)) * 0.4 + _bob * 0.8) * px;
+                            tilt = ((int)(_dtime * 6) % 2 == 0 ? 4 : -4);
+                            step = (int)(_dtime * 6) % 2 == 0;
+                            break;
+                        case 19: // сальто: угол и подъём считаются в Flip()
+                        {
+                            double fph = Flip().phase;
+                            step = fph >= 0.25 && fph < 0.75;
+                            break;
+                        }
+                        case 20: // дэб: пританцовывает и на долю — резкая поза с наклоном
+                            if ((_dtime * 1.1) % 1 >= 0.6) { tilt = -14; dy = -_bob * 0.4 * px; }
+                            else { dy = -(Math.Abs(Math.Sin(_dtime * 6)) * 0.6 + _bob * 0.6) * px; tilt = Math.Sin(_dtime * 3) * 5; step = Math.Sin(_dtime * 6) > 0; }
+                            break;
                         default: // прыжки (как раньше)
                             dy = -(Math.Abs(Math.Sin(_dtime * 7.5)) * 1.1 + _bob * 1.4) * px;
                             tilt = Math.Sin(_dtime * 3.75) * 9;
@@ -1200,6 +1296,13 @@ namespace Isle.Helpers
             {
                 // брейк-данс: падает и крутится на спине вокруг центра тела
                 var (ang, down, _) = Breakdance();
+                oy += down * px;
+                tf.Children.Add(new RotateTransform(-ang, ox + 6.5 * px, oy + 4.5 * px));
+            }
+            else if (mood == Mood.Music && _dance == 19 && _cheer <= 0)
+            {
+                // сальто: подпрыгивает и делает полный оборот вокруг центра тела
+                var (ang, down, _) = Flip();
                 oy += down * px;
                 tf.Children.Add(new RotateTransform(-ang, ox + 6.5 * px, oy + 4.5 * px));
             }

@@ -95,6 +95,14 @@ namespace Isle
                 await Task.Delay(1600); // полёт ~1.1 с
                 Phase("idle");
                 await Task.Delay(1900);
+                Phase("toast-ok");
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Снимок скопирован", Subtitle = "Сохранён в Изображения\\Isle", Icon = Icons.Check, Important = true, Duration = TimeSpan.FromSeconds(1.6) });
+                await Task.Delay(1800);
+                Phase("toast-err");
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Не удалось сохранить", Subtitle = "Нет доступа к папке", Icon = Icons.Info, Important = true, Duration = TimeSpan.FromSeconds(1.6) });
+                await Task.Delay(1800);
+                Phase("idle");
+                await DanceSheets(dir);
                 Journal.Info("bench", "память перед уборкой: " + (Environment.WorkingSet >> 20) + " МБ, управляемая " + (GC.GetTotalMemory(false) >> 20) + " МБ");
                 Helpers.MemoryTrim.Now("стенд");
                 await Task.Delay(500);
@@ -119,6 +127,41 @@ namespace Isle
                 File.WriteAllText(Path.Combine(dir, "done.txt"), DateTime.UtcNow.ToString("O"));
                 Application.Current.Shutdown();
             }
+        }
+
+        /// <summary>Каждый танец Клоди — полоска из 10 кадров (по 120 мс) в dance-NN.png: проверить, как он выглядит.</summary>
+        private static async Task DanceSheets(string dir)
+        {
+            try
+            {
+                var buddy = new Isle.Helpers.Character { Mood = Isle.Helpers.Mood.Music, FollowCursor = false, Bpm = 120, Energy = 0.5 };
+                var stage = new Border { Width = 160, Height = 110, Background = new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x18)),
+                    Child = new Viewbox { Child = buddy, Margin = new Thickness(40, 22, 40, 18) } };
+                var win = new Window { Content = stage, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false, Left = -4000, Top = -4000 };
+                win.Show();
+                for (int d = 0; d < Isle.Helpers.Character.DanceCount; d++)
+                {
+                    buddy.ForceDance(d);
+                    var sheet = new System.Windows.Media.Imaging.RenderTargetBitmap(160 * 10, 110, 96, 96, PixelFormats.Pbgra32);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen())
+                        for (int f = 0; f < 10; f++)
+                        {
+                            await Task.Delay(120);
+                            stage.UpdateLayout();
+                            var one = new System.Windows.Media.Imaging.RenderTargetBitmap(160, 110, 96, 96, PixelFormats.Pbgra32);
+                            one.Render(stage);
+                            dc.DrawImage(one, new Rect(f * 160, 0, 160, 110));
+                        }
+                    sheet.Render(dv);
+                    var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(sheet));
+                    using var fs = File.Create(Path.Combine(dir, "dance-" + d.ToString("00") + ".png"));
+                    enc.Save(fs);
+                }
+                win.Close();
+            }
+            catch (Exception ex) { Journal.Warn("bench", "кадры танцев: " + ex.Message); }
         }
 
         /// <summary>Фон на весь экран: пёстрые строки «текста», чтобы мозаике было что закрывать.</summary>
