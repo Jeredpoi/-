@@ -87,6 +87,8 @@ namespace Isle
         [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr o);
         [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
         [DllImport("user32.dll")] private static extern bool GetCursorInfo(ref CURSORINFO ci);
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINTI p);
+        [StructLayout(LayoutKind.Sequential)] private struct POINTI { public int x, y; }
         [DllImport("user32.dll")] private static extern bool DrawIconEx(IntPtr dc, int x, int y, IntPtr icon, int w, int h, uint step, IntPtr brush, uint flags);
         [DllImport("user32.dll")] private static extern bool GetIconInfo(IntPtr icon, out ICONINFO info);
         [StructLayout(LayoutKind.Sequential)] private struct BITMAPINFOHEADER { public int size, width, height; public short planes, bits; public int compression, sizeImage, xppm, yppm, clrUsed, clrImportant; }
@@ -119,13 +121,9 @@ namespace Isle
                 while (_recording)
                 {
                     BitBlt(mem, 0, 0, W, H, screen, 0, 0, 0x00CC0020 | 0x40000000); // SRCCOPY | CAPTUREBLT — вместе с прозрачными окнами
-                    var ci = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
-                    if (GetCursorInfo(ref ci) && (ci.flags & 1) != 0)
-                    {
-                        int hx = 0, hy = 0;
-                        if (GetIconInfo(ci.hCursor, out var ii)) { hx = ii.xHotspot; hy = ii.yHotspot; if (ii.hbmMask != IntPtr.Zero) DeleteObject(ii.hbmMask); if (ii.hbmColor != IntPtr.Zero) DeleteObject(ii.hbmColor); }
-                        DrawIconEx(mem, ci.x - hx, ci.y - hy, ci.hCursor, 0, 0, 0, IntPtr.Zero, 3);
-                    }
+                    // курсор не рисуем — его дорисует монтаж по cursor.txt (на машине GitHub он в захват не попадает)
+                    var ci = new CURSORINFO();
+                    if (GetCursorPos(out var cp)) { ci.x = cp.x; ci.y = cp.y; } else { ci.x = _pos.x; ci.y = _pos.y; }
                     Marshal.Copy(bits, buf, 0, buf.Length);
                     for (int i = 3; i < buf.Length; i += 4) buf[i] = 255;
                     // держим ровно 30 к/с: если кадр снимался дольше — дублируем его
@@ -197,6 +195,8 @@ namespace Isle
                     : "Конечно! Вот что можно сделать:\n• выделить область и замазать лишнее\n• отправить снимок в чат";
                 await Wait(2.5);
                 var wall = ShowWallpaper();
+                // чёлка — непрозрачное окно (см. App): фон — те же обои, ровно под ним
+                w.Background = WallBrush(w.Left, w.Top);
                 await Wait(2);
 
                 var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
@@ -346,12 +346,19 @@ namespace Isle
         }
 
         /// <summary>«Рабочий стол» за чёлкой: градиент и окно-чат (его потом замажет мозаика). Не во весь экран — иначе чёлка спрячется.</summary>
-        private static Window ShowWallpaper()
+        /// <summary>Градиент обоев в координатах экрана (точки), сдвинутый под окно с левым верхним углом (ox, oy).</summary>
+        private static LinearGradientBrush WallBrush(double ox, double oy)
         {
-            var bg = new LinearGradientBrush(new GradientStopCollection
+            double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
+            return new LinearGradientBrush(new GradientStopCollection
             {
                 new GradientStop(Color.FromRgb(0x2B, 0x1A, 0x5E), 0), new GradientStop(Color.FromRgb(0x8E, 0x2D, 0x7A), 0.55), new GradientStop(Color.FromRgb(0xF0, 0x8A, 0x4B), 1)
-            }, new Point(0, 0), new Point(1, 1));
+            }, new Point(-ox, -oy), new Point(sw - ox, sh - oy)) { MappingMode = BrushMappingMode.Absolute };
+        }
+
+        private static Window ShowWallpaper()
+        {
+            var bg = WallBrush(0, 0);
             var chat = new StackPanel { Margin = new Thickness(26) };
             string[] lines = { "Маша: идём сегодня в кино?", "Я: давай, во сколько?", "Маша: в 19:40, билеты уже взяла 🎟", "Я: пароль от вайфая — kino2024!", "Маша: ахах, отправила тебе адрес", "Я: ок, буду" };
             foreach (var l in lines)
@@ -364,7 +371,7 @@ namespace Isle
             var card = new Border
             {
                 Width = 620, Background = new SolidColorBrush(Color.FromArgb(0xB0, 0x10, 0x10, 0x16)), CornerRadius = new CornerRadius(22),
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Child = chat
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 90), Child = chat
             };
             double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
             var win = new Window

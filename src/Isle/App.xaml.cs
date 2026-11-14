@@ -68,6 +68,9 @@ namespace Isle
                 var w = new MainWindow();
                 Trace("окно создано");
                 AppHost.Window = w;
+                // съёмка ролика: машина GitHub не умеет записывать прозрачные окна — чёлка становится обычным окном
+                // с фоном-копией обоев под ней (Promo ставит фон), так её видно на записи
+                if (_promo) w.AllowsTransparency = false;
                 w.Show();
                 Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
