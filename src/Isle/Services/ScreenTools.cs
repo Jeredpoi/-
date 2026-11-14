@@ -81,13 +81,16 @@ namespace Isle.Services
             return path;
         }
 
-        public static void CopyImage(BitmapSource bmp)
+        /// <summary>Положить картинку в буфер обмена (5 попыток — буфер бывает занят другой программой).</summary>
+        public static bool CopyImage(BitmapSource bmp)
         {
             for (int i = 0; i < 5; i++)
             {
-                try { Clipboard.SetImage(bmp); return; }
+                try { Clipboard.SetImage(bmp); return true; }
                 catch { System.Threading.Thread.Sleep(50); }
             }
+            Journal.Warn("capture", "буфер обмена занят другой программой — картинку положить не удалось");
+            return false;
         }
 
         public static byte[] Bgra(BitmapSource bmp, out int w, out int h)

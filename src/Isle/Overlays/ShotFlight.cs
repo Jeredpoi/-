@@ -135,7 +135,8 @@ namespace Isle.Overlays
             {
                 if (begun) return;
                 begun = true;
-                shown?.Invoke();
+                // ошибка в «показан» (слой уже закрыт страховкой) не должна оставить окошко висеть на экране
+                try { shown?.Invoke(); } catch (Exception ex) { Journal.Warn("capture", "полёт: " + ex.Message); }
                 sw.Restart();
                 CompositionTarget.Rendering += tick;
             }

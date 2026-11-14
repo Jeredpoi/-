@@ -24,7 +24,7 @@ namespace Isle
             _icon = new Forms.NotifyIcon
             {
                 Icon = _img,
-                Text = "Isle — чёлка работает. " + AppSettings.Current.Hotkey + " — открыть",
+                Text = string.IsNullOrWhiteSpace(AppSettings.Current.Hotkey) ? "Isle — чёлка работает" : "Isle — чёлка работает. " + AppSettings.Current.Hotkey + " — открыть",
                 ContextMenuStrip = menu,
                 Visible = true
             };
@@ -33,7 +33,7 @@ namespace Isle
             if (!AppSettings.Current.TrayHintShown)
             {
                 _icon.ShowBalloonTip(3000, "Isle запущен",
-                    "Чёлка сверху по центру экрана. Наведи курсор на верхний край или нажми " + AppSettings.Current.Hotkey + ".", Forms.ToolTipIcon.None);
+                    "Чёлка сверху по центру экрана. Наведи курсор на верхний край" + (string.IsNullOrWhiteSpace(AppSettings.Current.Hotkey) ? "." : " или нажми " + AppSettings.Current.Hotkey + "."), Forms.ToolTipIcon.None);
                 AppSettings.Current.TrayHintShown = true;
                 AppSettings.Current.Save();
             }

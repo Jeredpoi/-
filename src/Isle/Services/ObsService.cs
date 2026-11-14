@@ -64,7 +64,9 @@ namespace Isle.Services
                 var d = await RequestAsync("GetRecordDirectory");
                 var dir = d.TryGetProperty("recordDirectory", out var rd) ? rd.GetString() : null;
                 if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
-                    return new System.IO.DirectoryInfo(dir).GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName;
+                    return new System.IO.DirectoryInfo(dir).GetFiles()
+                        .Where(f => f.Extension.ToLowerInvariant() is ".mkv" or ".mp4" or ".mov" or ".flv" or ".ts" or ".m3u8" or ".fmp4" or ".hybrid_mp4" or ".webm")
+                        .OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName;
             }
             catch { }
             return null;
@@ -82,10 +84,14 @@ namespace Isle.Services
         };
 
         private static DateTime _savedShownAt;
+        private static string _savedFile;
         public static void ShowSaved(string file)
         {
-            if (DateTime.Now - _savedShownAt < TimeSpan.FromSeconds(10)) return; // кнопка и слежение за OBS не дублируют друг друга
+            // кнопка и слежение за OBS не дублируют друг друга; но точный путь важнее догадки — его показываем
+            bool recent = DateTime.Now - _savedShownAt < TimeSpan.FromSeconds(10);
+            if (recent && (file == null || file == _savedFile)) return;
             _savedShownAt = DateTime.Now;
+            _savedFile = file;
             ToastBus.Show(SavedToast(file));
         }
 
@@ -109,7 +115,7 @@ namespace Isle.Services
 
         private static async Task PollOnce()
         {
-            bool rec = false, live = false;
+            bool rec = false, live = false, known = false;
             // список процессов — не в потоке интерфейса (раз в 3 с он подтормаживал анимацию)
             if (AppSettings.Current.ObsStatus && await Task.Run(IsObsRunning))
             {
@@ -119,6 +125,7 @@ namespace Isle.Services
                     rec = r.TryGetProperty("outputActive", out var a) && a.GetBoolean();
                     var st = await RequestAsync("GetStreamStatus");
                     live = st.TryGetProperty("outputActive", out var b) && b.GetBoolean();
+                    known = true;
                 }
                 catch { return; }
             }
@@ -126,7 +133,8 @@ namespace Isle.Services
             if (rec == Recording && live == Streaming) return;
             Recording = rec; Streaming = live;
             Changed?.Invoke();
-            if (stoppedRec) ShowSaved(await LastRecordingAsync());
+            // «Запись сохранена» — только если OBS сам сказал, что запись остановлена (а не упал / закрыт / слежение выключено)
+            if (stoppedRec && known) ShowSaved(await LastRecordingAsync());
         }
 
         /// <summary>Проверка подключения: возвращает версию OBS.</summary>

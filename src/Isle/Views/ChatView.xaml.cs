@@ -151,7 +151,8 @@ namespace Isle.Views
 
         public async void Ask(string text)
         {
-            if (_busy) return;
+            // ИИ ещё отвечает — не теряем вопрос: кладём его в поле ввода, отправить можно следом
+            if (_busy) { if (!string.IsNullOrWhiteSpace(text)) { Input.Text = text; Input.CaretIndex = text.Length; } return; }
             _busy = true;
             SendBtn.IsEnabled = false;
             Welcome.Visibility = Visibility.Collapsed;
@@ -249,7 +250,8 @@ namespace Isle.Views
 
         private void SaveSession()
         {
-            var real = _msgs.Where(m => m.Role == "user" || m.Role == "assistant").ToList();
+            // «…» — заглушка, пока ИИ думает; в историю её не пишем (иначе она уйдёт модели как ответ)
+            var real = _msgs.Where(m => (m.Role == "user" || m.Role == "assistant") && !(m.Role == "assistant" && m.Text == "…")).ToList();
             if (real.Count == 0) return;
             _session.Messages = real.Select(m => new ChatMessage { Role = m.Role, Text = m.Text }).ToList();
             if (!_session.AiTitle)

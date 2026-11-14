@@ -384,8 +384,8 @@ namespace Isle
                     _kbHook = IntPtr.Zero;
                 }) { IsBackground = true, Name = "Isle keyboard hook" };
                 _kbThread.Start();
-                ready.Wait(2000);
-                if (_kbHook == IntPtr.Zero) _kbThread = null;
+                // не дождались (тяжёлый старт) — поток всё равно поставит перехват позже; второй не запускаем
+                if (ready.Wait(2000) && _kbHook == IntPtr.Zero) _kbThread = null;
             }
             else if (!want && _kbThread != null)
             {
@@ -581,7 +581,7 @@ namespace Isle
                 return true;
             }
             if (!TryParseHotkey(gesture, out uint mods, out uint key, name == "collapse"))
-            { error = name == "collapse" ? "Выбери клавишу или сочетание клавиш." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
+            { error = name == "collapse" ? "Выбери Esc, F1–F24 или сочетание с Ctrl, Alt, Shift или Win." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
             var settings = AppSettings.Current;
             var bindings = HotkeySpecs(settings);
             foreach (var b in bindings.Where(b => b.Name != name))
@@ -638,6 +638,8 @@ namespace Isle
                 if (parsed != Key.None || !Enum.TryParse(parts[i], true, out parsed) || parsed == Key.None || parsed == Key.System) return false;
             }
             if (parsed == Key.None || (!allowNoModifier && modifiers == 0)) return false;
+            // одиночная клавиша (для «свернуть») — только Esc или F1–F24: буква или пробел мешали бы печатать в острове
+            if (modifiers == 0 && parsed != Key.Escape && !(parsed >= Key.F1 && parsed <= Key.F24)) return false;
             key = (uint)KeyInterop.VirtualKeyFromKey(parsed);
             return key is > 0 and <= 0xFF;
         }
@@ -2595,7 +2597,10 @@ namespace Isle
         /// </summary>
         private void CheckTopPush()
         {
-            if (State == IslandState.Expanded || !Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
+            // пока открыта — «упор» считаем уже засчитанным: после сворачивания с клавиатуры курсор у края
+            // не должен сразу открыть её снова, сначала уведи его от края
+            if (State == IslandState.Expanded) { _pushTicks = 1; return; }
+            if (!Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
             bool atTop = false;
             try
             {

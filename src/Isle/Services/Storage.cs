@@ -18,7 +18,15 @@ namespace Isle.Services
             {
                 var path = Path.Combine(Dir, name);
                 if (File.Exists(path))
-                    return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T();
+                {
+                    try { return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T(); }
+                    catch (Exception ex)
+                    {
+                        // битый файл — сохраняем копию, прежде чем его перезапишут настройками по умолчанию
+                        try { File.Copy(path, path + ".bad", true); } catch { }
+                        try { Journal.Error("storage", name + " не прочитался (копия: " + name + ".bad): " + ex.Message); } catch { }
+                    }
+                }
             }
             catch { }
             return new T();

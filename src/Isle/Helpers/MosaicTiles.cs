@@ -21,6 +21,16 @@ namespace Isle.Helpers
 
         public MosaicTiles() { IsHitTestVisible = false; }
 
+        /// <summary>Убрать всё (рамка схлопнулась в линию). Вместе с картинками забываем и кусочки —
+        /// иначе при новом растягивании они считались бы «уже нарисованными», и под мозаикой оставались дыры.</summary>
+        public void Reset()
+        {
+            Children.Clear();
+            _tiles.Clear();
+            _block = -1;
+            Clip = null;
+        }
+
         /// <summary>Размер квадрата, выбранный при первом обновлении (дальше не меняется — сетка не дрожит).</summary>
         public int Block => _block;
         /// <summary>Сколько кусочков пересчитано при последнем обновлении (для журнала).</summary>

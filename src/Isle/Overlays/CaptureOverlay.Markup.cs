@@ -567,7 +567,7 @@ namespace Isle.Overlays
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
-            if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Children.Clear(); return; }
+            if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Reset(); _livePx = Int32Rect.Empty; return; }
             // размер квадрата — ступеньками (6, 8, 12…24): пока тянешь, он меняется редко, и квадраты не «дрожат»
             int want = Mosaic.BlockForPatch(x1 - x0, y1 - y0), block = BlockSteps[0];
             foreach (var b in BlockSteps) if (b <= want) block = b;
@@ -702,10 +702,15 @@ namespace Isle.Overlays
                 if (saved) return;
                 saved = true;
                 var t1 = System.Diagnostics.Stopwatch.StartNew();
-                Hide();
-                var full = RenderFlat(content, _cropW, _cropH);
-                Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс" + how);
-                Finish(full);
+                BitmapSource full = null;
+                try
+                {
+                    Hide();
+                    full = RenderFlat(content, _cropW, _cropH);
+                    Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс" + how);
+                }
+                catch (Exception ex) { Journal.Error("capture", "склейка не удалась: " + ex); }
+                finally { Finish(full); } // слой обязательно закрывается — иначе снимки «залипали» до перезапуска
             }
             // страховка: если окошко полёта почему-то не появилось — всё равно сохраняем (иначе слой завис бы без Esc)
             var guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
@@ -714,7 +719,12 @@ namespace Isle.Overlays
             try
             {
                 // сначала на экране появляется окошко с копией, и только потом прячется слой — без «провала»
-                ShotFlight.Fly(preview, fromPx, Hide, () => { guard.Stop(); Complete(""); });
+                // окошко на экране: прячем слой и сразу возвращаем чёлку — снимок летит в неё, а не в пустоту
+                ShotFlight.Fly(preview, fromPx, () =>
+                {
+                    if (!saved) Hide();
+                    try { AppHost.Window.Visibility = Visibility.Visible; } catch { }
+                }, () => { guard.Stop(); Complete(""); });
             }
             catch (Exception ex)
             {
@@ -729,7 +739,13 @@ namespace Isle.Overlays
         {
             var dv = new DrawingVisual();
             using (var dc = dv.RenderOpen())
-                dc.DrawRectangle(new VisualBrush(content) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
+                // Viewbox — ровно размер снимка: иначе пометка у края (маркер, текст) расширяла рамку
+                // содержимого, и вся картинка сжималась и сдвигалась
+                dc.DrawRectangle(new VisualBrush(content)
+                {
+                    Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute,
+                    Viewbox = new Rect(0, 0, content.Width, content.Height)
+                }, null, new Rect(0, 0, w, h));
             var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(dv);
             rtb.Freeze();

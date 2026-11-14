@@ -500,7 +500,9 @@ namespace Isle.Views
             {
                 double n = double.Parse(timer.Groups[2].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
                 var u = timer.Groups[3].Value.ToLowerInvariant();
-                var span = u.StartsWith("с") || u.StartsWith("s") ? TimeSpan.FromSeconds(n) : u.StartsWith("ч") || u.StartsWith("h") ? TimeSpan.FromHours(n) : TimeSpan.FromMinutes(n);
+                double sec = n * (u.StartsWith("с") || u.StartsWith("s") ? 1 : u.StartsWith("ч") || u.StartsWith("h") ? 3600 : 60);
+                if (!(sec >= 1 && sec <= 100 * 3600)) { ToastBus.Show(new Toast { Kind = ToastKind.Info, Title = "Таймер", Subtitle = "Можно от 1 секунды до 100 часов", Icon = Icons.Timer }); return; } // огромное число роняло TimeSpan
+                var span = TimeSpan.FromSeconds(sec);
                 AppHost.Timer.StartNew(span);
                 HideCommand();
                 AppHost.Window.Collapse();
