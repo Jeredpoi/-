@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,63 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapVisual(FrameworkElement v, string dir, string name, Rect? crop = null)
+        {
+            v.UpdateLayout();
+            var r = crop ?? new Rect(0, 0, v.ActualWidth, v.ActualHeight);
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(r.Width * 2), (int)(r.Height * 2), 192, 192, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(20, 16, 30)), null, new Rect(0, 0, r.Width, r.Height)); dc.DrawRectangle(new VisualBrush(v) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top, ViewboxUnits = BrushMappingMode.Absolute, Viewbox = r }, null, new Rect(0, 0, r.Width, r.Height)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png"));
+            enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                var desk = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                Directory.CreateDirectory(desk);
+                // тестовые ярлыки: .lnk на программы Windows и .url как у Steam
+                void Lnk(string name, string target)
+                {
+                    var t = Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"));
+                    dynamic sh = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                    var l = sh.CreateShortcut(Path.Combine(desk, name + ".lnk")); l.TargetPath = target; l.Save();
+                }
+                var win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                Lnk("Блокнот", Path.Combine(win, "notepad.exe"));
+                Lnk("Проводник", Path.Combine(win, "explorer.exe"));
+                Lnk("Paint", Path.Combine(win, "System32", "mspaint.exe"));
+                Lnk("Калькулятор", Path.Combine(win, "System32", "calc.exe"));
+                File.WriteAllText(Path.Combine(desk, "Cyberpunk 2077.url"), "[InternetShortcut]\nURL=steam://rungameid/1091500\nIconIndex=0\nIconFile=" + Path.Combine(win, "System32", "shell32.dll") + "\n");
+                AppSettings.Current.Launcher = new() { Path.Combine(desk, "Блокнот.lnk"), Path.Combine(desk, "Проводник.lnk"), Path.Combine(desk, "Paint.lnk"), Path.Combine(desk, "Cyberpunk 2077.url") };
+                await Task.Delay(3500);
+                w.SuppressAutoCollapse = true;
+                w.Expand("home");
+                await Task.Delay(1500);
+                var home = (Isle.Views.HomeView)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "home" });
+                var box = home.LauncherBox;
+                var pt = box.TranslatePoint(new Point(0, 0), w.Content as UIElement);
+                SnapVisual(w.Content as FrameworkElement, dir, "home-1-bottom", new Rect(pt.X - 10, pt.Y - 10, box.ActualWidth + 20, box.ActualHeight + 20));
+                SnapVisual(w.Content as FrameworkElement, dir, "home-0-full");
+                typeof(Isle.Views.HomeView).GetMethod("OnLauncherAdd", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(home, new object[] { null, null });
+                await Task.Delay(800);
+                // меню — отдельное всплывающее окно: ищем его корень и снимаем
+                var src = System.Linq.Enumerable.OfType<System.Windows.Interop.HwndSource>(System.Windows.Interop.HwndSource.CurrentSources).Select(h => h.RootVisual).OfType<FrameworkElement>().Where(v => v.GetType().Name.Contains("Popup")).ToList();
+                int k = 0;
+                foreach (var v in src) SnapVisual(v, dir, "home-2-menu-" + (k++));
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
