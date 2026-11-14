@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -117,6 +118,39 @@ namespace Isle
                 Snap(w, dir, "clip-7-search");
                 v.Search.Text = ""; v.Search.Focus(); await Task.Delay(300);
                 Snap(w, dir, "clip-8-searchfocus");
+                // снимок из «привязанного» приложения → в папку
+                var np = System.Diagnostics.Process.Start("notepad.exe");
+                await Task.Delay(2500);
+                try { np.WaitForInputIdle(3000); } catch { }
+                Isle.Native.Win32.ForceForeground(np.MainWindowHandle);
+                await Task.Delay(800);
+                File.AppendAllText(Path.Combine(dir, "log.txt"), "впереди: " + Isle.Native.Win32.ForegroundProcessName() + "\n");
+                c.SetFolderApp("Работа", "notepad", true);
+                ClipboardService.NoteShotApp();
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 120, 96, 96, PixelFormats.Pbgra32);
+                var dv2 = new DrawingVisual(); using (var dc = dv2.RenderOpen()) dc.DrawRectangle(Brushes.OrangeRed, null, new Rect(0, 0, 200, 120));
+                bmp.Render(dv2); bmp.Freeze();
+                ScreenTools.CopyImage(bmp);
+                await Task.Delay(2500);
+                var top = c.Items.FirstOrDefault();
+                File.AppendAllText(Path.Combine(dir, "log.txt"), "первая запись: " + top?.Text + " · источник " + top?.Source + " · папка " + (top?.Folder ?? "—") + "\n");
+                w.Activate();
+                w.Expand("clip");
+                await Task.Delay(800);
+                Call(v, "SelectFolder", "Работа"); await Task.Delay(400);
+                Snap(w, dir, "clip-9-folder-apps");
+                Call(v, "AppsMenu", "Работа", v.AppsBar); await Task.Delay(800);
+                var pops = System.Linq.Enumerable.OfType<System.Windows.Interop.HwndSource>(System.Windows.Interop.HwndSource.CurrentSources).Select(h => h.RootVisual).OfType<FrameworkElement>().Where(x => x.GetType().Name.Contains("Popup")).ToList();
+                int k = 0;
+                foreach (var pv in pops)
+                {
+                    pv.UpdateLayout();
+                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)pv.ActualWidth * 2, (int)pv.ActualHeight * 2, 192, 192, PixelFormats.Pbgra32);
+                    rtb.Render(pv);
+                    var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                    using var fs = File.Create(Path.Combine(dir, "clip-10-apps-menu-" + (k++) + ".png")); enc.Save(fs);
+                }
+                try { np.Kill(); } catch { }
             }
             catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
             Application.Current.Shutdown();
