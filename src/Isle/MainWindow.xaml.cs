@@ -163,8 +163,10 @@ namespace Isle
             {
                 _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen;
                 ApplyVisibility();
-                // игра на весь экран занимает видеокарту — чёлку рисуем процессором, иначе она раскрывается рывками
-                SetSoftRender(fs, fs ? "полноэкранное приложение" : "полноэкранное приложение закрыто");
+                // Сам по себе полноэкранный режим — не повод уходить на процессор (видео, развёрнутый браузер,
+                // мощная видеокарта — на процессоре чёлка на 144 Гц как раз подлагивала). Решает замер раскрытия.
+                _slowExpands = 0;
+                if (!fs) SetSoftRender(false, "полноэкранное приложение закрыто");
             };
             AppHost.WeatherChanged += UpdateWeatherMini;
 
@@ -510,8 +512,13 @@ namespace Isle
         private bool _softRender;
         private System.Windows.Media.Effects.Effect _shadowEffect;
         private DateTime _softUntil = DateTime.MinValue; // до какого времени держать процессор после медленного раскрытия
+        private bool _expandWarm;    // первое раскрытие (прогрев) уже было
+        private int _slowExpands;    // медленных раскрытий подряд
         private readonly Helpers.FrameMeter _expandMeter = new();
         private DispatcherTimer _expandMeterStop;
+
+        /// <summary>Чёлка рисуется процессором — видеокарта занята (игра). Полёт снимка тогда тоже идёт процессором.</summary>
+        public bool SoftRender => _softRender;
 
         private void SetSoftRender(bool soft, string why)
         {
@@ -544,10 +551,16 @@ namespace Isle
                 _expandMeterStop.Stop();
                 var (fps, _, text) = _expandMeter.StopStats();
                 Journal.Info("render", "раскрытие (" + (_softRender ? "процессор" : "видеокарта") + "): " + text);
-                if (!_softRender && fps > 0 && fps < 20)
+                // первое раскрытие после запуска всегда медленное (программа «прогревается») — его не считаем
+                if (!_expandWarm) { _expandWarm = true; return; }
+                bool fullscreen = AppHost.Watchers?.IsFullscreen ?? false;
+                if (!_softRender && fps > 0 && fps < 20) _slowExpands++; else if (fps >= 20) _slowExpands = 0;
+                // видеокарта занята: в игре хватает одного медленного раскрытия, на обычном столе — двух подряд
+                if (!_softRender && _slowExpands >= (fullscreen ? 1 : 2))
                 {
-                    _softUntil = DateTime.Now.AddMinutes(10);
-                    SetSoftRender(true, "раскрытие шло " + Math.Round(fps) + " к/с — видеокарта занята (на 10 минут)");
+                    _slowExpands = 0;
+                    _softUntil = DateTime.Now.AddMinutes(fullscreen ? 10 : 3);
+                    SetSoftRender(true, "раскрытие шло " + Math.Round(fps) + " к/с — видеокарта занята (на " + (fullscreen ? 10 : 3) + " мин)");
                 }
                 else if (_softRender && DateTime.Now >= _softUntil && !(AppHost.Watchers?.IsFullscreen ?? false))
                     SetSoftRender(false, "видеокарта снова свободна");

@@ -240,6 +240,9 @@ namespace Isle.Services
                 }
                 var fg = Win32.GetForegroundWindow();
                 if (fg == IntPtr.Zero || fg == Win32.GetDesktopWindow() || fg == Win32.GetShellWindow()) return false;
+                // окна самого Isle (слой снимка экрана на весь экран, настройки) — не «полноэкранная игра»
+                Win32.GetWindowThreadProcessId(fg, out uint fgPid);
+                if (fgPid == (uint)Environment.ProcessId) return false;
                 var cls = new StringBuilder(64);
                 Win32.GetClassName(fg, cls, cls.Capacity);
                 var c = cls.ToString();

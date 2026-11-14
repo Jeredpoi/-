@@ -687,7 +687,9 @@ namespace Isle.Overlays
             content.Measure(new Size(_area.Width, _area.Height));
             content.Arrange(new Rect(0, 0, _area.Width, _area.Height));
             content.UpdateLayout();
-            double k = Math.Min(1, 900.0 / Math.Max(_cropW, _cropH));
+            // копия для полёта: снимок стартует с настоящего размера — копия почти полная, чтобы не было мыла;
+            // когда рисует процессор (игра), окошко маленькое — хватит и 900 px
+            double k = Math.Min(1, ((AppHost.Window?.SoftRender ?? false) ? 900.0 : 1600.0) / Math.Max(_cropW, _cropH));
             var preview = RenderFlat(content, Math.Max(1, (int)(_cropW * k)), Math.Max(1, (int)(_cropH * k)));
             _page.Children.Add(new Image { Source = preview, Stretch = Stretch.Fill });
             Journal.Info("capture", "сохранение: копия для полёта " + preview.PixelWidth + "×" + preview.PixelHeight + " за " + t0.ElapsedMilliseconds + " мс");
