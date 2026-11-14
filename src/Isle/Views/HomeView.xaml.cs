@@ -104,17 +104,24 @@ namespace Isle.Views
             if (desk.Count == 0) menu.Items.Add(new MenuItem { Header = "На рабочем столе нет ярлыков", IsEnabled = false });
             foreach (var path in desk)
             {
-                var item = new MenuItem { IsCheckable = true, StaysOpenOnClick = true, IsChecked = Has(path) };
-                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                var item = new MenuItem { StaysOpenOnClick = true };
+                // галочка справа — строки не прыгают, как со стандартной галочкой слева
+                var row = new Grid { MinWidth = 240 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
                 row.Children.Add(new System.Windows.Controls.Image { Source = Isle.Native.Win32.ShellIcon(path), Width = 20, Height = 20, Margin = new Thickness(0, 0, 10, 0) });
-                row.Children.Add(new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(path), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis });
+                var name = new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(path), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis };
+                Grid.SetColumn(name, 1); row.Children.Add(name);
+                var mark = new TextBlock { Text = "✓", FontSize = 13, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Visibility = Has(path) ? Visibility.Visible : Visibility.Hidden };
+                Grid.SetColumn(mark, 2); row.Children.Add(mark);
                 item.Header = row;
                 var p = path;
                 item.Click += (_, __) =>
                 {
                     if (Has(p)) _launch.Remove(_launch.First(l => string.Equals(l.Path, p, StringComparison.OrdinalIgnoreCase)));
                     else if (_launch.Count < 16) _launch.Add(new LauncherItem { Path = p });
-                    item.IsChecked = Has(p);
+                    mark.Visibility = Has(p) ? Visibility.Visible : Visibility.Hidden;
                     SaveLauncher();
                 };
                 menu.Items.Add(item);
