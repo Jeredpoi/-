@@ -318,6 +318,19 @@ namespace Isle.Native
             catch { return ""; }
         }
 
+        /// <summary>Имя процесса, которому принадлежит окно (пусто — не удалось).</summary>
+        public static string ProcessNameOf(IntPtr hwnd)
+        {
+            try
+            {
+                if (hwnd == IntPtr.Zero) return "";
+                GetWindowThreadProcessId(hwnd, out uint pid);
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                return p.ProcessName;
+            }
+            catch { return ""; }
+        }
+
         public static string ForegroundProcessName()
         {
             try

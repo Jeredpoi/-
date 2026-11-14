@@ -169,6 +169,8 @@ namespace Isle.Services
         public List<string> Folders { get; set; } = new();
         /// <summary>Папка, куда сейчас сохраняются все новые копии (null — никуда).</summary>
         public string ActiveFolder { get; set; }
+        /// <summary>Папка → приложения (имена процессов): снимки, сделанные в них, сами попадают в папку.</summary>
+        public Dictionary<string, List<string>> FolderApps { get; set; } = new();
     }
 
     /// <summary>История буфера обмена: текст и картинки. Хранится локально в %AppData%\Isle.</summary>
@@ -188,6 +190,56 @@ namespace Isle.Services
         }
         public event Action ActiveFolderChanged;
 
+        /// <summary>Папка → приложения, снимки из которых сами в неё попадают.</summary>
+        public Dictionary<string, List<string>> FolderApps { get; } = new();
+        public event Action FolderAppsChanged;
+
+        public IReadOnlyList<string> AppsOf(string folder) => FolderApps.TryGetValue(folder, out var l) ? l : Array.Empty<string>();
+
+        /// <summary>Включить или выключить «снимки из приложения → в папку». У приложения может быть только одна папка.</summary>
+        public void SetFolderApp(string folder, string app, bool on)
+        {
+            foreach (var kv in FolderApps) kv.Value.RemoveAll(a => a.Equals(app, StringComparison.OrdinalIgnoreCase));
+            if (on)
+            {
+                if (!FolderApps.TryGetValue(folder, out var list)) FolderApps[folder] = list = new List<string>();
+                list.Add(app);
+            }
+            foreach (var k in FolderApps.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList()) FolderApps.Remove(k);
+            Save();
+            FolderAppsChanged?.Invoke();
+        }
+
+        private string FolderForApp(string app) => string.IsNullOrEmpty(app) ? null
+            : FolderApps.FirstOrDefault(kv => kv.Value.Any(a => a.Equals(app, StringComparison.OrdinalIgnoreCase))).Key;
+
+        // ---------- из какого приложения снимок ----------
+        private static string _shotApp;
+        private static DateTime _shotAppAt;
+
+        /// <summary>
+        /// Запомнить приложение, которое снимают (Isle сам открывает слой выделения, и в момент копирования
+        /// активно уже не оно). Если впереди сама чёлка — берём окно, которое было до неё.
+        /// </summary>
+        public static void NoteShotApp()
+        {
+            var name = Win32.ForegroundProcessName();
+            if (IsOwnProcess(name)) name = Win32.ProcessNameOf(AppHost.Window?.PreviousForeground ?? IntPtr.Zero);
+            if (IsOwnProcess(name) || name.Length == 0) return;
+            _shotApp = name; _shotAppAt = DateTime.Now;
+        }
+
+        private static readonly string OwnName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+        private static bool IsOwnProcess(string name) => string.Equals(name, OwnName, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Откуда картинка: снимок Isle или «Ножниц» — приложение, которое снимали; иначе — кто скопировал.</summary>
+        private static string ImageSource(string source)
+        {
+            if ((IsOwnProcess(source) || IsScreenshotOwner(source) || source.Length == 0) && _shotApp != null && DateTime.Now - _shotAppAt < TimeSpan.FromMinutes(2))
+                return _shotApp;
+            return source;
+        }
+
         public void Attach(HwndSource src)
         {
             var data = Storage.Load<ClipboardData>("clipboard.json");
@@ -200,6 +252,8 @@ namespace Isle.Services
                 Items.Add(i);
             }
             _activeFolder = data.ActiveFolder != null && Folders.Contains(data.ActiveFolder) ? data.ActiveFolder : null;
+            foreach (var kv in data.FolderApps ?? new())
+                if (Folders.Contains(kv.Key) && kv.Value is { Count: > 0 }) FolderApps[kv.Key] = kv.Value.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             _ = Task.Run(CleanOrphans);
             Win32.AddClipboardFormatListener(src.Handle);
             src.AddHook(Hook);
@@ -293,6 +347,7 @@ namespace Isle.Services
             if (i < 0 || name.Length == 0 || (name != old && Folders.Contains(name, StringComparer.CurrentCultureIgnoreCase) && !string.Equals(name, old, StringComparison.CurrentCultureIgnoreCase))) return false;
             Folders[i] = name;
             foreach (var it in Items.Where(x => x.Folder == old)) it.Folder = name;
+            if (FolderApps.Remove(old, out var apps)) FolderApps[name] = apps;
             if (_activeFolder == old) { _activeFolder = name; ActiveFolderChanged?.Invoke(); }
             Save(); return true;
         }
@@ -302,6 +357,7 @@ namespace Isle.Services
         {
             foreach (var it in Items.Where(x => x.Folder == name)) it.Folder = null;
             Folders.Remove(name);
+            if (FolderApps.Remove(name)) FolderAppsChanged?.Invoke();
             if (_activeFolder == name) { _activeFolder = null; ActiveFolderChanged?.Invoke(); }
             Save();
         }
@@ -374,7 +430,7 @@ namespace Isle.Services
             string source = !string.IsNullOrEmpty(owner) && !IsScreenshotOwner(owner) ? owner : Win32.ForegroundProcessName();
             if (hasFiles) await AddFilesAsync(source);
             else if (hasText) await AddTextAsync(source);
-            else if (hasImage && s.ClipboardImages) { await AddImageAsync(); Helpers.MemoryTrim.Soon("картинка в буфере"); }
+            else if (hasImage && s.ClipboardImages) { await AddImageAsync(ImageSource(source)); Helpers.MemoryTrim.Soon("картинка в буфере"); }
         }
 
         /// <summary>
@@ -427,7 +483,7 @@ namespace Isle.Services
             Insert(existing, new ClipItem { Text = text, Source = source, Kind = Classify(text, source) });
         }
 
-        private async Task AddImageAsync()
+        private async Task AddImageAsync(string source)
         {
             try
             {
@@ -439,7 +495,6 @@ namespace Isle.Services
                     catch (System.Runtime.InteropServices.COMException) when (attempt < 4) { await Task.Delay(60 + attempt * 60); }
                 }
                 if (img == null) return;
-                var source = Win32.ForegroundProcessName();
                 // Хэш и PNG для снимка 4K — это сотни миллисекунд: считаем в фоне, чтобы чёлка не замирала при копировании картинки
                 if (img.CanFreeze) img.Freeze();
                 if (!img.IsFrozen) img = new WriteableBitmap(img).GetAsFrozen() as BitmapSource ?? img; // в фоне можно работать только с «замороженной» картинкой
@@ -490,7 +545,10 @@ namespace Isle.Services
             }
             else
             {
-                if (_activeFolder != null) fresh.Folder = _activeFolder;
+                // снимок из приложения, привязанного к папке, — в эту папку (точнее, чем общая «запись в папку»)
+                var byApp = fresh.IsImage ? FolderForApp(fresh.Source) : null;
+                if (byApp != null) fresh.Folder = byApp;
+                else if (_activeFolder != null) fresh.Folder = _activeFolder;
                 Items.Insert(0, fresh);
             }
 
@@ -509,7 +567,11 @@ namespace Isle.Services
             Save();
         }
 
-        public void Save() => Storage.Save("clipboard.json", new ClipboardData { Items = Items.ToList(), Folders = Folders.ToList(), ActiveFolder = _activeFolder });
+        public void Save() => Storage.Save("clipboard.json", new ClipboardData
+        {
+            Items = Items.ToList(), Folders = Folders.ToList(), ActiveFolder = _activeFolder,
+            FolderApps = FolderApps.ToDictionary(kv => kv.Key, kv => kv.Value.ToList())
+        });
 
         public void Remove(ClipItem item, bool save = true)
         {
