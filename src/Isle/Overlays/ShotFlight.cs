@@ -55,10 +55,22 @@ namespace Isle.Overlays
                 Topmost = true, ShowInTaskbar = false, ShowActivated = false, ResizeMode = ResizeMode.NoResize,
                 Left = -32000, Top = -32000, Width = 1, Height = 1
             };
-            var brush = new ImageBrush(image) { Stretch = Stretch.Fill };
+            // картинку заранее уменьшаем до размера окошка: каждый кадр не нужно пересчитывать 900 px в 480
+            BitmapSource pic = image;
+            double kp = Math.Min(1, Math.Max(from.Width / Math.Max(1, image.PixelWidth), from.Height / Math.Max(1, image.PixelHeight)));
+            if (kp < 0.95)
+            {
+                try
+                {
+                    var small = new CachedBitmap(new TransformedBitmap(image, new ScaleTransform(kp, kp)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                    small.Freeze();
+                    pic = small;
+                }
+                catch { }
+            }
+            var brush = new ImageBrush(pic) { Stretch = Stretch.Fill };
             RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.LowQuality);
-            // Размер окна меняется ступеньками (раз в ~15%), а между ними снимок плавно уменьшается внутри окна.
-            // Смена размера прозрачного окна — дорогая (Windows заново создаёт его картинку), и на 4K она давала рывки.
+            // Размер окна постоянный, а снимок плавно уменьшается внутри него (масштабом).
             var scale = new ScaleTransform(1, 1);
             win.Content = new Border
             {
@@ -87,7 +99,9 @@ namespace Isle.Overlays
                 double w = Lerp(from.Width, to.Width, ks), h = Lerp(from.Height, to.Height, ks);
                 double cx = Lerp(from.X + from.Width / 2, to.X + to.Width / 2, km);
                 double cy = Lerp(from.Y + from.Height / 2, to.Y + to.Height / 2, km);
-                bool resize = stepW <= 0 || w < stepW * 0.85 || h < stepH * 0.85 || u >= 1;
+                // размер окошка задаём один раз: смена размера прозрачного окна — самое дорогое (Windows заново
+                // создаёт его картинку), а маленькое окно целиком почти ничего не стоит — снимок уменьшается внутри
+                bool resize = stepW <= 0;
                 if (resize) { stepW = Math.Max(1, Math.Ceiling(w)); stepH = Math.Max(1, Math.Ceiling(h)); resizes++; }
                 scale.ScaleX = w / stepW * pop; scale.ScaleY = h / stepH * pop;
                 SetWindowPos(hwnd, new IntPtr(-1), (int)Math.Round(cx - stepW / 2), (int)Math.Round(cy - stepH / 2),
