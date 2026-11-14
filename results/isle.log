@@ -1,0 +1,214 @@
+2026-11-14 18:38:20.035 INFO  [trace] t1  запуск 0.1.0.0, Microsoft Windows NT 10.0.26100.0, D:\a\-\-\out\app\Isle.exe
+2026-11-14 18:38:20.039 INFO  [session] t1  ==================== запуск Isle 0.1.0.0 ====================
+2026-11-14 18:38:20.039 INFO  [session] t1  ОС Microsoft Windows NT 10.0.26100.0, .NET 8.0.33, 64-бит True, ядер 4, культура en-US, UI en-US, путь D:\a\-\-\out\app\Isle.exe
+2026-11-14 18:38:20.181 INFO  [session] t1  экран (DIP) 1920×1080, рабочая область 0,0,1920,1032, виртуальный 1920×1080, рендер tier 2
+2026-11-14 18:38:20.226 INFO  [session] t1  настройки {"MediaEnabled":true,"LyricsEnabled":true,"VolumeToasts":true,"LayoutToasts":true,"CapsToasts":true,"BatteryToasts":true,"NotificationToasts":true,"NotificationsOnlyInIsland":false,"ClipboardHistory":true,"ClipboardLimit":50,"HideInFullscreen":true,"ExpandOnHover":true,"DoNotDisturb":false,"OledMode":false,"OledRevealSeconds":10,"Scale":1,"ShowInCaptures":false,"VpnStatus":true,"ClipboardImages":true,"Launcher":[],"City":"\u041C\u043E\u0441\u043A\u0432\u0430","Latitude":55.7558,"Longitude":37.6173,"AiPreset":"groq","AiBaseUrl":"https://api.groq.com/openai/v1","AiKeyProtected":"***","AiModel":"llama-3.3-70b-versatile","VoicePreset":"groq","VoiceBaseUrl":"https://api.groq.com/openai/v1","VoiceModel":"whisper-large-v3","VoiceKeyProtected":"***","VoiceLanguage":"","VoiceAutoPaste":true,"VoicePunctuate":true,"ObsPort":4455,"ObsRecordFolder":"","ObsPasswordProtected":"***","AccentHex":"#ECECF1","IslandOpacity":1,"MaxFps":60,"Character":"pixel","BuddyOutfit":"auto","FirstRunDone":false,"WelcomeShown":false,"TrayHintShown":false,"AutoUpdateCheck":true,"ScaleFixV2":false,"ObsStatus":true,"SteamExactSpeed":true,"SteamExactActivated":false,"VoiceDefaultsV2":false,"MusicPill":"title","HomePlayer":"mirror","LyricsOnHome":true,"ShowClock":true,"ClockSeconds":false,"Hotkey":"Ctrl\u002BAlt\u002BSpace","HotkeyCommand":"Ctrl\u002BAlt\u002BK","HotkeyClipboard":"Ctrl\u002BAlt\u002BV","HotkeyScreenshot":"Ctrl\u002BAlt\u002BS","HotkeyVoice":"Ctrl\u002BAlt\u002BD","HotkeyVoiceCommand":"Ctrl\u002BAlt\u002BA","HotkeyCollapse":"Escape","PrintScreenIsle":false,"SaveScreenshots":true,"CaptureGpuRender":false,"CaptureComposition":true,"DebugLog":true,"Use24h":true}
+2026-11-14 18:38:20.379 INFO  [settings] t1  FirstRunDone: «False» → «True»
+2026-11-14 18:38:20.379 INFO  [settings] t1  ScaleFixV2: «False» → «True»
+2026-11-14 18:38:20.384 INFO  [settings] t1  VoiceDefaultsV2: «False» → «True»
+2026-11-14 18:38:20.388 INFO  [trace] t1  окно создано
+2026-11-14 18:38:20.480 INFO  [trace] t1  остров на экране: 455,0, экран 1920×1080
+2026-11-14 18:38:20.647 INFO  [trace] t1  окно показано: 455,0 1010×660
+2026-11-14 18:38:20.647 INFO  [debug] t1  подробный журнал включён (временная отладка) — его можно выключить в Настройках → Обновления
+2026-11-14 18:38:20.657 DEBUG [display] t1  выходы: \\.\DISPLAY1 — Microsoft Hyper-V Video (основной)
+2026-11-14 18:38:20.662 DEBUG [display] t1  монитор \\.\DISPLAY1 (основной): 1920×1080 в 0,0, рабочая область 1920×1032, 64 Гц, 32 бит
+2026-11-14 18:38:20.662 DEBUG [display] t1  WPF: tier 2, аппаратная отрисовка есть, макс. текстура 16384,16384
+2026-11-14 18:38:20.777 INFO  [settings] t1  HideInFullscreen: «True» → «False»
+2026-11-14 18:38:20.777 INFO  [settings] t1  ShowInCaptures: «False» → «True»
+2026-11-14 18:38:20.777 INFO  [settings] t1  AiKeyProtected: «(пусто)» → «***»
+2026-11-14 18:38:20.777 INFO  [settings] t1  AiKey: «(пусто)» → «***»
+2026-11-14 18:38:20.777 INFO  [settings] t1  WelcomeShown: «False» → «True»
+2026-11-14 18:38:20.777 INFO  [settings] t1  TrayHintShown: «False» → «True»
+2026-11-14 18:38:20.831 INFO  [weather] t1  запрос Москва (55.756,37.617)
+2026-11-14 18:38:20.853 DEBUG [exception] t9  InvalidOperationException: «Operation is not valid due to the current state of the object.» @ ExceptionHelpers.<ThrowExceptionForHR>g__Throw|38_0 t9
+2026-11-14 18:38:20.853 DEBUG [exception] t9  TargetInvocationException: «Exception has been thrown by the target of an invocation.» @ MethodBaseInvoker.InvokeWithNoArgs t9
+2026-11-14 18:38:20.861 INFO  [caps] t1  состояние: Caps Lock выкл (начальное)
+2026-11-14 18:38:20.861 DEBUG [ui] t1  поток интерфейса был занят ~149 мс (чёлка Collapsed, видеокарта)
+2026-11-14 18:38:21.620 INFO  [trace] t1  все модули запущены
+2026-11-14 18:38:25.885 INFO  [promo] t1  сцена: music
+2026-11-14 18:38:25.937 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:25.969 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.024 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.043 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.059 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.114 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.168 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.200 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.248 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.284 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.320 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.368 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.384 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.417 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.432 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.448 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.481 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.497 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.512 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.551 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.576 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.615 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.640 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.680 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.704 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.754 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.784 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:26.826 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ Marshal.ThrowExceptionForHR t1
+2026-11-14 18:38:29.809 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:29.850 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:29.875 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:29.916 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:29.940 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:29.972 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.012 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.047 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.070 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.086 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.136 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.152 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.201 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.216 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.256 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.282 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.323 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.348 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.381 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.411 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.453 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.476 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.507 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.525 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.541 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.579 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.613 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.640 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.681 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:30.706 DEBUG [exception] t1  COMException: «Element not found. (0x80070490)» @ MMDeviceEnumerator.GetDefaultAudioEndpoint t1
+2026-11-14 18:38:31.430 INFO  [promo] t1  сцена: caps
+2026-11-14 18:38:31.431 INFO  [toast] t1  Caps/вкл «Caps Lock включён» key=caps
+2026-11-14 18:38:31.433 DEBUG [toast] t1  в очередь: «Caps Lock включён», сейчас Collapsed, в очереди 0
+2026-11-14 18:38:31.433 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 18:38:32.638 INFO  [toast] t1  Caps/выкл «Caps Lock выключен» key=caps
+2026-11-14 18:38:32.638 DEBUG [toast] t1  в очередь: «Caps Lock выключен», сейчас Toast (««Caps Lock включён»»), в очереди 0
+2026-11-14 18:38:33.740 INFO  [island] t1  состояние Toast → Collapsed
+2026-11-14 18:38:34.239 INFO  [promo] t1  сцена: volume
+2026-11-14 18:38:34.240 DEBUG [toast] t1  в очередь: «Громкость», сейчас Collapsed, в очереди 0
+2026-11-14 18:38:34.240 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 18:38:34.360 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:34.480 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:34.601 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:34.722 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:34.843 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:34.964 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:35.086 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:35.205 DEBUG [toast] t1  в очередь: «Громкость», сейчас Toast (««Громкость»»), в очереди 0
+2026-11-14 18:38:36.512 INFO  [island] t1  состояние Toast → Collapsed
+2026-11-14 18:38:36.927 INFO  [promo] t1  сцена: message
+2026-11-14 18:38:36.927 INFO  [toast] t1  Notification «Маша  ·  Telegram» · «Идём сегодня в кино? 🍿»
+2026-11-14 18:38:36.927 DEBUG [toast] t1  в очередь: «Маша  ·  Telegram», сейчас Collapsed, в очереди 0
+2026-11-14 18:38:36.927 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 18:38:39.541 INFO  [island] t1  состояние Toast → Collapsed
+2026-11-14 18:38:39.928 INFO  [promo] t1  сцена: download
+2026-11-14 18:38:39.928 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 0%» key=dl-promo 0%
+2026-11-14 18:38:39.928 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Collapsed, в очереди 0
+2026-11-14 18:38:39.928 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 18:38:40.038 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 5%» key=dl-promo 5%
+2026-11-14 18:38:40.038 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.148 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 10%» key=dl-promo 10%
+2026-11-14 18:38:40.148 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.259 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 15%» key=dl-promo 15%
+2026-11-14 18:38:40.259 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.370 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 20%» key=dl-promo 20%
+2026-11-14 18:38:40.370 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.481 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 25%» key=dl-promo 25%
+2026-11-14 18:38:40.481 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.593 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 30%» key=dl-promo 30%
+2026-11-14 18:38:40.593 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.705 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 35%» key=dl-promo 35%
+2026-11-14 18:38:40.705 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.816 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 40%» key=dl-promo 40%
+2026-11-14 18:38:40.816 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:40.926 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 45%» key=dl-promo 45%
+2026-11-14 18:38:40.926 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.036 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 50%» key=dl-promo 50%
+2026-11-14 18:38:41.036 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.148 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 55%» key=dl-promo 55%
+2026-11-14 18:38:41.148 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.258 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 60%» key=dl-promo 60%
+2026-11-14 18:38:41.258 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.369 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 65%» key=dl-promo 65%
+2026-11-14 18:38:41.369 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.480 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 70%» key=dl-promo 70%
+2026-11-14 18:38:41.480 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.591 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 75%» key=dl-promo 75%
+2026-11-14 18:38:41.591 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.701 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 80%» key=dl-promo 80%
+2026-11-14 18:38:41.701 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.812 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 85%» key=dl-promo 85%
+2026-11-14 18:38:41.813 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:41.924 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 90%» key=dl-promo 90%
+2026-11-14 18:38:41.924 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:42.034 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 95%» key=dl-promo 95%
+2026-11-14 18:38:42.034 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:42.146 INFO  [toast] t1  Download «Cyberpunk 2077» · «Steam · 100%» key=dl-promo 100%
+2026-11-14 18:38:42.146 DEBUG [toast] t1  в очередь: «Cyberpunk 2077», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:42.259 INFO  [toast] t1  Success «Загрузка завершена» · «Cyberpunk 2077 · можно играть» key=dl-promo
+2026-11-14 18:38:42.259 DEBUG [toast] t1  в очередь: «Загрузка завершена», сейчас Toast (««Cyberpunk 2077»»), в очереди 0
+2026-11-14 18:38:44.256 INFO  [island] t1  состояние Toast → Collapsed
+2026-11-14 18:38:44.659 INFO  [promo] t1  сцена: error
+2026-11-14 18:38:44.659 INFO  [toast] t1  Error «Нет подключения» · «VPN отключился»
+2026-11-14 18:38:44.659 DEBUG [toast] t1  в очередь: «Нет подключения», сейчас Collapsed, в очереди 0
+2026-11-14 18:38:44.659 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 18:38:45.723 INFO  [memory] t1  уборка после «запуск»: память 232 → 0 МБ, управляемая 24 → 13 МБ, за 45 мс
+2026-11-14 18:38:46.459 INFO  [island] t1  состояние Toast → Collapsed
+2026-11-14 18:38:47.059 INFO  [promo] t1  сцена: expand
+2026-11-14 18:38:48.367 INFO  [island] t1  открыта: курсор у верхнего края
+2026-11-14 18:38:48.369 INFO  [island] t1  развернуть (было Collapsed)
+2026-11-14 18:38:48.369 INFO  [island] t1  вкладка home
+2026-11-14 18:38:48.372 INFO  [island] t1  состояние Collapsed → Expanded
+2026-11-14 18:38:49.036 INFO  [render] t1  раскрытие (видеокарта): кадров 10 за 664 мс (~15 к/с), худший кадр 109 мс, рывков >50 мс: 5
+2026-11-14 18:38:49.950 INFO  [promo] t1  сцена: home
+2026-11-14 18:38:50.666 DEBUG [stats] t1  процессор Isle 26.3%, память 159 МБ (управляемая 21 МБ, сборок 4/3/3), потоков 38; такт анимаций 33 к/с, худший кадр 229 мс, ограничение 60 к/с (чёлка Expanded, видеокарта), полноэкранное False, впереди Isle
+2026-11-14 18:38:50.974 DEBUG [toast] t1  не показана (панель открыта): «Громкость»
+2026-11-14 18:38:52.994 INFO  [promo] t1  сцена: chat
+2026-11-14 18:38:53.867 INFO  [island] t1  вкладка chat
+2026-11-14 18:38:53.890 INFO  [trace] t1  Клоди: занятие оглядывается
+2026-11-14 18:39:01.884 INFO  [promo] t1  сцена: notes
+2026-11-14 18:39:02.796 INFO  [island] t1  вкладка notes
+2026-11-14 18:39:07.358 INFO  [promo] t1  сцена: weather
+2026-11-14 18:39:08.242 INFO  [island] t1  вкладка weather
+2026-11-14 18:39:10.641 INFO  [promo] t1  сцена: collapse
+2026-11-14 18:39:12.146 INFO  [island] t1  свернуть (было Expanded)
+2026-11-14 18:39:12.146 INFO  [island] t1  состояние Expanded → Collapsed
+2026-11-14 18:39:15.147 INFO  [promo] t1  сцена: shot
+2026-11-14 18:39:15.329 INFO  [trace] t1  снимок: остров попадёт в снимок (настройка «видно на скриншотах»)
+2026-11-14 18:39:15.648 INFO  [capture] t1  Region: слой открыт, экран 0,0 1920×1080, снимок 1920×1080 Bgr32
+2026-11-14 18:39:15.655 INFO  [comp] t1  графический слой Windows готов
+2026-11-14 18:39:15.714 INFO  [comp] t1  устройство картинок: Direct3D Level_11_1
+2026-11-14 18:39:15.728 INFO  [capture] t1  слой: снимок, затемнение и мозаика — на графическом слое Windows (77 мс)
+2026-11-14 18:39:15.838 INFO  [capture] t1  слой: окно 1920×1080 px, 1920×1080 точек, tier 2, открыт через 190 мс
+2026-11-14 18:39:15.884 DEBUG [ui] t1  поток интерфейса был занят ~322 мс (чёлка Collapsed, видеокарта)
+2026-11-14 18:39:18.157 INFO  [capture] t1  пометки: отрисовка процессором
+2026-11-14 18:39:18.163 INFO  [trace] t1  пометки: экран 0,0 1920×1080, окно 1920×1080, масштаб 1, область 518,453 883×573, панель 591×48 в 664,391, слоёв 1
+2026-11-14 18:39:19.347 INFO  [promo] t1  сцена: mosaic
+2026-11-14 18:39:20.121 INFO  [capture] t1  мозаика: пиксели снимка 883×573 подготовлены за 10 мс
+2026-11-14 18:39:20.665 DEBUG [stats] t1  процессор Isle 24.7%, память 238 МБ (управляемая 17 МБ, сборок 8/6/5), потоков 38; такт анимаций 32 к/с, худший кадр 192 мс, ограничение 60 к/с (чёлка Collapsed, видеокарта), полноэкранное False, впереди Isle
+2026-11-14 18:39:21.539 INFO  [capture] t1  мозаика: рамка 334×58 px, квадрат 6 px, обновлений 39, кусочков 14 (пересчитано за всё время 71), расчёт в среднем 0.9 мс, макс 7.2 мс; кадры интерфейса: кадров 65 за 1418 мс (~46 к/с), худший кадр 62 мс, рывков >50 мс: 2; монитор 64 Гц
+2026-11-14 18:39:22.136 INFO  [promo] t1  сцена: save
+2026-11-14 18:39:22.138 INFO  [capture] t1  сохранение: слоёв пометок 0, плиток мозаики 1
+2026-11-14 18:39:22.159 INFO  [capture] t1  сохранение: копия для полёта 883×573 за 20 мс
+2026-11-14 18:39:22.161 INFO  [capture] t1  полёт #1: старт, снимок 883×573, окно 883×573 px
+2026-11-14 18:39:22.189 DEBUG [flight] t1  #1: графический слой, окно 931×1070 px в 494,-20, масштаб 1
+2026-11-14 18:39:23.352 INFO  [capture] t1  полёт #1 в чёлку (графический слой Windows): 1069 мс, монитор 64 Гц
+2026-11-14 18:39:23.372 INFO  [capture] t1  сохранение: картинка 883×573 склеена за 19 мс
+2026-11-14 18:39:23.373 INFO  [capture] t1  Region: готово 883×573 (с пометками) через 7724 мс
+2026-11-14 18:39:23.494 INFO  [capture] t1  снимок 883×573 в буфере за 112 мс
+2026-11-14 18:39:23.499 INFO  [toast] t1  Success «Снимок скопирован» · «Сохранён в Изображения\Isle»
+2026-11-14 18:39:23.499 DEBUG [ui] t1  поток интерфейса был занят ~159 мс (чёлка Collapsed, видеокарта)
+2026-11-14 18:39:23.503 DEBUG [toast] t1  в очередь: «Снимок скопирован», сейчас Collapsed, в очереди 0
+2026-11-14 18:39:23.503 INFO  [island] t1  состояние Collapsed → Toast
+2026-11-14 18:39:23.517 INFO  [capture] t7  PNG сохранён за 21 мс: Снимок 2026-11-14 18.39.23.png
+2026-11-14 18:39:23.600 INFO  [clipboard] t1  новое: картинка, из Isle
+2026-11-14 18:39:23.653 INFO  [clipboard] t1  повтор — поднят наверх: картинка, из Isle
+2026-11-14 18:39:25.337 INFO  [promo] t1  сцена: end
+2026-11-14 18:39:26.714 INFO  [memory] t1  уборка после «картинка в буфере»: память 264 → 24 МБ, управляемая 24 → 15 МБ, за 48 мс
