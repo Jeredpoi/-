@@ -95,6 +95,8 @@ namespace Isle
                 await Task.Delay(1600); // полёт ~1.1 с
                 Phase("idle");
                 await Task.Delay(1900);
+                backdrop.Close(); // фон на весь экран прячет чёлку (полноэкранный режим) — плашки снимаем без него
+                await Task.Delay(1500);
                 Phase("toast-ok");
                 ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Снимок скопирован", Subtitle = "Сохранён в Изображения\\Isle", Icon = Icons.Check, Important = true, Duration = TimeSpan.FromSeconds(1.6) });
                 await Task.Delay(1800);
@@ -107,7 +109,6 @@ namespace Isle
                 Helpers.MemoryTrim.Now("стенд");
                 await Task.Delay(500);
                 Phase("done");
-                backdrop.Close();
             }
             catch (Exception ex)
             {
