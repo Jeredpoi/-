@@ -35,6 +35,18 @@ namespace Isle.Services
             bool active = st.TryGetProperty("outputActive", out var oa) && oa.GetBoolean();
             if (!active)
             {
+                // папка из настроек Isle — OBS сам кладёт запись туда, куда указано у него (у кого-то это рабочий стол)
+                var folder = AppSettings.Current.ObsRecordFolder;
+                if (!string.IsNullOrWhiteSpace(folder))
+                {
+                    try
+                    {
+                        System.IO.Directory.CreateDirectory(folder);
+                        await RequestAsync("SetRecordDirectory", new { recordDirectory = folder });
+                        Journal.Info("obs", "папка записей: " + folder);
+                    }
+                    catch (Exception ex) { Journal.Warn("obs", "не удалось задать папку записей: " + ex.Message); }
+                }
                 await RequestAsync("StartRecord");
                 return (true, null);
             }
@@ -63,7 +75,9 @@ namespace Isle.Services
         {
             Kind = ToastKind.Success, Title = "Запись сохранена",
             Subtitle = file != null ? System.IO.Path.GetFileName(file) : "В папке записей OBS",
-            FilePath = file, FolderPath = file != null ? System.IO.Path.GetDirectoryName(file) : null,
+            // путь из OBS — с прямыми слешами; приводим к виду Windows, иначе Проводник открывал рабочий стол
+            FilePath = file != null ? System.IO.Path.GetFullPath(file.Replace('/', '\\')) : null,
+            FolderPath = file != null ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(file.Replace('/', '\\'))) : null,
             Icon = Icons.Record, ReplaceKey = "obs-saved", Important = true, Duration = TimeSpan.FromSeconds(7)
         };
 
@@ -126,7 +140,7 @@ namespace Isle.Services
             catch (Exception ex) { return "Ошибка: " + ex.Message; }
         }
 
-        private static async Task<JsonElement> RequestAsync(string requestType)
+        private static async Task<JsonElement> RequestAsync(string requestType, object requestData = null)
         {
             var s = AppSettings.Current;
             using var ws = new ClientWebSocket();
@@ -155,7 +169,9 @@ namespace Isle.Services
                 if (identified.RootElement.GetProperty("op").GetInt32() != 2) throw new Exception("OBS не принял подключение (неверный пароль?)");
 
             // 3. ToggleRecord (op 6) → ответ (op 7)
-            await SendAsync(ws, new { op = 6, d = new { requestType, requestId = "isle-1" } }, cts.Token);
+            await SendAsync(ws, requestData == null
+                ? new { op = 6, d = new { requestType, requestId = "isle-1" } }
+                : (object)new { op = 6, d = new { requestType, requestId = "isle-1", requestData } }, cts.Token);
             for (int i = 0; i < 10; i++)
             {
                 using var msg = JsonDocument.Parse(await ReceiveAsync(ws, cts.Token));

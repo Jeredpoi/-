@@ -189,6 +189,7 @@ namespace Isle.Views
             VoicePunct.IsChecked = S.VoicePunctuate;
 
             ObsPort.Text = S.ObsPort.ToString();
+            ShowObsFolder();
 
             CityBox.Text = S.City;
 
@@ -246,7 +247,7 @@ namespace Isle.Views
             var path = Services.Diag.PathToLog;
             try
             {
-                if (System.IO.File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                if (System.IO.File.Exists(path)) MainWindow.ShowInExplorer(path);
                 else System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Services.Storage.Dir) { UseShellExecute = true });
             }
             catch { }
@@ -643,6 +644,29 @@ namespace Isle.Views
         {
             if (_loading) return;
             if (int.TryParse(ObsPort.Text.Trim(), out var port) && port > 0 && port < 65536) { S.ObsPort = port; S.Save(); }
+        }
+
+        private void ShowObsFolder() => ObsFolder.Text = string.IsNullOrWhiteSpace(S.ObsRecordFolder)
+            ? "Как в настройках OBS (Настройки → Вывод → Путь записи)"
+            : S.ObsRecordFolder;
+
+        private void OnObsFolder(object s, RoutedEventArgs e)
+        {
+            var start = string.IsNullOrWhiteSpace(S.ObsRecordFolder)
+                ? System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyVideos), "Isle")
+                : S.ObsRecordFolder;
+            var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Куда сохранять записи OBS", InitialDirectory = System.IO.Directory.Exists(start) ? start : System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyVideos) };
+            if (dlg.ShowDialog(this) != true) return;
+            S.ObsRecordFolder = dlg.FolderName;
+            S.Save();
+            ShowObsFolder();
+        }
+
+        private void OnObsFolderReset(object s, RoutedEventArgs e)
+        {
+            S.ObsRecordFolder = "";
+            S.Save();
+            ShowObsFolder();
         }
 
         private void OnObsSave(object s, RoutedEventArgs e)

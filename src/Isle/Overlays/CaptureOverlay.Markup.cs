@@ -519,10 +519,15 @@ namespace Isle.Overlays
             patch ??= _livePatch;
             if (patch == null || _cropPx == null) return;
             long now = Environment.TickCount64;
-            if (!force && now - _patchAt < 16) return; // не чаще кадра
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
+            // Чем больше рамка, тем реже обновляем квадраты (до ~12 раз в секунду на весь 4K-экран): каждое обновление
+            // процессор перерисовывает полосой у края, и на огромной рамке он не успевал — отставал даже уголок рамки.
+            // Сама рамка двигается за курсором всегда, без задержки.
+            double mpx = (double)(x1 - x0) * (y1 - y0) / 1_000_000.0;
+            long every = (long)Math.Clamp(16 + mpx * 12, 16, 80);
+            if (!force && now - _patchAt < every) return;
             if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Children.Clear(); return; }
             // размер квадрата — ступеньками (6, 8, 12…24): пока тянешь, он меняется редко, и квадраты не «дрожат»
             int want = Mosaic.BlockForPatch(x1 - x0, y1 - y0), block = BlockSteps[0];

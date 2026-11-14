@@ -117,6 +117,8 @@ namespace Isle.Services
 
         // OBS (запись экрана через obs-websocket)
         public int ObsPort { get; set; } = 4455;
+        /// <summary>Куда OBS кладёт записи, начатые из Isle (пусто — как в настройках OBS).</summary>
+        public string ObsRecordFolder { get; set; } = "";
         public string ObsPasswordProtected { get; set; } = "";
         [System.Text.Json.Serialization.JsonIgnore]
         public string ObsPassword { get => Unprotect(ObsPasswordProtected); set => ObsPasswordProtected = Protect(value); }
