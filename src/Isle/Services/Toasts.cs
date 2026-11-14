@@ -34,6 +34,8 @@ namespace Isle.Services
         public bool EditFromFile { get; set; }
         /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
         public bool RoundImage { get; set; }
+        /// <summary>Что сделать по клику на плашку (например, «есть обновление» → скачать и установить).</summary>
+        public Action OnClick { get; set; }
         /// <summary>Уведомление другого приложения: его AppUserModelId — по клику открываем это приложение.</summary>
         public string LaunchAppId { get; set; }
         /// <summary>Анимированный значок погоды вместо иконки (вид: sun, rain, thunder, snow… — см. WeatherGlyph).</summary>
