@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media;
 using Isle.Services;
 using Windows.UI.Composition;
@@ -29,25 +28,35 @@ namespace Isle.Overlays
         private CompositionDrawingSurface _cShotSurface;
         private readonly List<IDisposable> _cTrash = new();
 
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct DwmMargins { public int L, R, T, B; }
-        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref DwmMargins m);
+        /// <summary>Окно графического слоя (без своей картинки) — лежит прямо под окном WPF.</summary>
+        private sealed class CompHost : System.Windows.Forms.NativeWindow
+        {
+            public CompHost(int x, int y, int w, int h)
+            {
+                CreateHandle(new System.Windows.Forms.CreateParams
+                {
+                    Style = unchecked((int)0x80000000),                       // WS_POPUP
+                    ExStyle = 0x00200000 | 0x08 | 0x80 | 0x08000000,          // NOREDIRECTIONBITMAP | TOPMOST | TOOLWINDOW | NOACTIVATE
+                    X = x, Y = y, Width = w, Height = h
+                });
+            }
+        }
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int cmd);
+        private CompHost _cHost;
 
-        /// <summary>Включить графический слой (вызывается, когда у окна уже есть HWND). false — остаёмся на WPF.</summary>
-        private bool TryEnableComp(IntPtr hwnd, UIElement wpfShot)
+        /// <summary>
+        /// Включить графический слой (до показа окна). Снимок, затемнение и мозаика — в отдельном окне под этим;
+        /// это окно WPF становится прозрачным и рисует только лёгкое (панель, рамку, пометки). false — всё на WPF.
+        /// </summary>
+        private bool TryEnableComp(UIElement wpfShot)
         {
             if (!AppSettings.Current.CaptureComposition) return false;
             try
             {
                 var t0 = System.Diagnostics.Stopwatch.StartNew();
                 var c = Helpers.Comp.Compositor;
-                // окно WPF — прозрачное (сквозь него видно то, что рисует слой под ним)
-                var hs = HwndSource.FromHwnd(hwnd);
-                hs.CompositionTarget.BackgroundColor = Colors.Transparent;
-                var m = new DwmMargins { L = -1, R = -1, T = -1, B = -1 };
-                int hr = DwmExtendFrameIntoClientArea(hwnd, ref m);
-                if (hr < 0) throw new InvalidOperationException("DWM 0x" + hr.ToString("X8"));
-                _cTarget = Helpers.Comp.Target(hwnd, false); // под содержимым WPF
+                _cHost = new CompHost(_vs.X, _vs.Y, _vs.Width, _vs.Height);
+                _cTarget = Helpers.Comp.Target(_cHost.Handle, true);
                 _cRoot = c.CreateContainerVisual();
                 _cTarget.Root = _cRoot;
 
@@ -71,11 +80,15 @@ namespace Isle.Overlays
                     _cDim[i].Brush = dimBrush;
                     _cRoot.Children.InsertAtTop(_cDim[i]);
                 }
+                ShowWindow(_cHost.Handle, 4 /* SW_SHOWNOACTIVATE */);
 
-                Background = Brushes.Transparent;
+                // окно WPF — прозрачное; почти невидимый фон, чтобы клики не проходили сквозь него
+                AllowsTransparency = true;
+                Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
                 wpfShot.Visibility = Visibility.Hidden;
                 _dim.Visibility = Visibility.Hidden;
                 _comp = true;
+                IsVisibleChanged += (_, e) => { if (_cHost != null) ShowWindow(_cHost.Handle, (bool)e.NewValue ? 4 : 0); }; // слой прячется вместе с окном
                 Closed += (_, __) => DisposeComp();
                 Journal.Info("capture", "слой: снимок, затемнение и мозаика — на графическом слое Windows (" + t0.ElapsedMilliseconds + " мс)");
                 return true;
@@ -84,9 +97,6 @@ namespace Isle.Overlays
             {
                 Journal.Warn("capture", "графический слой не включился, рисует WPF: " + ex);
                 DisposeComp();
-                try { if (HwndSource.FromHwnd(hwnd) is HwndSource hs) hs.CompositionTarget.BackgroundColor = Colors.Black; } catch { }
-                var m = new DwmMargins();
-                try { DwmExtendFrameIntoClientArea(hwnd, ref m); } catch { }
                 return false;
             }
         }
@@ -99,7 +109,8 @@ namespace Isle.Overlays
             _cTrash.Clear();
             try { _cShotSurface?.Dispose(); } catch { }
             try { _cTarget?.Dispose(); } catch { }
-            _cTarget = null; _cShotSurface = null;
+            try { _cHost?.DestroyHandle(); } catch { }
+            _cTarget = null; _cShotSurface = null; _cHost = null;
         }
 
         /// <summary>Затемнение вокруг «окна» hole (в точках слоя) — четыре полосы.</summary>

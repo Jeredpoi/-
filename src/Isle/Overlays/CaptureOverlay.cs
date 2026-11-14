@@ -70,6 +70,8 @@ namespace Isle.Overlays
             };
             root.Children.Add(_hint);
             Content = root;
+            // снимок, затемнение и мозаику — на графический слой Windows (окно под этим), если он доступен
+            if (mode != CaptureMode.Pipette) TryEnableComp(img);
 
             _hintText.Text = mode switch
             {
@@ -88,7 +90,6 @@ namespace Isle.Overlays
                 var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
                 _root.Width = _vs.Width * dev.M11;
                 _root.Height = _vs.Height * dev.M22;
-                TryEnableComp(h, _shotImage);
                 Journal.Info("capture", "слой: окно " + _vs.Width + "×" + _vs.Height + " px, " + Math.Round(_root.Width) + "×" + Math.Round(_root.Height)
                     + " точек, tier " + (RenderCapability.Tier >> 16) + ", открыт через " + _openedFor.ElapsedMilliseconds + " мс");
                 // Windows не даёт фоновой программе забрать фокус обычным Activate() — без фокуса не доходил Esc
@@ -96,6 +97,10 @@ namespace Isle.Overlays
                 Activate();
                 Focus();
                 Keyboard.Focus(this);
+                // прозрачное окно поверх графического слоя: процессор перерисовывает только изменившиеся кусочки
+                // (видеокарте пришлось бы каждый кадр возвращать картинку всего окна в память)
+                if (_comp)
+                    try { if (PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null) hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly; } catch { }
                 UpdateDim(Rect.Empty);
                 _escPoll.Start();
             };
