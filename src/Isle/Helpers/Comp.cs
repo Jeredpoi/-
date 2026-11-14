@@ -128,16 +128,28 @@ namespace Isle.Helpers
                 bmp = c;
             }
             int w = bmp.PixelWidth, h = bmp.PixelHeight, stride = w * 4;
-            var px = new byte[stride * h];
-            bmp.CopyPixels(px, stride, 0);
-            var surface = Device.CreateDrawingSurface(new Windows.Foundation.Size(w, h),
-                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, Windows.Graphics.DirectX.DirectXAlphaMode.Premultiplied);
-            Draw(surface, px, w, h, stride);
-            return surface;
+            // пиксели — во временный буфер вне кучи .NET: 4K-снимок не оставляет за собой 33 МБ мусора
+            var buf = Marshal.AllocHGlobal(stride * h);
+            try
+            {
+                bmp.CopyPixels(new System.Windows.Int32Rect(0, 0, w, h), buf, stride * h, stride);
+                var surface = Device.CreateDrawingSurface(new Windows.Foundation.Size(w, h),
+                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, Windows.Graphics.DirectX.DirectXAlphaMode.Premultiplied);
+                Draw(surface, buf, w, h, stride);
+                return surface;
+            }
+            finally { Marshal.FreeHGlobal(buf); }
         }
 
         /// <summary>Записать пиксели (BGRA, с умноженной альфой) в поверхность.</summary>
         public static void Draw(CompositionDrawingSurface surface, byte[] px, int w, int h, int stride)
+        {
+            var handle = GCHandle.Alloc(px, GCHandleType.Pinned);
+            try { Draw(surface, handle.AddrOfPinnedObject(), w, h, stride); }
+            finally { handle.Free(); }
+        }
+
+        public static void Draw(CompositionDrawingSurface surface, IntPtr px, int w, int h, int stride)
         {
             var interop = Interop<ICompositionDrawingSurfaceInterop>(surface);
             var iid = typeof(ID2D1DeviceContext).GUID;
@@ -146,14 +158,11 @@ namespace Isle.Helpers
             {
                 using var ctx = new ID2D1DeviceContext(ctxPtr);
                 var props = new BitmapProperties(new Vortice.DCommon.PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied));
-                var handle = GCHandle.Alloc(px, GCHandleType.Pinned);
-                try
                 {
-                    using var bitmap = ctx.CreateBitmap(new Vortice.Mathematics.SizeI(w, h), handle.AddrOfPinnedObject(), (uint)stride, props);
+                    using var bitmap = ctx.CreateBitmap(new Vortice.Mathematics.SizeI(w, h), px, (uint)stride, props);
                     ctx.PrimitiveBlend = PrimitiveBlend.Copy; // заменить пиксели, а не смешать с тем, что было
                     ctx.DrawBitmap(bitmap, new Vortice.Mathematics.Rect(offset.X, offset.Y, w, h), 1f, BitmapInterpolationMode.NearestNeighbor, null);
                 }
-                finally { handle.Free(); }
             }
             finally { interop.EndDraw(); }
         }

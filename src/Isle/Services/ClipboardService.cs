@@ -146,7 +146,7 @@ namespace Isle.Services
             }
 
             if (hasText) await AddTextAsync();
-            else if (hasImage && s.ClipboardImages) await AddImageAsync();
+            else if (hasImage && s.ClipboardImages) { await AddImageAsync(); Helpers.MemoryTrim.Soon("картинка в буфере"); }
         }
 
         /// <summary>

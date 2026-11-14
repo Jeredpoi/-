@@ -115,7 +115,7 @@ namespace Isle.Overlays
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
             // окно закрыли не через Finish (Alt+F4 и т. п.) — всё равно завершаем, иначе чёлка останется скрытой, а снимки — заблокированы
-            Closed += (_, __) => { _escPoll.Stop(); _meter.Stop(); UnhookMosaicFrame(); _tcs.TrySetResult(null); }; // замер кадров не должен пережить слой
+            Closed += (_, __) => { _escPoll.Stop(); _meter.Stop(); UnhookMosaicFrame(); _tcs.TrySetResult(null); Helpers.MemoryTrim.Soon("слой снимка"); }; // замер кадров не должен пережить слой
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;

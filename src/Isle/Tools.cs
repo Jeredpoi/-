@@ -79,6 +79,20 @@ namespace Isle
             return ScreenTools.CaptureAll();
         }
 
+        /// <summary>Уменьшенная копия (не держит исходную картинку).</summary>
+        public static BitmapSource Thumb(BitmapSource bmp, int maxSide = 360)
+        {
+            try
+            {
+                double k = Math.Min(1, maxSide / (double)Math.Max(bmp.PixelWidth, bmp.PixelHeight));
+                if (k >= 1) return bmp;
+                var wb = new System.Windows.Media.Imaging.WriteableBitmap(new System.Windows.Media.Imaging.TransformedBitmap(bmp, new System.Windows.Media.ScaleTransform(k, k)));
+                wb.Freeze();
+                return wb;
+            }
+            catch { return bmp; }
+        }
+
         private static void Done(BitmapSource bmp)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -103,9 +117,12 @@ namespace Isle
             {
                 Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Снимок скопирован" : "Буфер обмена занят",
                 Subtitle = path != null ? "Сохранён в Изображения\\Isle" : copied ? "В буфере обмена" : "Снимок не скопировался — попробуй ещё раз",
-                Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
-                FilePath = path, EditImage = bmp
+                // в уведомлении — маленькая копия, а для «редактировать» снимок читается из файла: полноразмерный
+                // 4K-снимок (десятки мегабайт) больше не висит в памяти, пока не придёт следующее уведомление
+                Image = Thumb(bmp), Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
+                FilePath = path, EditImage = path == null ? bmp : null, EditFromFile = path != null
             });
+            Helpers.MemoryTrim.Soon("снимок");
         }
 
         public static async Task OcrShot()

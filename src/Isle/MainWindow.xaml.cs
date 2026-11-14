@@ -1716,7 +1716,7 @@ namespace Isle
             bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
             ToastFolderButton.Visibility = hasFolder ? Visibility.Visible : Visibility.Collapsed;
             ToastEditButton.Tag = t;
-            ToastEditButton.Visibility = t.EditImage != null ? Visibility.Visible : Visibility.Collapsed;
+            ToastEditButton.Visibility = t.EditImage != null || (t.EditFromFile && File.Exists(t.FilePath)) ? Visibility.Visible : Visibility.Collapsed;
             bool alarmButtons = t.Kind == ToastKind.Alarm && t.RepeatTimer.HasValue;
             if (alarmButtons && ToastAlarmButtons.Visibility != Visibility.Visible) PopAlarmButtons();
             ToastAlarmButtons.Visibility = alarmButtons ? Visibility.Visible : Visibility.Collapsed;
@@ -1938,8 +1938,18 @@ namespace Isle
         private void OnToastEdit(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
-            if (ToastEditButton.Tag is not Toast t || t.EditImage == null) return;
-            try { new Overlays.ImageEditor(t.EditImage, t.FilePath).Show(); }
+            if (ToastEditButton.Tag is not Toast t) return;
+            try
+            {
+                var img = t.EditImage;
+                if (img == null && t.EditFromFile && File.Exists(t.FilePath))
+                {
+                    var b = new System.Windows.Media.Imaging.BitmapImage();
+                    b.BeginInit(); b.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; b.UriSource = new Uri(t.FilePath); b.EndInit(); b.Freeze();
+                    img = b;
+                }
+                if (img != null) new Overlays.ImageEditor(img, t.FilePath).Show();
+            }
             catch (Exception ex) { App.Log("editor: " + ex); }
         }
 

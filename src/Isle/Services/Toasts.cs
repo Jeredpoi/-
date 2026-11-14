@@ -30,6 +30,8 @@ namespace Isle.Services
         public string FilePath { get; set; }
         /// <summary>Снимок, который можно разметить: справа появляется карандаш — открывает редактор пометок.</summary>
         public System.Windows.Media.Imaging.BitmapSource EditImage { get; set; }
+        /// <summary>Редактировать снимок из файла FilePath (картинка не держится в памяти).</summary>
+        public bool EditFromFile { get; set; }
         /// <summary>Картинка — обложка игры: показываем круглой миниатюрой, как в пилюле загрузки.</summary>
         public bool RoundImage { get; set; }
         /// <summary>Уведомление другого приложения: его AppUserModelId — по клику открываем это приложение.</summary>
