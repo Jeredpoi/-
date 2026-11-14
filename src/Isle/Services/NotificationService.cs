@@ -41,7 +41,14 @@ namespace Isle.Services
                 try
                 {
                     _listener.NotificationChanged += (_, __) => System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () => await Poll());
-                    _timer.Interval = TimeSpan.FromSeconds(10); // подстраховка
+                    // у обычного exe Windows событие часто «принимает», но не присылает — поэтому опрос всё равно частый
+                    _timer.Interval = TimeSpan.FromSeconds(1.5);
+                    // «только в острове» — чаще, чтобы плашка Windows успевала мелькнуть как можно меньше
+                    _timer.Tick += (_, __) =>
+                    {
+                        var want = TimeSpan.FromMilliseconds(AppSettings.Current.NotificationsOnlyInIsland ? 400 : 1500);
+                        if (_timer.Interval != want) _timer.Interval = want;
+                    };
                 }
                 catch { _timer.Interval = TimeSpan.FromSeconds(1); }
                 _timer.Start();
@@ -93,6 +100,13 @@ namespace Isle.Services
                         Duration = TimeSpan.FromSeconds(5),
                         ReplaceKey = updated ? "win-notification-" + n.Id : null
                     });
+                    // «только в острове»: убираем уведомление у Windows — плашка справа снизу исчезает (без дубля).
+                    // В «Не беспокоить» остров уведомление не покажет — тогда оставляем его Windows, чтобы не потерялось.
+                    if (AppSettings.Current.NotificationsOnlyInIsland && !AppSettings.Current.DoNotDisturb)
+                    {
+                        try { _listener.RemoveNotification(n.Id); Journal.Debug("notify", "убрано у Windows (только в острове): " + Journal.Short(app, 40)); }
+                        catch (Exception ex) { Journal.Debug("notify", "не удалось убрать у Windows: " + ex.Message); }
+                    }
                 }
                 if (_seen.Count > 2000)
                 {

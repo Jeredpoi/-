@@ -218,6 +218,7 @@ namespace Isle.Views
             Caps.IsChecked = S.CapsToasts;
             Battery.IsChecked = S.BatteryToasts;
             Notif.IsChecked = S.NotificationToasts;
+            NotifOnly.IsChecked = S.NotificationsOnlyInIsland;
             NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
             Vpn.IsChecked = S.VpnStatus;
             SteamExact.IsChecked = S.SteamExactSpeed;
@@ -249,6 +250,7 @@ namespace Isle.Views
             S.CapsToasts = Caps.IsChecked == true;
             S.BatteryToasts = Battery.IsChecked == true;
             S.NotificationToasts = Notif.IsChecked == true;
+            S.NotificationsOnlyInIsland = NotifOnly.IsChecked == true;
             S.VpnStatus = Vpn.IsChecked == true;
             S.ClipboardHistory = ClipHist.IsChecked == true;
             S.ClipboardImages = ClipImg.IsChecked == true;

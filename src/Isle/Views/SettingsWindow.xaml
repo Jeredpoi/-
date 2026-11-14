@@ -572,6 +572,12 @@
                                 <CheckBox x:Name="Notif" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Уведомления только в острове"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Isle убирает плашку Windows справа снизу — уведомление видно только в чёлке. Оно пропадает и из центра уведомлений Windows."/></StackPanel>
+                                <CheckBox x:Name="NotifOnly" HorizontalAlignment="Right" Click="OnToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Статус VPN и страна"/><CheckBox x:Name="Vpn" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">

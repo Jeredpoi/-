@@ -1597,7 +1597,9 @@ namespace Isle
         private void EnqueueToast(Toast t)
         {
             if (t.Kind == ToastKind.Alarm && State == IslandState.Expanded && !_pinned) Collapse(); // будильник важнее открытой панели
-            if (State == IslandState.Expanded && !t.Important) return;
+            if (State == IslandState.Expanded && !t.Important) { Journal.Debug("toast", "не показана (панель открыта): " + Journal.Short(t.Title, 60)); return; }
+            Journal.Debug("toast", "в очередь: " + Journal.Short(t.Title, 60) + ", сейчас " + State + (_currentToast != null ? " («" + Journal.Short(_currentToast.Title, 40) + "»)" : "") + ", в очереди " + _toasts.Count
+                + (_fullscreenHidden ? ", чёлка скрыта в полноэкранном режиме" : "") + (AppSettings.Current.DoNotDisturb ? ", «Не беспокоить»" : ""));
             if (_currentToast?.Kind == ToastKind.Download && t.Kind != ToastKind.Download)
             {
                 if (t.ReplaceKey != null)
