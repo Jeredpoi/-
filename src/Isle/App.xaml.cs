@@ -69,6 +69,7 @@ namespace Isle
                 Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
                 try { DebugProbe.Start(); } catch (Exception ex) { Log("debug probe: " + ex.Message); }
+                Helpers.MemoryTrim.Soon("запуск", 25000); // после запуска остаётся мусор загрузки модулей
                 if (_benchDir != null) _ = Bench.RunAsync(w, _benchDir);
             }
             catch (Exception ex)
