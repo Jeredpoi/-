@@ -80,6 +80,7 @@ namespace Isle.Overlays
                     _cDim[i].Brush = dimBrush;
                     _cRoot.Children.InsertAtTop(_cDim[i]);
                 }
+                BuildCompShapes(c);
                 ShowWindow(_cHost.Handle, 4 /* SW_SHOWNOACTIVATE */);
 
                 // окно WPF — прозрачное; почти невидимый фон, чтобы клики не проходили сквозь него
@@ -99,6 +100,67 @@ namespace Isle.Overlays
                 DisposeComp();
                 return false;
             }
+        }
+
+        // Рамка выделения и пунктир мозаики — тоже на графическом слое: при перетаскивании WPF вообще не
+        // перерисовывается, рамка идёт с частотой монитора (240 Гц), а не ~60, как у прозрачного окна WPF.
+        private ShapeVisual _cSelVis, _cFrameVis;
+        private CompositionRectangleGeometry _cSelGeo, _cFrameGeo;
+
+        private void BuildCompShapes(Compositor c)
+        {
+            float k = (float)Math.Max(1, Kx > 0 ? Kx : 1);
+            _cSelGeo = c.CreateRectangleGeometry();
+            var sel = c.CreateSpriteShape(_cSelGeo);
+            sel.StrokeBrush = c.CreateColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
+            sel.StrokeThickness = 1.5f * k;                      // как у рамки WPF: 1,5 точки
+            _cSelVis = c.CreateShapeVisual();
+            _cSelVis.Size = new Vector2(_vs.Width, _vs.Height);
+            _cSelVis.Shapes.Add(sel);
+            _cSelVis.IsVisible = false;
+            _cRoot.Children.InsertAtTop(_cSelVis);
+
+            _cFrameGeo = c.CreateRectangleGeometry();
+            var under = c.CreateSpriteShape(_cFrameGeo);         // чёрная линия под белым пунктиром — видна на любом фоне
+            under.StrokeBrush = c.CreateColorBrush(Windows.UI.Color.FromArgb(255, 0, 0, 0));
+            under.StrokeThickness = k;
+            var dash = c.CreateSpriteShape(_cFrameGeo);
+            dash.StrokeBrush = c.CreateColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
+            dash.StrokeThickness = k;
+            dash.StrokeDashArray.Add(4); dash.StrokeDashArray.Add(4); // штрихи в толщинах линии — как у WPF (4, 4)
+            _cFrameVis = c.CreateShapeVisual();
+            _cFrameVis.Size = new Vector2(_vs.Width, _vs.Height);
+            _cFrameVis.Shapes.Add(under);
+            _cFrameVis.Shapes.Add(dash);
+            _cFrameVis.IsVisible = false;
+            _cRoot.Children.InsertAtTop(_cFrameVis);
+        }
+
+        private static void PlaceRect(CompositionRectangleGeometry g, float l, float t, float r, float b)
+        {
+            g.Offset = new Vector2(l, t);
+            g.Size = new Vector2(Math.Max(1, r - l), Math.Max(1, b - t));
+        }
+
+        /// <summary>Рамка выделения (в точках слоя); null — спрятать.</summary>
+        private void CompSel(Rect? r)
+        {
+            if (!_comp || _cSelVis == null) return;
+            if (r is not Rect x || x.IsEmpty) { _cSelVis.IsVisible = false; return; }
+            PlaceRect(_cSelGeo, (float)(x.X * Kx), (float)(x.Y * Ky), (float)(x.Right * Kx), (float)(x.Bottom * Ky));
+            _cSelVis.IsVisible = true;
+        }
+
+        /// <summary>Пунктирная рамка мозаики (в точках страницы); null — спрятать.</summary>
+        private void CompFrame(Rect? r)
+        {
+            if (!_comp || _cFrameVis == null) return;
+            if (r is not Rect x) { _cFrameVis.IsVisible = false; return; }
+            double ox = _area.X, oy = _area.Y;
+            float l = (float)Math.Round((ox + x.X) * Kx) + 0.5f, t = (float)Math.Round((oy + x.Y) * Ky) + 0.5f;
+            float rr = (float)Math.Round((ox + x.X + Math.Max(1, x.Width)) * Kx) - 0.5f, b = (float)Math.Round((oy + x.Y + Math.Max(1, x.Height)) * Ky) - 0.5f;
+            PlaceRect(_cFrameGeo, l, t, rr, b);
+            _cFrameVis.IsVisible = true;
         }
 
         private void DisposeComp()

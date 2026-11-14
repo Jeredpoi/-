@@ -183,7 +183,7 @@ namespace Isle.Overlays
                 return;
             }
             _start = e.GetPosition(_canvas);
-            _sel.Visibility = Visibility.Visible;
+            if (_comp) CompSel(new Rect(_start.Value, _start.Value)); else _sel.Visibility = Visibility.Visible;
             CaptureMouse();
         }
 
@@ -200,8 +200,8 @@ namespace Isle.Overlays
             }
             if (_start == null) return;
             var r = new Rect(_start.Value, p);
-            Canvas.SetLeft(_sel, r.X); Canvas.SetTop(_sel, r.Y);
-            _sel.Width = r.Width; _sel.Height = r.Height;
+            if (_comp) CompSel(r);
+            else { Canvas.SetLeft(_sel, r.X); Canvas.SetTop(_sel, r.Y); _sel.Width = r.Width; _sel.Height = r.Height; }
             UpdateDim(r);
             _hintText.Text = (int)(r.Width * Kx) + " × " + (int)(r.Height * Ky);
         }
