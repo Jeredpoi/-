@@ -571,7 +571,8 @@ namespace Isle.Services
                 for (int attempt = 0; ; attempt++)
                 {
                     try { img = Clipboard.GetImage(); break; }
-                    catch (System.Runtime.InteropServices.COMException) when (attempt < 4) { await Task.Delay(60 + attempt * 60); }
+                    // другая программа (эмулятор, менеджер буфера) может держать буфер дольше — до ~2,5 с попыток
+                    catch (System.Runtime.InteropServices.COMException) when (attempt < 9) { await Task.Delay(60 + attempt * 50); }
                 }
                 if (img == null) return;
                 // Хэш и PNG для снимка 4K — это сотни миллисекунд: считаем в фоне, чтобы чёлка не замирала при копировании картинки

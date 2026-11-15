@@ -172,7 +172,7 @@ namespace Isle.Overlays
             Journal.Info("capture", _mode + ": " + (result switch
             {
                 null => "отменено",
-                BitmapSource b => "готово " + b.PixelWidth + "×" + b.PixelHeight + (_markup ? " (с пометками)" : ""),
+                BitmapSource b => "готово " + b.PixelWidth + "×" + b.PixelHeight,
                 Color c => "цвет " + Hex(c),
                 _ => result.GetType().Name
             }) + " через " + _openedFor.ElapsedMilliseconds + " мс");
@@ -223,7 +223,27 @@ namespace Isle.Overlays
             if (_comp) CompSel(r);
             else { Canvas.SetLeft(_sel, r.X); Canvas.SetTop(_sel, r.Y); _sel.Width = r.Width; _sel.Height = r.Height; }
             UpdateDim(r);
-            _hintText.Text = (int)(r.Width * Kx) + " × " + (int)(r.Height * Ky);
+            var px = PixelRect(r);
+            _hintText.Text = px.Width + " × " + px.Height;
+        }
+
+        /// <summary>
+        /// Область в точках → пиксели снимка, по краям, а не «начало + ширина». Курсор не может встать за последний
+        /// пиксель экрана: при масштабе 125 % правый край выделения — 3839-й пиксель, и снимок всего экрана выходил
+        /// 3839×2159. Край в пределах пикселя от края экрана — это сам край.
+        /// </summary>
+        private Int32Rect PixelRect(Rect r)
+        {
+            int W = _shot.PixelWidth, H = _shot.PixelHeight;
+            int x0 = (int)Math.Round(r.X * Kx), y0 = (int)Math.Round(r.Y * Ky);
+            int x1 = (int)Math.Round(r.Right * Kx), y1 = (int)Math.Round(r.Bottom * Ky);
+            if (x0 <= 1) x0 = 0;
+            if (y0 <= 1) y0 = 0;
+            if (x1 >= W - 1) x1 = W;
+            if (y1 >= H - 1) y1 = H;
+            x0 = Math.Clamp(x0, 0, W - 1); y0 = Math.Clamp(y0, 0, H - 1);
+            x1 = Math.Clamp(x1, x0 + 1, W); y1 = Math.Clamp(y1, y0 + 1, H);
+            return new Int32Rect(x0, y0, x1 - x0, y1 - y0);
         }
 
         private void OnUp(object s, MouseButtonEventArgs e)
@@ -235,11 +255,7 @@ namespace Isle.Overlays
             _start = null;
             if (r.IsEmpty) { Finish(null); return; }
             if (r.Width < 4 || r.Height < 4) { Finish(null); return; }
-            var crop = new Int32Rect(
-                (int)Math.Max(0, r.X * Kx), (int)Math.Max(0, r.Y * Ky),
-                (int)Math.Min(_shot.PixelWidth - r.X * Kx, r.Width * Kx),
-                (int)Math.Min(_shot.PixelHeight - r.Y * Ky, r.Height * Ky));
-            if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
+            var crop = PixelRect(r);
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
             _cropX = crop.X; _cropY = crop.Y;
