@@ -144,7 +144,7 @@ namespace Isle.Services
         {
             if (!AppSettings.Current.VpnStatus) { _last = null; if (Active) { Active = false; Changed?.Invoke(); } return; } // включат снова — проверим заново
             // Список сетевых адаптеров Windows отдаёт медленно (до десятков мс) — не в потоке интерфейса, иначе раз в 10 с подлагивает анимация
-            if (_checking) return;
+            if (_checking) { _recheck = true; return; } // сеть поменялась, пока шла проверка — повторим сразу после неё
             _checking = true;
             try
             {
@@ -170,8 +170,14 @@ namespace Isle.Services
                     if (!first && CountryName.Length > 0) ShowToast(active); // та же плашка, уже со страной
                 }
             }
-            finally { _checking = false; }
+            finally
+            {
+                _checking = false;
+                if (_recheck) { _recheck = false; _ = Check(); }
+            }
         }
+
+        private bool _recheck;
 
         private void ShowToast(bool active) => ToastBus.Show(new Toast
         {

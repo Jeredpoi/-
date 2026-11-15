@@ -59,6 +59,7 @@ namespace Isle
 
         public static async Task FullShot()
         {
+            ClipboardService.NoteShotApp(); // весь экран тоже относится к приложению, которое было впереди
             BitmapSource bmp;
             if (AppSettings.Current.ShowInCaptures) { bmp = await ShotWithIslandAsync(); Done(bmp); return; }
             await HideIslandAsync();
@@ -95,6 +96,7 @@ namespace Isle
 
         private static void Done(BitmapSource bmp)
         {
+            ClipboardService.ShotTaken();
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool copied = ScreenTools.CopyImage(bmp);
             long copyMs = sw.ElapsedMilliseconds;
