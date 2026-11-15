@@ -130,7 +130,6 @@ namespace Isle.Services
         {
             var a = Available;
             if (a == null || Installing) return;
-            Installing = true;
             string title = "Обновление до " + a.Version.ToString(3);
             double last = -1;
             void Show(double p, string sub) => ToastBus.Show(new Toast
@@ -148,9 +147,9 @@ namespace Isle.Services
                 Show(p, p >= 1 ? "Устанавливаю — Isle перезапустится сам" : "Скачиваю… " + (int)(p * 100) + "%" + (a.Size > 0 ? " · " + Mb((long)(a.Size * p)) + " из " + Mb(a.Size) : ""));
             });
             try { await DownloadAndInstallAsync(a, progress); }
+            catch (InvalidOperationException) when (Installing) { } // уже обновляется (кнопкой в настройках) — второй загрузки не будет
             catch (Exception ex)
             {
-                Installing = false;
                 Journal.Info("update", "не удалось обновить: " + ex.Message);
                 ToastBus.Show(new Toast
                 {
@@ -163,6 +162,15 @@ namespace Isle.Services
 
         /// <summary>Скачивает установщик и запускает тихую установку. Isle закроется и запустится уже новой версией.</summary>
         public static async Task DownloadAndInstallAsync(UpdateInfo info, IProgress<double> progress)
+        {
+            // одна загрузка за раз: плашка в чёлке и кнопка в настройках писали в один и тот же файл установщика
+            if (Installing) throw new InvalidOperationException("Обновление уже скачивается");
+            Installing = true;
+            try { await DownloadAndRunAsync(info, progress); }
+            catch { Installing = false; throw; }
+        }
+
+        private static async Task DownloadAndRunAsync(UpdateInfo info, IProgress<double> progress)
         {
             var path = Path.Combine(Path.GetTempPath(), "Isle-Setup-" + info.Version.ToString(3) + ".exe");
             Download.DefaultRequestHeaders.UserAgent.Clear();

@@ -138,6 +138,7 @@ namespace Isle.Overlays
         {
             // прошлый слой почему-то остался на экране — закрываем, иначе он попадёт в новый снимок второй панелью
             if (_open != null) { try { _open.Finish(null); } catch { } _open = null; }
+            ClipboardService.NoteShotApp(); // что снимаем — чтобы снимок попал в папку этого приложения
             var vs = ScreenTools.VirtualScreen();
             shot ??= ScreenTools.Capture(vs);
             var w = new CaptureOverlay(shot, vs, mode);
@@ -159,6 +160,9 @@ namespace Isle.Overlays
                 Color c => "цвет " + Hex(c),
                 _ => result.GetType().Name
             }) + " через " + _openedFor.ElapsedMilliseconds + " мс");
+            // приложение снимка — только настоящему снимку области; отмена, текст с экрана, пипетка, QR — забываем
+            if (result is BitmapSource && _mode == CaptureMode.Region) ClipboardService.ShotTaken();
+            else ClipboardService.ForgetShotApp();
             _tcs.TrySetResult(result);
             Close();
         }
