@@ -38,6 +38,46 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.HideInFullscreen = true;
+                await Task.Delay(3500);
+                var scaler = (FrameworkElement)w.FindName("Scaler");
+                string St() => "чёлка " + (scaler.Visibility == Visibility.Visible ? "ВИДНА" : "спрятана") + ", состояние " + w.State + ", полноэкранное " + AppHost.Watchers.IsFullscreen;
+                async Task Front(Window x) { x.Show(); await Task.Delay(400); Isle.Native.Win32.ForceForeground(new System.Windows.Interop.WindowInteropHelper(x).Handle); await Task.Delay(400); AppHost.Watchers.CheckFullscreenNow(); await Task.Delay(500); }
+
+                // 1) «игра»: окно без рамки на весь экран
+                var game = new Window { WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, Left = 0, Top = 0, Width = SystemParameters.PrimaryScreenWidth, Height = SystemParameters.PrimaryScreenHeight, Background = Brushes.DarkSlateBlue, Title = "game" };
+                await Front(game);
+                L("игра впереди: " + St());
+                ToastBus.Show(new Toast { Title = "Сообщение", Subtitle = "чужое уведомление", Kind = ToastKind.Notification, Duration = TimeSpan.FromSeconds(2) });
+                await Task.Delay(700);
+                L("  чужое уведомление: " + St());
+                await Task.Delay(2500);
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "#4ADE80", Subtitle = "rgb(74, 222, 128)", Icon = Icons.Pipette, Accent = Color.FromRgb(0x4A, 0xDE, 0x80), Swatch = Color.FromRgb(0x4A, 0xDE, 0x80), Important = true, Duration = TimeSpan.FromSeconds(3.5) });
+                await Task.Delay(700);
+                L("  плашка пипетки: " + St());
+                await Task.Delay(6500);
+                L("  через 7 с после пипетки: " + St());
+                game.Close();
+
+                // 2) обычное развёрнутое окно с рамкой (как эмулятор)
+                var app = new Window { WindowStyle = WindowStyle.SingleBorderWindow, WindowState = WindowState.Maximized, Background = Brushes.DarkOliveGreen, Title = "app" };
+                await Front(app);
+                L("развёрнутое окно с рамкой впереди: " + St());
+                app.Close();
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
