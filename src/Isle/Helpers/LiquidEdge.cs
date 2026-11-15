@@ -218,22 +218,25 @@ namespace Isle.Helpers
                 var pts = _pts; var inner = _inner;
                 double rho = Math.Max(0, r - 0.5);
                 int n = 0;
-                void Add(double x, double baseY, double depth)
+                // заливка заходит внутрь острова на 2,5 px ПО НОРМАЛИ к контуру: перекрывает его обводку и рамку
+                // подсветки плашки (1,5 px). Раньше сдвиг был только вниз — на крутой части дуги рамка проступала второй линией
+                const double inset = 2.5;
+                void Add(double x, double baseY, double depth, double nx, double ny)
                 {
                     pts[n] = new Point(x, baseY + depth);
-                    inner[n] = new Point(x, baseY - 1.5); // заливка заходит чуть внутрь острова — перекрывает его обводку
+                    inner[n] = new Point(x - nx * inset, baseY - ny * inset);
                     n++;
                 }
                 for (int j = 0; j < CornerSamples; j++)
                 {
                     double th = j / (double)CornerSamples * Math.PI / 2;
-                    Add(r - rho * Math.Cos(th), 1 - r + rho * Math.Sin(th), _cornerL[j]);
+                    Add(r - rho * Math.Cos(th), 1 - r + rho * Math.Sin(th), _cornerL[j], -Math.Cos(th), Math.Sin(th));
                 }
-                for (int i = 0; i < Samples; i++) Add(r + i / (double)(Samples - 1) * span, 0.5, _depth[i]);
+                for (int i = 0; i < Samples; i++) Add(r + i / (double)(Samples - 1) * span, 0.5, _depth[i], 0, 1);
                 for (int j = CornerSamples - 1; j >= 0; j--)
                 {
                     double th = j / (double)CornerSamples * Math.PI / 2;
-                    Add(w - r + rho * Math.Cos(th), 1 - r + rho * Math.Sin(th), _cornerR[j]);
+                    Add(w - r + rho * Math.Cos(th), 1 - r + rho * Math.Sin(th), _cornerR[j], Math.Cos(th), Math.Sin(th));
                 }
 
                 void Curve(StreamGeometryContext c)
