@@ -29,6 +29,11 @@ namespace Isle.Helpers
         private class Drop { public double X, Y, Vy, R, Life; }
 
         public Brush Fill { get; set; } = Brushes.Black;
+        /// <summary>
+        /// Подсветка плашки (цвет и сила 0…1): низ острова под ней тонирован этим цветом, и вытянутый край
+        /// должен продолжать его — иначе под зелёной плашкой «капля» была чёрной с серой обводкой.
+        /// </summary>
+        public Func<(Color color, double strength)?> Tint { get; set; }
         public Color SpikeColor { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public double CornerRadius { get; set; } = 18;
         /// <summary>Поставщик спектра (null — музыки нет).</summary>
@@ -167,6 +172,22 @@ namespace Isle.Helpers
             double maxDepth = 0;
             foreach (var d in _depth) maxDepth = Math.Max(maxDepth, d);
 
+            // цвет низа острова под подсвеченной плашкой: там градиент подсветки доходит до 0x3C/255 её цвета
+            var tint = Tint?.Invoke();
+            Brush fill = Fill;
+            Pen outlinePen = OutlinePen;
+            if (tint is var (tc, ts) && ts > 0.02)
+            {
+                var baseCol = Fill is SolidColorBrush sb ? sb.Color : Colors.Black;
+                double a = 0x3C / 255.0 * ts;
+                var f = Color.FromRgb((byte)(baseCol.R + (tc.R - baseCol.R) * a), (byte)(baseCol.G + (tc.G - baseCol.G) * a), (byte)(baseCol.B + (tc.B - baseCol.B) * a));
+                fill = new SolidColorBrush(f); fill.Freeze();
+                // обводка — как рамка подсветки (её цвет с прозрачностью 0xB0) поверх серого контура
+                double k = 0xB0 / 255.0 * ts;
+                var o = Color.FromRgb((byte)(0x23 + (tc.R - 0x23) * k), (byte)(0x23 + (tc.G - 0x23) * k), (byte)(0x2A + (tc.B - 0x2A) * k));
+                outlinePen = new Pen(new SolidColorBrush(o), 1 + 0.5 * ts); outlinePen.Freeze();
+            }
+
             if (maxDepth > 0.05)
             {
                 var g = new StreamGeometry();
@@ -189,7 +210,7 @@ namespace Isle.Helpers
                     c.LineTo(new Point(w - r + 2, -1), true, true);
                 }
                 g.Freeze();
-                dc.DrawGeometry(Fill, null, g);
+                dc.DrawGeometry(fill, null, g);
 
                 // обводка по изгибу — тем же цветом, что и контур острова: «жидкость» видна и на чёрном экране
                 var outline = new StreamGeometry();
@@ -208,7 +229,7 @@ namespace Isle.Helpers
                     c.LineTo(new Point(w - r + 2, 0.5), true, true);
                 }
                 outline.Freeze();
-                dc.DrawGeometry(null, OutlinePen, outline);
+                dc.DrawGeometry(null, outlinePen, outline);
 
                 // кончики всплесков светятся цветом обложки
                 double musicLevel = 0;
@@ -229,8 +250,8 @@ namespace Isle.Helpers
             foreach (var d in _drops)
             {
                 var a = (byte)(255 * Math.Clamp(d.Life, 0, 1));
-                var fill = Fill is SolidColorBrush sb ? new SolidColorBrush(Color.FromArgb(a, sb.Color.R, sb.Color.G, sb.Color.B)) : Fill;
-                dc.DrawEllipse(fill, new Pen(new SolidColorBrush(Color.FromArgb((byte)(a / 3), 255, 255, 255)), 0.6), new Point(d.X, d.Y), d.R, d.R * 1.15);
+                var dropFill = fill is SolidColorBrush sb ? new SolidColorBrush(Color.FromArgb(a, sb.Color.R, sb.Color.G, sb.Color.B)) : Fill;
+                dc.DrawEllipse(dropFill, new Pen(new SolidColorBrush(Color.FromArgb((byte)(a / 3), 255, 255, 255)), 0.6), new Point(d.X, d.Y), d.R, d.R * 1.15);
             }
         }
     }

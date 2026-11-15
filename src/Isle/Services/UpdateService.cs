@@ -136,6 +136,7 @@ namespace Isle.Services
             void Show(double p, string sub) => ToastBus.Show(new Toast
             {
                 Kind = ToastKind.Download, Title = title, Subtitle = sub, Icon = Icons.Download, Progress = p,
+                Accent = System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80), // кольцо загрузки — зелёное, как плашка «Новая версия»
                 ReplaceKey = "update", Important = true, Duration = TimeSpan.FromMinutes(10),
             });
             Show(0, "Скачиваю…");
