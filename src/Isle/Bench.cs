@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -36,6 +37,39 @@ namespace Isle
         }
 
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3500);
+                int sw = (int)SystemParameters.PrimaryScreenWidth, sh = (int)SystemParameters.PrimaryScreenHeight;
+                var shots = new[] { (0, 0, sw - 1, sh - 1, "весь экран"), (100, 100, 500, 400, "область 100,100 → 500,400") };
+                foreach (var (x0, y0, x1, y1, name) in shots)
+                {
+                    _ = Tools.RegionShot();
+                    var ov = await WaitOverlay();
+                    await Task.Delay(700);
+                    SetCursorPos(x0, y0); await Task.Delay(200);
+                    mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero);
+                    for (int i = 1; i <= 20; i++) { SetCursorPos(x0 + (x1 - x0) * i / 20, y0 + (y1 - y0) * i / 20); await Task.Delay(20); }
+                    await Task.Delay(150);
+                    mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                    await Task.Delay(700);
+                    keybd_event(0x0D, 0, 0, UIntPtr.Zero); keybd_event(0x0D, 0, KeyUp, UIntPtr.Zero);
+                    await Task.Delay(3500);
+                    var png = Directory.GetFiles(ScreenTools.ShotsDir, "*.png").OrderBy(File.GetLastWriteTime).Last();
+                    var dec = System.Windows.Media.Imaging.BitmapDecoder.Create(new Uri(png), System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                    File.AppendAllText(log, name + ": экран " + sw + "×" + sh + ", снимок " + dec.Frames[0].PixelWidth + "×" + dec.Frames[0].PixelHeight + "\n");
+                }
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
