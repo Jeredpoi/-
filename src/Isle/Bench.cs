@@ -38,6 +38,45 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3500);
+                var np = System.Diagnostics.Process.Start("notepad.exe");
+                await Task.Delay(2500); np.Refresh();
+                for (int round = 0; round < 3; round++)
+                {
+                    foreach (var steal in new[] { false, true })
+                    {
+                        Isle.Native.Win32.ForceForeground(np.MainWindowHandle); await Task.Delay(500);
+                        _ = Tools.RegionShot();
+                        var ov = (Window)await WaitOverlay();
+                        if (ov == null) { L("слой не открылся"); continue; }
+                        await Task.Delay(600);
+                        if (steal) { Isle.Native.Win32.ForceForeground(np.MainWindowHandle); await Task.Delay(300); }
+                        L((steal ? "впереди Блокнот" : "впереди слой") + ": передний = " + Isle.Native.Win32.ForegroundProcessName() + ", слой думает, что фокус у него: " + ov.IsKeyboardFocusWithin);
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        keybd_event(0x1B, 0, 0, UIntPtr.Zero); await Task.Delay(40); keybd_event(0x1B, 0, KeyUp, UIntPtr.Zero);
+                        while (ov.IsVisible && sw.ElapsedMilliseconds < 3000) await Task.Delay(5);
+                        L("  Esc → " + (ov.IsVisible ? "НЕ закрылся за 3 с" : "закрылся за " + sw.ElapsedMilliseconds + " мс"));
+                        if (ov.IsVisible) { ov.Close(); await Task.Delay(300); }
+                        await Task.Delay(600);
+                    }
+                }
+                try { np.Kill(); } catch { }
+                var jl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Isle");
+                foreach (var f in Directory.GetFiles(jl, "*.log")) foreach (var line in File.ReadLines(f)) if (line.Contains("Esc") || line.Contains("передним")) L("журнал: " + line);
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
