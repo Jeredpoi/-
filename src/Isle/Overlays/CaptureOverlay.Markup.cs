@@ -319,10 +319,7 @@ namespace Isle.Overlays
         /// </summary>
         private void SetArea(Rect a)
         {
-            var crop = new Int32Rect(
-                (int)Math.Clamp(a.X * Kx, 0, _shot.PixelWidth - 1), (int)Math.Clamp(a.Y * Ky, 0, _shot.PixelHeight - 1), 0, 0);
-            crop.Width = Math.Max(1, Math.Min(_shot.PixelWidth - crop.X, (int)Math.Round(a.Width * Kx)));
-            crop.Height = Math.Max(1, Math.Min(_shot.PixelHeight - crop.Y, (int)Math.Round(a.Height * Ky)));
+            var crop = PixelRect(a);
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
 
