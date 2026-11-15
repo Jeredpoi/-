@@ -770,8 +770,9 @@ namespace Isle.Overlays
                 try
                 {
                     Hide();
-                    full = RenderFlat(content, _cropW, _cropH);
-                    Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + " склеена за " + t1.ElapsedMilliseconds + " мс" + how);
+                    full = ComposeFull(content, out bool plain);
+                    Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + (plain ? " без пометок — пиксель в пиксель" : " склеена")
+                        + " за " + t1.ElapsedMilliseconds + " мс" + how);
                 }
                 catch (Exception ex) { Journal.Error("capture", "склейка не удалась: " + ex); }
                 finally { Finish(full); } // слой обязательно закрывается — иначе снимки «залипали» до перезапуска
@@ -796,6 +797,36 @@ namespace Isle.Overlays
                 guard.Stop();
                 Complete(" (без полёта)");
             }
+        }
+
+        /// <summary>
+        /// Итоговая картинка в полном разрешении. Раньше вся страница (вместе со снимком) шла через VisualBrush:
+        /// при масштабе Windows 125–150 % снимок по дороге ужимался до размера в точках и растягивался обратно —
+        /// выходило мыльнее, чем на экране. Теперь без пометок отдаём сам вырезанный кусок экрана, а с пометками
+        /// кладём его 1:1 и рисуем пометки поверх.
+        /// </summary>
+        private BitmapSource ComposeFull(FrameworkElement content, out bool plain)
+        {
+            var crop = _crop;
+            if (crop.CanFreeze && !crop.IsFrozen) crop.Freeze();
+            plain = _ink.Children.Count == 0 && _patches.Children.Count == 0 && _compPatches.Count == 0;
+            if (plain) return crop;
+            _baseImage.Visibility = Visibility.Hidden; // снимок рисуем сами, без пересчёта размера
+            content.UpdateLayout();
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+            {
+                dc.DrawImage(crop, new Rect(0, 0, _cropW, _cropH));
+                dc.DrawRectangle(new VisualBrush(content)
+                {
+                    Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute,
+                    Viewbox = new Rect(0, 0, content.Width, content.Height)
+                }, null, new Rect(0, 0, _cropW, _cropH));
+            }
+            var rtb = new RenderTargetBitmap(_cropW, _cropH, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(dv);
+            rtb.Freeze();
+            return rtb;
         }
 
         /// <summary>Склеить снимок с пометками в картинку w×h.</summary>
