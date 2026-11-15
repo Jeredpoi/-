@@ -31,6 +31,9 @@ namespace Isle.Overlays
         private readonly TaskCompletionSource<object> _tcs = new();
         private readonly System.Windows.Threading.DispatcherTimer _escPoll = new() { Interval = TimeSpan.FromMilliseconds(30) };
         private bool _escWasDown = true, _escArmed;
+        private long _escPressAt;
+        /// <summary>Когда Esc последний раз пришёл обычным путём (KeyDown) — чтобы опрос клавиатуры не обработал то же нажатие второй раз.</summary>
+        private long _escKeyAt = -10_000;
 
         private CaptureOverlay(BitmapSource shot, Int32Rect vs, CaptureMode mode)
         {
@@ -102,18 +105,31 @@ namespace Isle.Overlays
                 if (_comp)
                     try { if (PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null) hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly; } catch { }
                 UpdateDim(Rect.Empty);
-                _escPoll.Start();
+                var fg = Isle.Native.Win32.GetForegroundWindow();
+                Journal.Info("capture", fg == h ? "слой впереди, Esc придёт клавишей" : "слой не стал передним окном (Windows не дала) — Esc ловим опросом клавиатуры");
             };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) { OnEscape(); e.Handled = true; } else OnMarkupKey(e); };
-            // Подстраховка: Esc ловим напрямую с клавиатуры, даже если окно так и не получило фокус
+            KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Escape) { _escKeyAt = Environment.TickCount64; OnEscape("клавиша"); e.Handled = true; }
+                else OnMarkupKey(e);
+            };
+            // Подстраховка: Esc ловим напрямую с клавиатуры. Раньше она молчала, если окно «думало», что фокус у него
+            // (IsKeyboardFocusWithin), — а при открытии по PrintScreen Windows иногда не делает слой передним окном:
+            // фокус у слоя есть, но нажатия уходят в прошлую программу, и Esc срабатывал только после клика.
+            // Теперь: если это же нажатие не пришло обычным путём за 120 мс — закрываем по опросу.
             _escPoll.Tick += (_, __) =>
             {
                 bool down = (Isle.Native.Win32.GetAsyncKeyState(0x1B) & 0x8000) != 0;
-                // своё окно в фокусе — Esc уже обработан в KeyDown (там он сначала отменяет набираемый текст)
-                if (down && !_escWasDown && _escArmed && !IsKeyboardFocusWithin) OnEscape();
+                if (down && !_escWasDown && _escArmed) _escPressAt = Environment.TickCount64;
+                if (_escPressAt > 0 && Environment.TickCount64 - _escPressAt >= 120)
+                {
+                    long at = _escPressAt; _escPressAt = 0;
+                    if (_escKeyAt < at - 40) OnEscape("опрос клавиатуры");
+                }
                 _escWasDown = down;
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
+            _escPoll.Start(); // сразу, а не после загрузки: Esc в первые мгновения тоже должен сработать
             // окно закрыли не через Finish (Alt+F4 и т. п.) — всё равно завершаем, иначе чёлка останется скрытой, а снимки — заблокированы
             Closed += (_, __) => { _escPoll.Stop(); _meter.Stop(); UnhookMosaicFrame(); _tcs.TrySetResult(null); Helpers.MemoryTrim.Soon("слой снимка"); }; // замер кадров не должен пережить слой
             MouseLeftButtonDown += OnDown;

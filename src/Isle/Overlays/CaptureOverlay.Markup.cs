@@ -705,8 +705,9 @@ namespace Isle.Overlays
         }
 
         /// <summary>Esc: сначала отменяет набираемый текст, потом — весь снимок.</summary>
-        private void OnEscape()
+        private void OnEscape(string how)
         {
+            Journal.Info("capture", "Esc (" + how + ") через " + _openedFor.ElapsedMilliseconds + " мс после открытия" + (_saving ? " — снимок уже сохраняется, не отменяю" : ""));
             if (_saving) return; // снимок уже улетает — Esc его не отменяет
             if (_markup && _text != null) { MarkUndo(); return; }
             Finish(null);
