@@ -35,7 +35,49 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void Snap(MainWindow w, string dir, string name, double x0, double width)
+        {
+            w.UpdateLayout();
+            int H = 110;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(width * 4), H * 4, 384, 384, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(120, 70, 150)), null, new Rect(0, 0, width, H)); dc.DrawRectangle(new VisualBrush(w.Content as Visual) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top, ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(x0, 0, width, H) }, null, new Rect(0, 0, width, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(4000);
+                async Task Shot(string name, double fx, double y)
+                {
+                    var isl = (FrameworkElement)w.FindName("Island");
+                    var tl = isl.TranslatePoint(new Point(0, 0), w.Content as UIElement);
+                    var p = w.PointToScreen(new Point(tl.X + isl.ActualWidth * fx, y));
+                    SetCursorPos((int)p.X, (int)p.Y);
+                    await Task.Delay(1800);
+                    Snap(w, dir, name + "-left", tl.X - 20, 160);
+                    Snap(w, dir, name + "-full", tl.X - 20, isl.ActualWidth + 40);
+                }
+                await Shot("a-idle", 0.5, 400);
+                await Shot("b-mid", 0.5, 70);
+                await Shot("c-edge", 0.02, 60);
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Новая версия Isle 0.2.6", Subtitle = "Нажми — скачаю и установлю · 46 МБ", Icon = Icons.Download, Important = true, Duration = TimeSpan.FromSeconds(30), ReplaceKey = "update" });
+                await Task.Delay(1200);
+                await Shot("d-toast-edge", 0.05, 90);
+                await Shot("e-toast-mid", 0.5, 95);
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
