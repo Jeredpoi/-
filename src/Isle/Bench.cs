@@ -35,7 +35,68 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void Snap(MainWindow w, string dir, string name)
+        {
+            w.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)w.ActualWidth, (int)w.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, w.ActualWidth, w.ActualHeight)); dc.DrawRectangle(new VisualBrush(w.Content as Visual), null, new Rect(0, 0, w.ActualWidth, w.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                // картинка с мелким текстом, как скриншот
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(1600, 900, 96, 96, PixelFormats.Pbgra32);
+                var dv = new DrawingVisual();
+                using (var dc = dv.RenderOpen())
+                {
+                    dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(30, 40, 90), Color.FromRgb(120, 40, 90), 30), null, new Rect(0, 0, 1600, 900));
+                    for (int i = 0; i < 30; i++)
+                        dc.DrawText(new FormattedText("Строка " + (i + 1) + ": мелкий текст на скриншоте — его нужно прочитать, увеличив картинку", System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 18, Brushes.White, 1), new Point(40, 30 + i * 28));
+                }
+                bmp.Render(dv); bmp.Freeze();
+                Directory.CreateDirectory(ClipboardService.ImagesDir);
+                var enc0 = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc0.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                using (var f = File.Create(Path.Combine(ClipboardService.ImagesDir, "view-test.png"))) enc0.Save(f);
+                AppHost.Clipboard.Items.Insert(0, new ClipItem { Kind = ClipKind.Image, Text = "Изображение 1600×900", ImageFile = "view-test.png", Source = "chrome" });
+                AppHost.Clipboard.Items.Insert(1, new ClipItem { Kind = ClipKind.Text, Text = "просто текст", Source = "notepad" });
+                w.SuppressAutoCollapse = true;
+                w.Expand("clip");
+                await Task.Delay(1500);
+                var v = (Isle.Views.ClipboardView)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "clip" });
+                Snap(w, dir, "v0-list");
+                // настоящий клик мышью по миниатюре
+                var thumb = (FrameworkElement)v.GetType().GetMethod("FindThumb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(v, new object[] { AppHost.Clipboard.Items[0] });
+                var p = thumb.PointToScreen(new Point(thumb.ActualWidth / 2, thumb.ActualHeight / 2));
+                SetCursorPos((int)p.X, (int)p.Y); await Task.Delay(300);
+                mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(50); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                foreach (var ms in new[] { 60, 70, 70, 80, 300 }) { await Task.Delay(ms); Snap(w, dir, "v1-open-" + ms); }
+                File.AppendAllText(log, "после клика: чёлка " + w.State + ", просмотр " + v.Viewer.Visibility + "\n");
+                await Task.Delay(800);
+                Snap(w, dir, "v2-opened");
+                v.GetType().GetMethod("ZoomAt", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(v, new object[] { new Point(v.ViewerFrame.ActualWidth * 0.3, v.ViewerFrame.ActualHeight * 0.3), 3.0 });
+                await Task.Delay(300);
+                Snap(w, dir, "v3-zoom");
+                keybd_event(0x1B, 0, 0, UIntPtr.Zero); keybd_event(0x1B, 0, KeyUp, UIntPtr.Zero);
+                await Task.Delay(120); Snap(w, dir, "v4-closing");
+                await Task.Delay(600); Snap(w, dir, "v5-closed");
+                File.AppendAllText(log, "после Esc: чёлка " + w.State + ", просмотр " + v.Viewer.Visibility + "\n");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
