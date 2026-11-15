@@ -38,6 +38,34 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                for (int i = 0; i < 40 && w.State != IslandState.Collapsed; i++) await Task.Delay(250);
+                await Task.Delay(1500);
+                var b = (FrameworkElement)w.FindName("Buddy");
+                File.AppendAllText(log, "чёлка: " + w.State + ", Клоди виден: " + b.IsVisible + "\n");
+                var p = b.PointToScreen(new Point(b.ActualWidth / 2, b.ActualHeight / 2));
+                SetCursorPos((int)p.X, (int)p.Y); await Task.Delay(400);
+                mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                await Task.Delay(800);
+                File.AppendAllText(log, "после клика по Клоди: " + w.State + ", тычок: " + typeof(Isle.Helpers.Character).GetField("_poke", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(b) + "\n");
+                var lbl = (FrameworkElement)w.FindName("Island");
+                var q = lbl.PointToScreen(new Point(lbl.ActualWidth - 20, lbl.ActualHeight / 2));
+                SetCursorPos((int)q.X, (int)q.Y); await Task.Delay(400);
+                mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                await Task.Delay(800);
+                File.AppendAllText(log, "после клика в другом месте чёлки: " + w.State + "\n");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncPokeSheets(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
