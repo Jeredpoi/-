@@ -307,6 +307,11 @@ namespace Isle.Services
                 var proc = ProcessOf(fg);
                 if (DesktopTools.Any(t => proc.StartsWith(t))) return false;
 
+                // Обычное окно, развёрнутое на весь экран (с рамкой; например, эмулятор при скрытой панели задач),
+                // — не игра и не видео: раньше из-за него чёлка пряталась, и не было видно даже плашек пипетки и таймера
+                const int GWL_STYLE = -16, WS_THICKFRAME = 0x00040000;
+                if (Win32.IsZoomed(fg) && (Win32.GetWindowLong(fg, GWL_STYLE) & WS_THICKFRAME) != 0) return false;
+
                 if (!Win32.GetWindowRect(fg, out var r)) return false;
                 var mon = Win32.MonitorFromWindow(fg, 2);
                 var mi = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };

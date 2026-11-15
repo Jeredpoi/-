@@ -231,6 +231,7 @@ namespace Isle
             _peekTimer.Tick += (_, __) =>
             {
                 if (Island.IsMouseOver || State == IslandState.Expanded) return; // пока пользуются — не прячем
+                if (State == IslandState.Toast && _currentToast != null && PeeksOverFullscreen(_currentToast)) return; // плашка ещё висит
                 _peekTimer.Stop();
                 _fullscreenPeek = false;
                 ApplyVisibility();
@@ -1694,9 +1695,23 @@ namespace Isle
             _toastTimer.Start();
         }
 
+        /// <summary>
+        /// Плашка — ответ на действие самого пользователя (пипетка, снимок, таймер, голос, обновление) или ошибка:
+        /// её видно даже поверх полноэкранной игры — остров выглядывает, пока она висит. Чужие уведомления,
+        /// громкость, раскладка и Caps Lock в игре по-прежнему не показываются.
+        /// </summary>
+        private static bool PeeksOverFullscreen(Toast t) =>
+            t.Important && (t.Kind is ToastKind.Success or ToastKind.Error or ToastKind.Alarm or ToastKind.Timer or ToastKind.Reminder
+                            || t.Warning || t.ReplaceKey is "voice" or "update");
+
         private void RenderToast(Toast t)
         {
             _currentToast = t;
+            if (_fullscreenHidden && PeeksOverFullscreen(t))
+            {
+                Journal.Debug("toast", "поверх полноэкранного: " + Journal.Short(t.Title, 60));
+                PeekOverFullscreen();
+            }
             SetIslandRadius(18);
             if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
             if (t.Kind == ToastKind.Alarm) StartAlarmPulse(); else StopAlarmPulse();
