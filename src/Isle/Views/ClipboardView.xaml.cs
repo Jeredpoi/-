@@ -57,6 +57,8 @@ namespace Isle.Views
             Svc.ActiveFolderChanged += () => { RebuildFolders(); UpdateRecordBar(); };
             Svc.FolderAppsChanged += () => { RebuildFolders(); UpdateAppsBar(); };
             _undoTimer.Tick += (_, __) => FinishUndo();
+            // чёлку свернули или ушли на другую вкладку — просмотр закрывается сразу, без анимации
+            IsVisibleChanged += (_, __) => { if (!IsVisible) CloseViewer(instant: true); };
             RefreshAll();
         }
 

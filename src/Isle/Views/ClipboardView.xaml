@@ -105,7 +105,8 @@
                                             <h:Icon Kind="{Binding IconKind}" Width="15" Height="15" Foreground="{StaticResource Muted}"/>
                                         </Border>
                                         <Border x:Name="swatch" Width="28" Height="28" CornerRadius="8" Background="{Binding Swatch}" BorderBrush="#3A3A42" BorderThickness="1" Visibility="Collapsed"/>
-                                        <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#1C1C20" ClipToBounds="True" Visibility="Collapsed">
+                                        <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#1C1C20" ClipToBounds="True" Visibility="Collapsed"
+                                                Cursor="Hand" ToolTip="Посмотреть" MouseLeftButtonUp="OnThumbClick" Tag="{Binding}">
                                             <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
                                         </Border>
                                     </Grid>
@@ -161,5 +162,34 @@
                 </ListBox>
             </Grid>
         </DockPanel>
+
+        <!-- просмотр картинки: вырастает из миниатюры, колёсико — масштаб, перетаскивание — сдвиг -->
+        <Grid x:Name="Viewer" Grid.ColumnSpan="2" Visibility="Collapsed" Margin="-6">
+            <Border x:Name="ViewerBack" Background="#F2050507" CornerRadius="14" Opacity="0" MouseLeftButtonUp="OnViewerBackClick"/>
+            <Canvas x:Name="ViewerCanvas" ClipToBounds="True" IsHitTestVisible="True" Background="{x:Null}">
+                <Border x:Name="ViewerFrame" Background="#0E0E10" ClipToBounds="True"
+                        MouseWheel="OnViewerWheel" MouseLeftButtonDown="OnViewerDown" MouseMove="OnViewerMove" MouseLeftButtonUp="OnViewerUp">
+                    <Image x:Name="ViewerImage" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Border>
+            </Canvas>
+            <Border x:Name="ViewerBar" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,10" Opacity="0"
+                    Background="#E6141418" BorderBrush="#2A2A33" BorderThickness="1" CornerRadius="16" Padding="6">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="ViewerInfo" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0,12,0"/>
+                    <Button Style="{StaticResource Ghost}" Padding="10,6" Click="OnViewerCopy" ToolTip="Скопировать картинку">
+                        <StackPanel Orientation="Horizontal"><h:Icon Kind="Copy" Width="14" Height="14"/><TextBlock Text="Копировать" FontSize="12" Margin="7,0,0,0"/></StackPanel>
+                    </Button>
+                    <Button x:Name="ViewerSaveBtn" Style="{StaticResource Ghost}" Padding="10,6" Click="OnViewerSave" ToolTip="Сохранить как…">
+                        <StackPanel Orientation="Horizontal"><h:Icon Kind="Download" Width="14" Height="14"/><TextBlock Text="Сохранить" FontSize="12" Margin="7,0,0,0"/></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Padding="10,6" Click="OnViewerOpen" ToolTip="Открыть в программе для фото">
+                        <StackPanel Orientation="Horizontal"><h:Icon Kind="External" Width="14" Height="14"/><TextBlock Text="Открыть" FontSize="12" Margin="7,0,0,0"/></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Padding="8,6" Click="OnViewerClose" ToolTip="Закрыть (Esc)" Margin="4,0,0,0">
+                        <h:Icon Kind="Close" Width="14" Height="14"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>
