@@ -1662,6 +1662,11 @@ namespace Isle
             if (_toasts.Count == 0)
             {
                 GlowStatus(null); // плашки кончились — подсветка гаснет
+                if (_peekForToast && _fullscreenPeek)
+                {
+                    _peekForToast = false;
+                    _peekTimer.Stop(); _peekTimer.Interval = TimeSpan.FromSeconds(1.2); _peekTimer.Start();
+                }
                 if (_currentToast?.Kind == ToastKind.Alarm) AlarmService.Stop();
                 StopAlarmPulse();
                 _currentToast = null;
@@ -1700,6 +1705,9 @@ namespace Isle
         /// её видно даже поверх полноэкранной игры — остров выглядывает, пока она висит. Чужие уведомления,
         /// громкость, раскладка и Caps Lock в игре по-прежнему не показываются.
         /// </summary>
+        /// <summary>Остров выглянул над полноэкранным ради плашки — спрятать вскоре после неё, а не через 10 с.</summary>
+        private bool _peekForToast;
+
         private static bool PeeksOverFullscreen(Toast t) =>
             t.Important && (t.Kind is ToastKind.Success or ToastKind.Error or ToastKind.Alarm or ToastKind.Timer or ToastKind.Reminder
                             || t.Warning || t.ReplaceKey is "voice" or "update");
@@ -1711,6 +1719,7 @@ namespace Isle
             {
                 Journal.Debug("toast", "поверх полноэкранного: " + Journal.Short(t.Title, 60));
                 PeekOverFullscreen();
+                _peekForToast = true;
             }
             SetIslandRadius(18);
             if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
@@ -2596,6 +2605,7 @@ namespace Isle
 
         private void PeekOverFullscreen()
         {
+            _peekForToast = false; // выглянул по наведению на край — держим, как обычно
             _fullscreenPeek = true;
             ApplyVisibility();
             KeepOnTop();
