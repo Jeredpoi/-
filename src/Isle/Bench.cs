@@ -35,7 +35,49 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void Snap(MainWindow w, string dir, string name)
+        {
+            w.UpdateLayout();
+            int W = (int)w.ActualWidth, H = 130;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(W * 2, H * 2, 192, 192, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(120, 70, 150)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(w.Content as Visual) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top, ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, W, H) }, null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                await Task.Delay(4000);
+                var info = new UpdateInfo { Version = new Version(0, 2, 5), Tag = "v0.2.5", Size = 48_000_000, SetupUrl = "https://example.invalid/x.exe" };
+                typeof(UpdateService).GetProperty("Available").SetValue(null, info);
+                UpdateService.ShowAvailableToast();
+                await Task.Delay(1200);
+                // курсор под чёлкой — край тянется к нему
+                var p = w.PointToScreen(new Point(w.ActualWidth / 2 + 60, 110));
+                SetCursorPos((int)p.X, (int)p.Y);
+                await Task.Delay(1500);
+                Snap(w, dir, "ring-0-success-bulge");
+                foreach (var pr in new[] { 0.1, 0.42, 0.9 })
+                {
+                    ToastBus.Show(new Toast { Kind = ToastKind.Download, Title = "Обновление до 0.2.5", Subtitle = "Скачиваю… " + (int)(pr * 100) + "%", Icon = Icons.Download, Progress = pr, Accent = Color.FromRgb(0x4A, 0xDE, 0x80), ReplaceKey = "update", Important = true, Duration = TimeSpan.FromMinutes(1) });
+                    await Task.Delay(900);
+                    Snap(w, dir, "ring-" + (int)(pr * 100));
+                }
+                ToastBus.Show(new Toast { Kind = ToastKind.Download, Title = "Cyberpunk 2077", Subtitle = "Steam · 64%", Icon = Icons.Download, Progress = 0.64, ReplaceKey = "steam", Important = true, Duration = TimeSpan.FromMinutes(1) });
+                await Task.Delay(1500);
+                Snap(w, dir, "ring-steam-64");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
