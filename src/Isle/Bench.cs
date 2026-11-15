@@ -48,11 +48,22 @@ namespace Isle
                 await Task.Delay(3500);
                 var scaler = (FrameworkElement)w.FindName("Scaler");
                 string St() => "чёлка " + (scaler.Visibility == Visibility.Visible ? "ВИДНА" : "спрятана") + ", состояние " + w.State + ", полноэкранное " + AppHost.Watchers.IsFullscreen;
-                async Task Front(Window x) { x.Show(); await Task.Delay(400); Isle.Native.Win32.ForceForeground(new System.Windows.Interop.WindowInteropHelper(x).Handle); await Task.Delay(400); AppHost.Watchers.CheckFullscreenNow(); await Task.Delay(500); }
+                // окна — в отдельной программе (свои окна Isle «игрой» не считает)
+                async Task<System.Diagnostics.Process> Front(string border)
+                {
+                    var ps = "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.FormBorderStyle = '" + border + "'; $f.WindowState = 'Maximized'; $f.BackColor = 'DarkSlateBlue'; $f.TopMost = $false; [System.Windows.Forms.Application]::Run($f)";
+                    var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe", "-NoProfile -Command \"" + ps + "\"") { UseShellExecute = false, CreateNoWindow = true });
+                    for (int i = 0; i < 40 && p.MainWindowHandle == IntPtr.Zero; i++) { await Task.Delay(250); p.Refresh(); }
+                    await Task.Delay(500);
+                    Isle.Native.Win32.ForceForeground(p.MainWindowHandle); await Task.Delay(500);
+                    AppHost.Watchers.CheckFullscreenNow(); await Task.Delay(600);
+                    Isle.Native.Win32.GetWindowRect(p.MainWindowHandle, out var r);
+                    L("окно " + border + ": " + r.Left + "," + r.Top + "–" + r.Right + "," + r.Bottom + ", впереди " + Isle.Native.Win32.ForegroundProcessName());
+                    return p;
+                }
 
                 // 1) «игра»: окно без рамки на весь экран
-                var game = new Window { WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, Left = 0, Top = 0, Width = SystemParameters.PrimaryScreenWidth, Height = SystemParameters.PrimaryScreenHeight, Background = Brushes.DarkSlateBlue, Title = "game" };
-                await Front(game);
+                var game = await Front("None");
                 L("игра впереди: " + St());
                 ToastBus.Show(new Toast { Title = "Сообщение", Subtitle = "чужое уведомление", Kind = ToastKind.Notification, Duration = TimeSpan.FromSeconds(2) });
                 await Task.Delay(700);
@@ -63,13 +74,13 @@ namespace Isle
                 L("  плашка пипетки: " + St());
                 await Task.Delay(6500);
                 L("  через 7 с после пипетки: " + St());
-                game.Close();
+                try { game.Kill(); } catch { }
+                await Task.Delay(800);
 
                 // 2) обычное развёрнутое окно с рамкой (как эмулятор)
-                var app = new Window { WindowStyle = WindowStyle.SingleBorderWindow, WindowState = WindowState.Maximized, Background = Brushes.DarkOliveGreen, Title = "app" };
-                await Front(app);
+                var app = await Front("Sizable");
                 L("развёрнутое окно с рамкой впереди: " + St());
-                app.Close();
+                try { app.Kill(); } catch { }
             }
             catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
             Application.Current.Shutdown();
