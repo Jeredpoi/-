@@ -195,7 +195,8 @@
                                     <TextBlock x:Name="ToastBadge" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     <h:WeatherGlyph x:Name="ToastWeather" Margin="2" Visibility="Collapsed"/>
                                     <Ellipse x:Name="ToastRingTrack" Stroke="#55555F" StrokeThickness="2" Margin="-3" Visibility="Collapsed" IsHitTestVisible="False"/>
-                                    <Path x:Name="ToastRing" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>
+                                    <!-- Margin как у дорожки: кольцо шире плитки, и без него края дуги обрезались — выходил «полуквадрат» -->
+                                    <Path x:Name="ToastRing" Margin="-3" Stroke="{DynamicResource Accent}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" IsHitTestVisible="False"/>
                                 </Grid>
                             </Border>
                             <Grid Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">

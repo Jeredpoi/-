@@ -107,6 +107,8 @@ namespace Isle
             AppHost.Lyrics = new LyricsState(AppHost.Media);
             AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
+            // плашка подсвечена (получилось / ошибка / внимание) — край, который тянется к курсору, того же цвета
+            Edge.Tint = () => _glowColor is Color g && StatusGlow.Opacity > 0.02 ? (g, StatusGlow.Opacity) : null;
             AppHost.Media.TrackChanged += m => Edge.SpikeColor = DominantColor(m.Cover) ?? AccentColor();
             AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) { Buddy.Cheer(); Edge.DropBead(); } });
             if (!s.ScaleFixV2)
@@ -1725,7 +1727,21 @@ namespace Isle
             ToastIconBox.Width = ToastIconBox.Height = tile;
             ToastIconBox.CornerRadius = new CornerRadius(download || t.RoundImage ? tile / 2 : swatch ? 14 : 12);
             ToastIcon.Width = ToastIcon.Height = tile >= 40 ? 18 : 17;
-            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2, tile / 2, tile / 2 + 2); // по дорожке (она снаружи плитки)
+            // по дорожке (она снаружи плитки); у кольца отступ −3, поэтому центр сдвинут на 3
+            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2 + 3, tile / 2 + 3, tile / 2 + 2);
+            // своё цветное кольцо (обновление Isle — зелёное); загрузки Steam и браузера — цветом акцента, как раньше
+            bool tinted = download && t.Accent != Color.FromRgb(0xEC, 0xEC, 0xF1);
+            if (tinted)
+            {
+                ToastRing.Stroke = new SolidColorBrush(t.Accent);
+                ToastRingTrack.Stroke = new SolidColorBrush(Color.FromArgb(0x55, t.Accent.R, t.Accent.G, t.Accent.B));
+                ToastIcon.Foreground = new SolidColorBrush(t.Accent);
+            }
+            else
+            {
+                ToastRing.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent");
+                ToastRingTrack.Stroke = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x5F));
+            }
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
             ToastFolderButton.Tag = t;
             bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
@@ -1979,8 +1995,12 @@ namespace Isle
         /// Цветная подсветка чёлки под всплывашку: вспышка (180 мс) → мягко гаснет до едва заметной, пока плашка видна.
         /// null — погасить (обычная всплывашка или плашек больше нет).
         /// </summary>
+        /// <summary>Цвет текущей подсветки плашки — «жидкий» край под ней красится в тот же цвет.</summary>
+        private Color? _glowColor;
+
         private void GlowStatus(Color? c)
         {
+            if (c is Color gc) _glowColor = gc;
             if (c is not Color col)
             {
                 StatusGlow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new SineEase() });
