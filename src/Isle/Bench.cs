@@ -72,8 +72,8 @@ namespace Isle
                 ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "#4ADE80", Subtitle = "rgb(74, 222, 128)", Icon = Icons.Pipette, Accent = Color.FromRgb(0x4A, 0xDE, 0x80), Swatch = Color.FromRgb(0x4A, 0xDE, 0x80), Important = true, Duration = TimeSpan.FromSeconds(3.5) });
                 await Task.Delay(700);
                 L("  плашка пипетки: " + St());
-                await Task.Delay(3800);
-                L("  через 4,5 с после пипетки (плашка ушла ~1 с назад): " + St());
+                await Task.Delay(5300);
+                L("  через 6 с после пипетки (плашка ушла 2,5 с назад): " + St());
                 try { game.Kill(); } catch { }
                 await Task.Delay(800);
 
