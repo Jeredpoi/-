@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -187,6 +188,10 @@ namespace Isle.Helpers
             Unloaded += (_, __) => Unsubscribe();
         }
 
+        /// <summary>По Клоди можно кликнуть в любом месте его рамки, а не только точно в нарисованный пиксель.</summary>
+        protected override HitTestResult HitTestCore(PointHitTestParameters p) =>
+            new Rect(RenderSize).Contains(p.HitPoint) ? new PointHitTestResult(this, p.HitPoint) : null;
+
         private bool _subscribed;
         private void Subscribe() { if (_subscribed) return; _subscribed = true; FrameClock.Tick += OnFrame; }
         private void Unsubscribe() { if (!_subscribed) return; _subscribed = false; FrameClock.Tick -= OnFrame; }
@@ -331,6 +336,32 @@ namespace Isle.Helpers
 
         /// <summary>Короткая радость (скриншот, ответ ИИ, файл на полке).</summary>
         public void Cheer() => _cheer = 1;
+
+        // ---- тык по Клоди: каждый раз своя реакция; часто тыкать — закружится голова
+        private double _poke, _dizzy;
+        private int _pokeKind = -1;
+        private readonly List<DateTime> _pokes = new();
+        private const int PokeHop = 0, PokeHeart = 1, PokeSpin = 2, PokeCheer = 3, PokeStartle = 4;
+
+        /// <summary>По Клоди кликнули.</summary>
+        public void Poke()
+        {
+            var now = DateTime.Now;
+            _pokes.Add(now);
+            _pokes.RemoveAll(t => now - t > TimeSpan.FromSeconds(2.5));
+            if (_pokes.Count >= 4) { _dizzy = 1; _pokes.Clear(); _poke = 0; return; } // затыкали — голова кругом
+            if (_dizzy > 0.3) return; // пока кружится голова — не до этого
+            int kind;
+            if (Mood == Mood.Sleep || Mood == Mood.Drowsy) kind = PokeStartle;
+            else
+            {
+                // не повторяем прошлую реакцию подряд
+                do kind = _rnd.Next(4); while (kind == _pokeKind);
+            }
+            _pokeKind = kind;
+            _poke = 1;
+            if (kind == PokeCheer) Cheer();
+        }
         /// <summary>Включить конкретное занятие в покое на заданное время (для съёмки README и демонстраций).</summary>
         public void ForceActivity(int activity, double seconds)
         {
@@ -431,6 +462,8 @@ namespace Isle.Helpers
             else _blink += (1 - _blink) * FrameClock.Lerp(0.2);
 
             if (_cheer > 0) _cheer = Math.Max(0, _cheer - 0.035 * FrameClock.K);
+            if (_poke > 0) _poke = Math.Max(0, _poke - 0.024 * FrameClock.K);   // ~1,4 с
+            if (_dizzy > 0) _dizzy = Math.Max(0, _dizzy - 0.012 * FrameClock.K); // ~2,8 с
             // сонный не выдержал и уснул — появляется кровать, одеяло медленно натягивается
             _bed += ((mood == Mood.Sleep ? 1 : 0) - _bed) * FrameClock.Lerp(mood == Mood.Sleep ? 0.03 : 0.12);
             if (_bed < 0.002) _bed = 0;
@@ -1281,6 +1314,31 @@ namespace Isle.Helpers
                 dy -= Math.Abs(Math.Sin((1 - _cheer) * Math.PI * 3)) * 2.4 * px * _cheer;
                 step = true;
             }
+            // тык: сжимается и подпрыгивает / вздрагивает / подскакивает перед поворотом
+            double squash = 0, pu = 1 - _poke;
+            if (_poke > 0)
+            {
+                switch (_pokeKind)
+                {
+                    case PokeHop:
+                        if (pu < 0.16) squash = Math.Sin(pu / 0.16 * Math.PI / 2);
+                        else if (pu < 0.7) { squash = -0.35 * Math.Sin((pu - 0.16) / 0.54 * Math.PI); dy -= Math.Sin((pu - 0.16) / 0.54 * Math.PI) * 3.2 * px; }
+                        break;
+                    case PokeHeart:
+                        dy -= Math.Abs(Math.Sin(pu * Math.PI * 2)) * 1.2 * px * _poke;
+                        break;
+                    case PokeSpin:
+                        dy -= Math.Sin(Math.Min(1, pu / 0.8) * Math.PI) * 1.6 * px;
+                        break;
+                    case PokeStartle:
+                        // вздрогнул: резко вверх и дрожь
+                        dy -= (pu < 0.25 ? Math.Sin(pu / 0.25 * Math.PI) * 3.5 : 0) * px;
+                        dx += (pu < 0.6 ? Math.Sin(pu * 90) * 0.5 * (1 - pu / 0.6) : 0) * px;
+                        break;
+                }
+                step = true;
+            }
+            if (_dizzy > 0) tilt += Math.Sin(_time * 9) * 13 * Math.Min(1, _dizzy * 2);
 
             // начало спрайта — по целому пикселю экрана, чтобы клетки не «дрожали» при движении
             double ox = Math.Round((ActualWidth - W * px) / 2 + dx);
@@ -1289,9 +1347,12 @@ namespace Isle.Helpers
 
             // «кружится»: сжимаем по горизонтали — будто поворачивается боком
             double spin = mood == Mood.Music && _dance == 5 ? Math.Cos(_dtime * 2.6) : 1;
+            if (_poke > 0 && _pokeKind == PokeSpin) spin *= Math.Cos(Math.Min(1, pu / 0.8) * Math.PI * 2); // полный оборот
             if (Math.Abs(spin) < 0.18) spin = spin < 0 ? -0.18 : 0.18;
             var tf = new TransformGroup();
             tf.Children.Add(new ScaleTransform(spin, 1, ActualWidth / 2, ActualHeight / 2));
+            // сжатие от тычка — к низу, как мячик об пол
+            if (Math.Abs(squash) > 0.001) tf.Children.Add(new ScaleTransform(1 + 0.22 * squash, 1 - 0.28 * squash, ActualWidth / 2, oy + H * px));
             if (mood == Mood.Music && _dance == 8 && _cheer <= 0)
             {
                 // брейк-данс: падает и крутится на спине вокруг центра тела
@@ -1628,6 +1689,46 @@ namespace Isle.Helpers
                 var z = new FormattedText("z", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                     new Typeface("Segoe UI Semibold"), 3.2 * px, light, VisualTreeHelper.GetDpi(this).PixelsPerDip);
                 dc.DrawText(z, new Point(ox + 11.5 * px, oy - zy * 0.4 * px));
+            }
+            // ---- реакции на тык
+            if (_poke > 0 && (_pokeKind == PokeHop || _pokeKind == PokeStartle) && pu < 0.75)
+            {
+                // «!» или «?!» над головой, выскакивает и гаснет
+                double a = pu < 0.1 ? pu / 0.1 : pu > 0.55 ? (0.75 - pu) / 0.2 : 1;
+                var b = new SolidColorBrush(Color.FromArgb((byte)(255 * Math.Clamp(a, 0, 1)), 0xFF, 0xE9, 0xD6));
+                double bx = ox + (_pokeKind == PokeStartle ? 9.5 : 6) * px, by = oy - 3.4 * px - Math.Min(1, pu * 5) * px;
+                if (_pokeKind == PokeStartle)
+                {
+                    var q = new FormattedText("?", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                        new Typeface("Segoe UI Black"), 3.4 * px, b, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                    dc.DrawText(q, new Point(bx - 2.4 * px, by - 0.6 * px));
+                }
+                dc.DrawRectangle(b, null, new Rect(bx, by, px, px * 1.6));
+                dc.DrawRectangle(b, null, new Rect(bx, by + 2 * px, px, px * 0.6));
+            }
+            if (_poke > 0 && _pokeKind == PokeHeart)
+            {
+                // пиксельное сердечко всплывает над головой и тает
+                string[] heart = { ".x.x.", "xxxxx", ".xxx.", "..x.." };
+                double a = pu < 0.12 ? pu / 0.12 : Math.Max(0, (1 - pu) / 0.45);
+                var hb = new SolidColorBrush(Color.FromArgb((byte)(255 * Math.Clamp(a, 0, 1)), 0xFF, 0x6B, 0x9A));
+                double hp = px * 0.75, hx = ox + 6.5 * px - 2.5 * hp + Math.Sin(pu * 9) * 0.6 * px, hy = oy - 2.2 * px - pu * 5 * px;
+                for (int yy = 0; yy < heart.Length; yy++)
+                    for (int xx = 0; xx < 5; xx++)
+                        if (heart[yy][xx] == 'x') dc.DrawRectangle(hb, null, new Rect(hx + xx * hp, hy + yy * hp, hp, hp));
+            }
+            if (_dizzy > 0.05)
+            {
+                // голова кругом: звёздочки летают вокруг головы
+                var sb = new SolidColorBrush(Color.FromArgb((byte)(255 * Math.Min(1, _dizzy * 2.5)), 0xFF, 0xD1, 0x66));
+                for (int i = 0; i < 3; i++)
+                {
+                    double ang = _time * 6 + i * Math.PI * 2 / 3;
+                    double sx = ox + 6.5 * px + Math.Cos(ang) * 5.5 * px, sy = oy - 0.6 * px + Math.Sin(ang) * 1.4 * px;
+                    dc.DrawRectangle(sb, null, new Rect(sx - 0.35 * px, sy - 0.35 * px, px * 0.7, px * 0.7));
+                    dc.DrawRectangle(sb, null, new Rect(sx - 0.9 * px, sy - 0.12 * px, px * 1.8, px * 0.24));
+                    dc.DrawRectangle(sb, null, new Rect(sx - 0.12 * px, sy - 0.9 * px, px * 0.24, px * 1.8));
+                }
             }
             if (_cheer > 0.2)
             {

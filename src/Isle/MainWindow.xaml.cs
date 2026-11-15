@@ -107,6 +107,8 @@ namespace Isle
             AppHost.Lyrics = new LyricsState(AppHost.Media);
             AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
+            // по Клоди в чёлке можно тыкнуть — курсор-«рука» подсказывает это
+            Buddy.Cursor = BuddyMedia.Cursor = BuddyTimer.Cursor = Cursors.Hand;
             // плашка подсвечена (получилось / ошибка / внимание) — край, который тянется к курсору, того же цвета
             Edge.Tint = () => _glowColor is Color g && StatusGlow.Opacity > 0.02 ? (g, StatusGlow.Opacity) : null;
             AppHost.Media.TrackChanged += m => Edge.SpikeColor = DominantColor(m.Cover) ?? AccentColor();
@@ -800,6 +802,14 @@ namespace Isle
             if (State != IslandState.Expanded)
             {
                 if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return; // кнопки мини-плеера
+                // клик по Клоди — он реагирует, а чёлка не раскрывается (раскрыть — клик в любом другом месте)
+                if (FindParent<Helpers.Character>(e.OriginalSource as DependencyObject) is Helpers.Character buddy)
+                {
+                    buddy.Poke();
+                    Journal.Debug("island", "тык по Клоди");
+                    e.Handled = true;
+                    return;
+                }
                 Expand(null);
                 e.Handled = true;
                 return;
