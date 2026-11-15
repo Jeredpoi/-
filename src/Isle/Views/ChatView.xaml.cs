@@ -37,6 +37,9 @@ namespace Isle.Views
                 ChatBuddy.Outfit = MainWindow.OutfitForWeather();
                 ChatBuddy.Mood = night ? Isle.Helpers.Mood.Drowsy : Isle.Helpers.Mood.Idle;
             };
+            // в чате по Клоди тоже можно тыкнуть
+            ChatBuddy.Cursor = System.Windows.Input.Cursors.Hand;
+            ChatBuddy.MouseLeftButtonUp += (_, e) => { ChatBuddy.Poke(); e.Handled = true; };
             foreach (var idea in Ideas)
             {
                 var b = new Button { Content = idea, Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 0, 6), HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(14, 6, 14, 6) };
