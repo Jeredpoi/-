@@ -38,6 +38,57 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                await Task.Delay(3000);
+                var buddy = new Isle.Helpers.Character { Mood = Isle.Helpers.Mood.Idle, FollowCursor = false };
+                var stage = new Border { Width = 160, Height = 110, Background = new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x18)),
+                    Child = new Viewbox { Child = buddy, Margin = new Thickness(40, 22, 40, 18) } };
+                var win = new Window { Content = stage, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false, Left = -4000, Top = -4000 };
+                win.Show();
+                await Task.Delay(500);
+                var fKind = typeof(Isle.Helpers.Character).GetField("_pokeKind", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var fPoke = typeof(Isle.Helpers.Character).GetField("_poke", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var fDizzy = typeof(Isle.Helpers.Character).GetField("_dizzy", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                string[] names = { "hop", "heart", "spin", "cheer", "startle", "dizzy" };
+                for (int k = 0; k < names.Length; k++)
+                {
+                    buddy.Mood = k == 4 ? Isle.Helpers.Mood.Sleep : Isle.Helpers.Mood.Idle;
+                    await Task.Delay(k == 4 ? 2500 : 300);
+                    if (k == 5) fDizzy.SetValue(buddy, 1.0);
+                    else { fKind.SetValue(buddy, k); fPoke.SetValue(buddy, 1.0); if (k == 3) buddy.Cheer(); }
+                    var sheet = new System.Windows.Media.Imaging.RenderTargetBitmap(160 * 10, 110, 96, 96, PixelFormats.Pbgra32);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen())
+                        for (int f = 0; f < 10; f++)
+                        {
+                            await Task.Delay(k == 5 ? 220 : 130);
+                            stage.UpdateLayout();
+                            var one = new System.Windows.Media.Imaging.RenderTargetBitmap(160, 110, 96, 96, PixelFormats.Pbgra32);
+                            one.Render(stage);
+                            dc.DrawImage(one, new Rect(f * 160, 0, 160, 110));
+                        }
+                    sheet.Render(dv);
+                    var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(sheet));
+                    using var fs = File.Create(Path.Combine(dir, "poke-" + k + "-" + names[k] + ".png")); enc.Save(fs);
+                }
+                win.Close();
+                // клик по Клоди в чёлке не раскрывает её
+                var isl = (FrameworkElement)w.FindName("Buddy");
+                var p = isl.PointToScreen(new Point(isl.ActualWidth / 2, isl.ActualHeight / 2));
+                SetCursorPos((int)p.X, (int)p.Y); await Task.Delay(400);
+                mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                await Task.Delay(700);
+                File.WriteAllText(Path.Combine(dir, "log.txt"), "после клика по Клоди чёлка: " + w.State + "\n");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
