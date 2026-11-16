@@ -182,19 +182,16 @@ namespace Isle.Views
             MemoryTrim.Soon("просмотр картинки");
         }
 
-        private FrameworkElement FindThumb(ClipItem item)
-        {
-            if (item == null || List.ItemContainerGenerator.ContainerFromItem(item) is not ListBoxItem c) return null;
-            return FindChild(c, "imgIcon");
-        }
+        /// <summary>Миниатюра записи в списке (список разбит на дни — ищем по дереву, а не через генератор строк).</summary>
+        private FrameworkElement FindThumb(ClipItem item) => item == null ? null : FindThumbIn(List, item);
 
-        private static FrameworkElement FindChild(DependencyObject d, string name)
+        private static FrameworkElement FindThumbIn(DependencyObject d, ClipItem item)
         {
             for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++)
             {
                 var ch = VisualTreeHelper.GetChild(d, i);
-                if (ch is FrameworkElement fe && fe.Name == name) return fe;
-                if (FindChild(ch, name) is FrameworkElement f) return f;
+                if (ch is FrameworkElement { Name: "imgIcon" } fe && ReferenceEquals(fe.Tag, item)) return fe;
+                if (FindThumbIn(ch, item) is FrameworkElement f) return f;
             }
             return null;
         }
