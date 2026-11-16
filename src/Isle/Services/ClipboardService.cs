@@ -148,7 +148,9 @@ namespace Isle.Services
             _ => null,
         };
 
-        [JsonIgnore] public string Meta => string.Join(" · ", new[] { KindText, string.IsNullOrEmpty(Source) ? null : Source, Ago(Time),
+        [JsonIgnore] public string Meta => string.Join(" · ", new[] { KindText, string.IsNullOrEmpty(Source) ? null : Source,
+            // дата уже в разделителе дня над записью — у старых записей здесь только время
+            Time.Date == DateTime.Today || DateTime.Now - Time < TimeSpan.FromHours(24) ? Ago(Time) : Time.ToString("HH:mm"),
             Pinned ? "закреплено" : null, Folder != null ? "в «" + Folder + "»" : null }.Where(x => x != null));
         [JsonIgnore] public string AgoText => Ago(Time);
         /// <summary>День записи — по нему список делится разделителями «Сегодня», «Вчера», «14 ноября».</summary>
