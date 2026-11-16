@@ -32,7 +32,7 @@ namespace Isle.Services
         public string Text { get; set; } = "";
         public string Source { get; set; } = "";
         private DateTime _time = DateTime.Now;
-        public DateTime Time { get => _time; set { _time = value; Changed(nameof(Time), nameof(Meta), nameof(AgoText)); } }
+        public DateTime Time { get => _time; set { _time = value; Changed(nameof(Time), nameof(Meta), nameof(AgoText), nameof(Day)); } }
         private bool _pinned;
         public bool Pinned { get => _pinned; set { _pinned = value; Changed(nameof(Pinned), nameof(Meta)); } }
         /// <summary>Своя папка пользователя (null — просто история). Записи в папках не вытесняются лимитом.</summary>
@@ -148,9 +148,13 @@ namespace Isle.Services
             _ => null,
         };
 
-        [JsonIgnore] public string Meta => string.Join(" · ", new[] { KindText, string.IsNullOrEmpty(Source) ? null : Source, Ago(Time),
+        [JsonIgnore] public string Meta => string.Join(" · ", new[] { KindText, string.IsNullOrEmpty(Source) ? null : Source,
+            // дата уже в разделителе дня над записью — у старых записей здесь только время
+            Time.Date == DateTime.Today || DateTime.Now - Time < TimeSpan.FromHours(24) ? Ago(Time) : Time.ToString("HH:mm"),
             Pinned ? "закреплено" : null, Folder != null ? "в «" + Folder + "»" : null }.Where(x => x != null));
         [JsonIgnore] public string AgoText => Ago(Time);
+        /// <summary>День записи — по нему список делится разделителями «Сегодня», «Вчера», «14 ноября».</summary>
+        [JsonIgnore] public DateTime Day => Time.Date;
 
         public static string Ago(DateTime t)
         {

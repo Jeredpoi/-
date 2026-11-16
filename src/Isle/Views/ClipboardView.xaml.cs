@@ -44,6 +44,7 @@ namespace Isle.Views
         {
             InitializeComponent();
             _view = CollectionViewSource.GetDefaultView(Svc.Items);
+            _view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ClipItem.Day)));
             _view.Filter = o => o is ClipItem c && InFolder(c) && (_type == null || c.Category == _type) && Matches(c);
             List.ItemsSource = _view;
             // очистка или отмена на N записей — одна перестройка, а не N
@@ -708,5 +709,23 @@ namespace Isle.Views
             UndoBar.Visibility = Visibility.Collapsed;
             Hint.Visibility = Visibility.Visible;
         }
+    }
+
+    /// <summary>Подпись разделителя дня: «Сегодня», «Вчера», «Пятница, 13 ноября» (неделя), «14 ноября», «3 марта 2025».</summary>
+    public class DayTitleConverter : IValueConverter
+    {
+        private static readonly System.Globalization.CultureInfo Ru = new("ru-RU");
+
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is not DateTime d) return "";
+            var today = DateTime.Today;
+            if (d == today) return "Сегодня";
+            if (d == today.AddDays(-1)) return "Вчера";
+            if (d > today.AddDays(-7)) return Ru.TextInfo.ToTitleCase(d.ToString("dddd", Ru)) + ", " + d.ToString("d MMMM", Ru);
+            return d.Year == today.Year ? d.ToString("d MMMM", Ru) : d.ToString("d MMMM yyyy", Ru);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
     }
 }
