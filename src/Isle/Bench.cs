@@ -35,7 +35,83 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void Snap(MainWindow w, string dir, string name)
+        {
+            w.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)w.ActualWidth, (int)w.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, w.ActualWidth, w.ActualHeight)); dc.DrawRectangle(new VisualBrush(w.Content as Visual), null, new Rect(0, 0, w.ActualWidth, w.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                Directory.CreateDirectory(ClipboardService.ImagesDir);
+                string Png(string name, Color c)
+                {
+                    var b = new System.Windows.Media.Imaging.RenderTargetBitmap(320, 180, 96, 96, PixelFormats.Pbgra32);
+                    var d = new DrawingVisual(); using (var dc = d.RenderOpen()) dc.DrawRectangle(new LinearGradientBrush(c, Colors.Black, 40), null, new Rect(0, 0, 320, 180));
+                    b.Render(d); var e = new System.Windows.Media.Imaging.PngBitmapEncoder(); e.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(b));
+                    using (var f = File.Create(Path.Combine(ClipboardService.ImagesDir, name))) e.Save(f);
+                    return name;
+                }
+                var now = DateTime.Now;
+                var items = new[]
+                {
+                    new ClipItem { Kind = ClipKind.Image, Text = "Изображение 320×180", ImageFile = Png("d1.png", Colors.MediumPurple), Source = "chrome", Time = now.AddMinutes(-3) },
+                    new ClipItem { Kind = ClipKind.Text, Text = "сегодняшний текст", Source = "Telegram", Time = now.AddMinutes(-40) },
+                    new ClipItem { Kind = ClipKind.Image, Text = "Изображение 320×180", ImageFile = Png("d2.png", Colors.SteelBlue), Source = "Discord", Time = now.AddDays(-1).AddHours(-1) },
+                    new ClipItem { Kind = ClipKind.Link, Text = "https://github.com/Jeredpoi/-", Source = "chrome", Time = now.AddDays(-1).AddHours(-3) },
+                    new ClipItem { Kind = ClipKind.Image, Text = "Изображение 320×180", ImageFile = Png("d3.png", Colors.SeaGreen), Source = "mumu", Time = now.AddDays(-3) },
+                    new ClipItem { Kind = ClipKind.Text, Text = "старая запись", Source = "notepad", Time = now.AddDays(-20) },
+                    new ClipItem { Kind = ClipKind.Text, Text = "запись прошлого года", Source = "notepad", Time = now.AddYears(-1) },
+                };
+                foreach (var it in items) AppHost.Clipboard.Items.Add(it);
+                w.SuppressAutoCollapse = true;
+                w.Expand("clip");
+                await Task.Delay(1500);
+                Snap(w, dir, "days-1");
+                var v = (Isle.Views.ClipboardView)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "clip" });
+                var sv = FindSv(v.List);
+                sv?.ScrollToEnd(); await Task.Delay(400);
+                Snap(w, dir, "days-2-end");
+                sv?.ScrollToHome(); await Task.Delay(300);
+                // просмотр картинки из вчерашней группы: клик мышью по миниатюре и Esc
+                var thumb = (FrameworkElement)v.GetType().GetMethod("FindThumb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(v, new object[] { items[2] });
+                File.AppendAllText(log, "миниатюра вчерашней картинки найдена: " + (thumb != null) + "\n");
+                if (thumb != null)
+                {
+                    var p = thumb.PointToScreen(new Point(thumb.ActualWidth / 2, thumb.ActualHeight / 2));
+                    SetCursorPos((int)p.X, (int)p.Y); await Task.Delay(300);
+                    mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(50); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                    await Task.Delay(700);
+                    File.AppendAllText(log, "просмотр: " + v.Viewer.Visibility + "\n");
+                    keybd_event(0x1B, 0, 0, UIntPtr.Zero); keybd_event(0x1B, 0, KeyUp, UIntPtr.Zero);
+                    await Task.Delay(700);
+                    File.AppendAllText(log, "после Esc: " + v.Viewer.Visibility + ", чёлка " + w.State + "\n");
+                }
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        private static ScrollViewer FindSv(DependencyObject d)
+        {
+            if (d is ScrollViewer s) return s;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++) if (FindSv(VisualTreeHelper.GetChild(d, i)) is ScrollViewer r) return r;
+            return null;
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
