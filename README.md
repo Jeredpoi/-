@@ -145,7 +145,7 @@ Steam и браузеры прямо в чёлке: картинка игры, �
 
 <table>
 <tr>
-<td align="center" width="38%"><img src="docs/screenshots/phone-connect.gif" width="260" alt="Подключение телефона"><br><sub>Ждёт телефон — рамка «дышит». Отсканировал — по краю бежит зелёная змейка</sub></td>
+<td align="center" width="38%"><img src="docs/screenshots/phone-connect.gif" width="260" alt="Подключение телефона"><br><sub>Отсканировал QR — по краю бежит зелёная змейка, в центре галочка</sub></td>
 <td align="center" width="62%"><img src="docs/screenshots/phone.png" alt="Вкладка «Телефон»"><br><sub>Фото и текст с телефона, файл для телефона</sub></td>
 </tr>
 <tr>
