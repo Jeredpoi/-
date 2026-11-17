@@ -97,10 +97,11 @@ namespace Isle
                 var src = (System.Windows.Media.Imaging.BitmapSource)qr.Source;
                 var dev = PresentationSource.FromVisual(w).CompositionTarget.TransformToDevice.M11;
                 L("QR: клеток " + src.PixelWidth + ", размер " + qr.ActualWidth.ToString("0.###") + "×" + qr.ActualHeight.ToString("0.###") + " DIP, масштаб " + dev + " → " + (qr.ActualWidth * dev / src.PixelWidth).ToString("0.###") + " px на клетку");
+                await Task.Delay(4000); // первая анимация (от первого запроса странички) должна закончиться
                 SnapEl(w.Content as FrameworkElement, dir, "phone-0");
                 // телефон открывает страничку → змейка
                 var opened = http.GetAsync(url);
-                for (int i = 1; i <= 6; i++) { await Task.Delay(i == 1 ? 350 : 300); SnapEl(w.Content as FrameworkElement, dir, "phone-snake-" + i); }
+                for (int i = 1; i <= 8; i++) { await Task.Delay(150); L("кадр " + i + ": " + DateTime.Now.ToString("ss.fff")); SnapEl(w.Content as FrameworkElement, dir, "phone-snake-" + i); }
                 await opened;
                 await Task.Delay(2500);
                 SnapEl(w.Content as FrameworkElement, dir, "phone-after");
