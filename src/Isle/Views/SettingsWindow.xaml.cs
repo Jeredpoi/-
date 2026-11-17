@@ -176,6 +176,7 @@ namespace Isle.Views
             foreach (var rb in Outfits.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.BuddyOutfit ?? "auto");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
+            foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
             OpacitySlider.Value = Math.Round(S.IslandOpacity * 100);
@@ -431,6 +432,13 @@ namespace Isle.Views
         {
             S.WinterSnow = (string)((FrameworkElement)s).Tag;
             S.Save(); // чёлка подхватит на следующем кадре
+        }
+
+        private void OnNotchMode(object s, RoutedEventArgs e)
+        {
+            S.NotchMode = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            Isle.Helpers.NotchBar.Update(); // окна сдвигаются сразу
         }
 
         private void OnOutfit(object s, RoutedEventArgs e)

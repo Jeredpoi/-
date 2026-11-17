@@ -149,6 +149,8 @@ namespace Isle.Services
         public int PhonePort { get; set; }
         /// <summary>Снег из-под чёлки: «auto» — с 1 декабря по 14 января и когда за окном снег, «on» — всегда, «off» — никогда.</summary>
         public string WinterSnow { get; set; } = "auto";
+        /// <summary>Режим выреза: «off», «browser» — окна ниже чёлки, пока впереди браузер, «always» — всегда.</summary>
+        public string NotchMode { get; set; } = "off";
         public bool FirstRunDone { get; set; } = false;
         /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
         public bool WelcomeShown { get; set; }
