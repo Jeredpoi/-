@@ -34,7 +34,9 @@
                             </Grid>
                         </Border>
                         <!-- ждёт телефон: оранжевая рамка «дышит» — разгорается и гаснет -->
+                        <!-- свечение рисуется один раз в кэш, дальше меняется только прозрачность — почти бесплатно для ЦП -->
                         <Rectangle x:Name="Breath" Stroke="#FB923C" StrokeThickness="2" IsHitTestVisible="False" Opacity="0.25" SnapsToDevicePixels="True">
+                            <Rectangle.CacheMode><BitmapCache EnableClearType="False" RenderAtScale="1" SnapsToDevicePixels="True"/></Rectangle.CacheMode>
                             <Rectangle.Effect><DropShadowEffect Color="#FB923C" BlurRadius="16" ShadowDepth="0" Opacity="0.9"/></Rectangle.Effect>
                         </Rectangle>
                         <!-- телефон открыл страничку: по краю пробегает зелёная змейка и замыкается в рамку -->
