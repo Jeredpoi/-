@@ -112,6 +112,7 @@ namespace Isle.Views
             BuildIn();
             BuildOut();
             UpdateStatus();
+            UpdateHttpsHelp();
         }
 
         private static readonly Color Green = Color.FromRgb(0x4A, 0xDE, 0x80);
@@ -247,6 +248,37 @@ namespace Isle.Views
             }
             CompositionTarget.Rendering += Frame;
         }
+
+        /// <summary>«Не открывается?» — открыть/закрыть подсказку прямо в карточке.</summary>
+        private void OnHelp(object s, RoutedEventArgs e)
+        {
+            bool show = HelpCard.Visibility != Visibility.Visible;
+            if (show)
+            {
+                HelpCard.Visibility = Visibility.Visible;
+                HelpCard.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+            }
+            else
+            {
+                var a = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
+                a.Completed += (_, __) => { if (HelpCard.Opacity < 0.01) HelpCard.Visibility = Visibility.Collapsed; };
+                HelpCard.BeginAnimation(OpacityProperty, a);
+            }
+        }
+
+        private void UpdateHttpsHelp()
+        {
+            bool tls = PhoneTls.Ready;
+            HttpsToggle.Visibility = tls ? Visibility.Visible : Visibility.Collapsed;
+            HttpsNote.Text = !tls
+                ? "5. Ссылка по http: сертификат для https не скачался (нет интернета?). «Небезопасно» в браузере не страшно — данные не выходят из твоей сети."
+                : PhoneLink.Https
+                    ? "5. Ссылка по https (…local-ip.sh) — телефону нужен интернет, чтобы найти адрес. Нет интернета — перейди на http."
+                    : "5. Ссылка по http — браузер напишет «Небезопасно». Есть интернет на телефоне — верни https.";
+            HttpsToggleText.Text = PhoneLink.Https ? "Перейти на http" : "Вернуть https";
+        }
+
+        private void OnHttpsToggle(object s, RoutedEventArgs e) => PhoneLink.SetHttps(!AppSettings.Current.PhoneHttps);
 
         private void OnCopyLink(object s, RoutedEventArgs e)
         {

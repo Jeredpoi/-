@@ -50,16 +50,34 @@ namespace Isle.Helpers
                 _fgProc = (_, __, hwnd, ___, ____, _____, ______) => { Debounce.Stop(); Debounce.Start(); };
                 Win32.SetWinEventHook(Win32.EVENT_SYSTEM_FOREGROUND, Win32.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _fgProc, 0, 0, Win32.WINEVENT_OUTOFCONTEXT);
                 Debounce.Tick += (_, __) => { Debounce.Stop(); Update(); };
+                // развернули браузер или вернули в окно — событие «другое окно впереди» не приходит, поэтому проверяем раз в 0,7 с
+                ZoomWatch.Tick += (_, __) =>
+                {
+                    if ((AppSettings.Current.NotchMode ?? "off") != "browser") { ZoomWatch.Stop(); return; }
+                    var fg = Win32.GetForegroundWindow();
+                    bool zoomed = fg != IntPtr.Zero && Win32.IsZoomed(fg);
+                    if (fg == _lastFg && zoomed == _lastZoomed) return;
+                    _lastFg = fg; _lastZoomed = zoomed;
+                    Update();
+                };
             }
+            if (mode == "browser") ZoomWatch.Start(); else ZoomWatch.Stop();
             bool want = mode == "always" || (mode == "browser" && BrowserInFront());
             if (want) Register(); else Unregister();
         }
 
+        private static readonly System.Windows.Threading.DispatcherTimer ZoomWatch = new() { Interval = TimeSpan.FromMilliseconds(700) };
+        private static IntPtr _lastFg;
+        private static bool _lastZoomed;
+
+        /// <summary>Впереди браузер, развёрнутый на весь экран. Браузер в обычном окне полосу не включает — там она только мешала бы.</summary>
         private static bool BrowserInFront()
         {
             var name = Win32.ForegroundProcessName().ToLowerInvariant();
             if (name == System.Diagnostics.Process.GetCurrentProcess().ProcessName.ToLowerInvariant()) return _registered; // своё окно впереди — не дёргаем
-            return Browsers.Contains(name);
+            if (!Browsers.Contains(name)) return false;
+            var fg = Win32.GetForegroundWindow();
+            return fg != IntPtr.Zero && Win32.IsZoomed(fg);
         }
 
         private static void Register()

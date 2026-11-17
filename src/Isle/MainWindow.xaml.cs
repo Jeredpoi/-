@@ -75,6 +75,18 @@ namespace Isle
             AddHandler(ToolTipService.ToolTipOpeningEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.Now.AddSeconds(8)), true);
             AddHandler(ToolTipService.ToolTipClosingEvent, new ToolTipEventHandler((_, __) => _tipUntil = DateTime.MinValue), true);
             // любое меню приложения: пока открыто — не сворачиваемся и не перекрываем его чёлкой (раньше оно «уходило за окно»)
+            // открывшуюся подсказку явно ставим поверх чёлки: окно острова тоже «поверх всех», и без этого подсказка могла оказаться под ним
+            EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ToolTip), System.Windows.Controls.ToolTip.OpenedEvent, new RoutedEventHandler((tip, __) =>
+            {
+                _tipUntil = DateTime.Now.AddSeconds(8);
+                void Raise()
+                {
+                    if (PresentationSource.FromVisual((Visual)tip) is System.Windows.Interop.HwndSource src)
+                        SetWindowPos(src.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010 | 0x0200);
+                }
+                Raise();
+                Dispatcher.InvokeAsync(Raise, DispatcherPriority.ApplicationIdle);
+            }));
             EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.OpenedEvent, new RoutedEventHandler((_, __) => _openMenus++));
             EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.ClosedEvent, new RoutedEventHandler((_, __) => _openMenus = Math.Max(0, _openMenus - 1)));
             var s = AppSettings.Current;
@@ -323,7 +335,8 @@ namespace Isle
                 Helpers.NotchBar.Height = () =>
                 {
                     var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
-                    return (int)Math.Round(34 * ScaleT.ScaleY * dev.M22);
+                    double sc = Math.Clamp(AppSettings.Current.Scale, 0.7, 2.0); // конечный масштаб, а не текущий кадр анимации
+                    return (int)Math.Ceiling(_collapsedH * sc * dev.M22);
                 };
                 Helpers.NotchBar.Update();
                 ApplyTabs();
@@ -985,6 +998,8 @@ namespace Isle
             if (MediaDownload.Visibility == Visibility.Visible) w += 54;
             if (dl) { w = 380; h = 54; } // компактно, как остальные состояния чёлки
             if (Buddy.Visibility == Visibility.Visible && (media || timer)) w += 42; // место для Клоди
+            // полоса режима выреза — высотой с настоящую свёрнутую чёлку (с загрузкой и музыкой она выше)
+            if (Math.Abs(h - _collapsedH) > 0.5) { _collapsedH = h; Dispatcher.InvokeAsync(Helpers.NotchBar.Update, DispatcherPriority.Background); }
             if (_hoverGrown) { w += 16; h = Math.Max(38, h); }
             // сравниваем с целью анимации, а не с текущим (ещё анимируемым) размером: таймер дёргает это 4 раза в секунду,
             // и раньше «желе» перезапускалось каждые 250 мс — чёлка дрожала, пока шёл таймер
@@ -2977,6 +2992,9 @@ namespace Isle
         }
 
         /// <summary>Масштаб острова. Окно растёт вместе с ним — иначе края панели обрезаются.</summary>
+        /// <summary>Высота свёрнутой чёлки сейчас (34, с загрузкой 54, с музыкой — по пилюле), без масштаба.</summary>
+        private double _collapsedH = 34;
+
         public void ApplyScale()
         {
             Dispatcher.InvokeAsync(Helpers.NotchBar.Update, DispatcherPriority.Background); // полоса выреза — под новый размер чёлки
