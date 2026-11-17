@@ -24,7 +24,8 @@ namespace Isle
             Directory.CreateDirectory(dir);
             try
             {
-                AppSettings.Current.WelcomeShown = true; // приветствие первого запуска снимаем отдельно, а не поверх всего
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false; // иначе на снимки попадает «Новая версия Isle» // приветствие первого запуска снимаем отдельно, а не поверх всего
                 await Task.Delay(4000); // сервисы, погода, раскладка успевают загрузиться
                 var island = (FrameworkElement)w.FindName("Island");
 
@@ -139,14 +140,19 @@ namespace Isle
             // телефон открывает страничку — снимаем анимацию подключения по кадрам
             var card = view?.FindName("QrHost") as FrameworkElement;
             var qrDir = Path.Combine(dir, "qr"); Directory.CreateDirectory(qrDir);
-            var get = http.GetAsync(url);
             int frame = 0;
-            var until = DateTime.Now.AddSeconds(3.6);
-            while (DateTime.Now < until && card != null)
+            async Task Frames(double seconds)
             {
-                await Task.Delay(40);
-                Save(card, Path.Combine(qrDir, "frame_" + (frame++).ToString("0000") + ".png"), 16, 1.5);
+                var until = DateTime.Now.AddSeconds(seconds);
+                while (DateTime.Now < until && card != null)
+                {
+                    await Task.Delay(40);
+                    SaveExact(card, Path.Combine(qrDir, "frame_" + (frame++).ToString("0000") + ".png"), 22, 1.5);
+                }
             }
+            await Frames(2.8);            // ждёт телефон — рамка «дышит»
+            var get = http.GetAsync(url); // телефон открыл страничку
+            await Frames(3.8);
             await get;
             // фото и текст «с телефона», файл «на телефон»
             var bmp = new RenderTargetBitmap(640, 480, 96, 96, PixelFormats.Pbgra32);
@@ -185,6 +191,8 @@ namespace Isle
         private static async Task SnowShotAsync(MainWindow w, string dir)
         {
             AppSettings.Current.WinterSnow = "on";
+            // всплывашки (фото и текст с телефона) должны уйти — снег виден под свёрнутой чёлкой
+            for (int i = 0; i < 40 && w.State != IslandState.Collapsed; i++) await Task.Delay(250);
             await Task.Delay(4500);
             var root = (FrameworkElement)w.Content;
             var island = (FrameworkElement)w.FindName("Island");
@@ -218,6 +226,23 @@ namespace Isle
             for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++)
                 if (FindChild<T>(VisualTreeHelper.GetChild(d, i)) is T r) return r;
             return null;
+        }
+
+        /// <summary>Снимок ровно по границам элемента (без вылезающих теней и свечения) на тёмном фоне.</summary>
+        private static void SaveExact(FrameworkElement el, string path, double pad, double scale)
+        {
+            el.UpdateLayout();
+            double w = Math.Ceiling(el.ActualWidth), h = Math.Ceiling(el.ActualHeight);
+            var brush = new VisualBrush(el) { Stretch = Stretch.None, Viewbox = new Rect(-pad, -pad, w + pad * 2, h + pad * 2), ViewboxUnits = BrushMappingMode.Absolute };
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+            {
+                dc.DrawRoundedRectangle(new SolidColorBrush(Backdrop), null, new Rect(0, 0, w + pad * 2, h + pad * 2), 18, 18);
+                dc.DrawRectangle(brush, null, new Rect(0, 0, w + pad * 2, h + pad * 2));
+            }
+            var bmp = new RenderTargetBitmap((int)((w + pad * 2) * scale), (int)((h + pad * 2) * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            bmp.Render(dv);
+            WritePng(bmp, path);
         }
 
         /// <summary>Снимок прямоугольника из окна (2×) на тёмном фоне.</summary>
