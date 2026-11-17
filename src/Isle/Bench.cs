@@ -47,6 +47,8 @@ namespace Isle
             using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
         }
 
+        private static Task _resWait;
+
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
@@ -98,6 +100,21 @@ namespace Isle
                 var dev = PresentationSource.FromVisual(w).CompositionTarget.TransformToDevice.M11;
                 L("QR: клеток " + src.PixelWidth + ", размер " + qr.ActualWidth.ToString("0.###") + "×" + qr.ActualHeight.ToString("0.###") + " DIP, масштаб " + dev + " → " + (qr.ActualWidth * dev / src.PixelWidth).ToString("0.###") + " px на клетку");
                 await Task.Delay(4000); // первая анимация (от первого запроса странички) должна закончиться
+                var me = System.Diagnostics.Process.GetCurrentProcess();
+                void Res(string when, double secs)
+                {
+                    me.Refresh(); var cpu0 = me.TotalProcessorTime; var t0 = DateTime.Now;
+                    System.Threading.Thread.Sleep(0);
+                    var tcs = new TaskCompletionSource();
+                    var tm = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(secs) };
+                    tm.Tick += (_, __) => { tm.Stop(); me.Refresh(); var c = (me.TotalProcessorTime - cpu0).TotalMilliseconds / (DateTime.Now - t0).TotalMilliseconds / Environment.ProcessorCount * 100;
+                        L(when + ": ЦП " + c.ToString("0.0") + "% (всех ядер), память " + me.WorkingSet64 / 1048576 + " МБ рабочий набор, " + me.PrivateMemorySize64 / 1048576 + " МБ частная"); tcs.SetResult(); };
+                    tm.Start(); _resWait = tcs.Task;
+                }
+                // телефон «отключился»: подождать, пока статус сбросится (15 с без запросов) — рамка должна задышать
+                await Task.Delay(16000);
+                Res("вкладка «Телефон» открыта, рамка дышит", 8); await _resWait;
+                SnapEl(w.Content as FrameworkElement, dir, "breath-a"); await Task.Delay(700); SnapEl(w.Content as FrameworkElement, dir, "breath-b");
                 SnapEl(w.Content as FrameworkElement, dir, "phone-0");
                 // телефон открывает страничку → змейка
                 var opened = http.GetAsync(url);
@@ -118,6 +135,13 @@ namespace Isle
                 PhoneLink.Notices.Clear(); pv.GetType().GetMethod("BuildNotices", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(pv, null);
                 await Task.Delay(400);
                 SnapEl(w.Content as FrameworkElement, dir, "phone-notices-empty");
+                w.Collapse(); await Task.Delay(2000);
+                { var me2 = System.Diagnostics.Process.GetCurrentProcess(); me2.Refresh(); var c0 = me2.TotalProcessorTime; var t0 = DateTime.Now; await Task.Delay(8000); me2.Refresh();
+                  L("чёлка свёрнута, сервер работает: ЦП " + ((me2.TotalProcessorTime - c0).TotalMilliseconds / (DateTime.Now - t0).TotalMilliseconds / Environment.ProcessorCount * 100).ToString("0.0") + "%, память " + me2.WorkingSet64 / 1048576 + " МБ / частная " + me2.PrivateMemorySize64 / 1048576 + " МБ"); }
+                // нагрузка: телефон опрашивает список, как страничка (раз в 2,5 с) — 40 запросов подряд
+                { var me3 = System.Diagnostics.Process.GetCurrentProcess(); me3.Refresh(); var c0 = me3.TotalProcessorTime; var sw2 = System.Diagnostics.Stopwatch.StartNew();
+                  for (int i = 0; i < 40; i++) await http.GetStringAsync(url + "list");
+                  me3.Refresh(); L("40 запросов списка: " + sw2.ElapsedMilliseconds + " мс, ЦП процесса на них " + (me3.TotalProcessorTime - c0).TotalMilliseconds.ToString("0") + " мс"); }
                 // проверка распознавания «Связи с телефоном»
                 L("PhoneLink распознан: " + NotificationService.IsPhoneLink("Связь с телефоном", "Microsoft.YourPhone_8wekyb3d8bbwe!App") + ", Telegram: " + NotificationService.IsPhoneLink("Telegram", "TelegramDesktop"));
                 File.WriteAllText(Path.Combine(dir, "page.html"), await http.GetStringAsync(url));
