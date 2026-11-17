@@ -33,6 +33,8 @@ namespace Isle.Helpers
         private static IntPtr _hwnd;
         private static uint _callback;
         private static bool _registered;
+        /// <summary>Полоса сейчас зарезервирована (чёлка не «тянется» к курсору — под ней вкладки браузера).</summary>
+        public static bool Active => _registered;
         private static Win32.WinEventProc _fgProc;
         private static bool _hooked;
         private static readonly System.Windows.Threading.DispatcherTimer Debounce = new() { Interval = TimeSpan.FromMilliseconds(500) };

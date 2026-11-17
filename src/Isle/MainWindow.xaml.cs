@@ -217,7 +217,8 @@ namespace Isle
                 _leaveClose.Stop();
                 _oledHide.Stop();
                 _ungrow.Stop();
-                if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
+                // в режиме выреза не тянемся: под чёлкой вкладки браузера, и «вытянутая» чёлка закрывала бы их
+                if (State == IslandState.Collapsed && !_hoverGrown && !Helpers.NotchBar.Active) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
                 // навёл на всплывашку — она не исчезает, пока курсор на ней (и не превращается в панель)
                 if (State == IslandState.Toast) _toastTimer.Stop();
                 // По наведению на саму чёлку панель НЕ открывается: на ней кнопки (папка загрузки, мини-плеер, таймер),
@@ -336,7 +337,7 @@ namespace Isle
                 {
                     var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
                     double sc = Math.Clamp(AppSettings.Current.Scale, 0.7, 2.0); // конечный масштаб, а не текущий кадр анимации
-                    return (int)Math.Ceiling(_collapsedH * sc * dev.M22);
+                    return (int)Math.Ceiling((_collapsedH + 3) * sc * dev.M22); // +3: чёлка целиком внутри полосы, край ровный
                 };
                 Helpers.NotchBar.Update();
                 ApplyTabs();
