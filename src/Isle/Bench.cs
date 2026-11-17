@@ -35,7 +35,44 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string cls, string title);
+        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            System.Diagnostics.Process proc = null;
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                AppSettings.Current.NotchMode = "browser"; Helpers.NotchBar.Update();
+                var ps = @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+                var fake = Path.Combine(dir, "chrome.exe"); File.Copy(ps, fake, true);
+                var script = "Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.Form; $f.Text='BenchChrome'; $f.Width=700; $f.Height=500; $f.StartPosition='CenterScreen'; [System.Windows.Forms.Application]::Run($f)";
+                proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(fake, "-NoProfile -Command \"" + script + "\"") { UseShellExecute = false });
+                IntPtr h = IntPtr.Zero;
+                for (int i = 0; i < 40 && h == IntPtr.Zero; i++) { await Task.Delay(250); h = FindWindow(null, "BenchChrome"); }
+                SetForegroundWindow(h); await Task.Delay(1800);
+                L("браузер в окне: впереди " + Isle.Native.Win32.ForegroundProcessName() + ", развёрнут " + Isle.Native.Win32.IsZoomed(h) + ", рабочая область сверху " + SystemParameters.WorkArea.Top);
+                ShowWindow(h, 3); await Task.Delay(1800); // развернуть
+                L("браузер развёрнут: развёрнут " + Isle.Native.Win32.IsZoomed(h) + ", рабочая область сверху " + SystemParameters.WorkArea.Top);
+                ShowWindow(h, 9); await Task.Delay(1800); // вернуть в окно
+                L("браузер снова в окне: развёрнут " + Isle.Native.Win32.IsZoomed(h) + ", рабочая область сверху " + SystemParameters.WorkArea.Top);
+                ShowWindow(h, 3); await Task.Delay(1800);
+                L("снова развёрнут: рабочая область сверху " + SystemParameters.WorkArea.Top);
+                Helpers.NotchBar.Unregister();
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            try { proc?.Kill(); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
