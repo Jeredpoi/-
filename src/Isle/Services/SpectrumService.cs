@@ -90,6 +90,36 @@ namespace Isle.Services
 
         public bool Running => _cap != null;
 
+        private string _deviceId;
+        private DateTime _startedAt, _lastSound, _lastCheck;
+        private int _restarts;
+
+        private static string DefaultDeviceId()
+        {
+            try { using var en = new NAudio.CoreAudioApi.MMDeviceEnumerator(); using var d = en.GetDefaultAudioEndpoint(NAudio.CoreAudioApi.DataFlow.Render, NAudio.CoreAudioApi.Role.Multimedia); return d.ID; }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Раз в секунду, пока играет музыка: если в Windows сменилось устройство вывода (подключили наушники, Bluetooth,
+        /// телефон) — захват перезапускаем на новом. Раньше спектр продолжал слушать старое устройство, где почти тихо,
+        /// и полоски в чёлке поднимались редко. Если слышим тишину дольше 4 с при играющей музыке — тоже перезапуск.
+        /// </summary>
+        public void Watchdog()
+        {
+            if (_cap == null || DateTime.Now - _lastCheck < TimeSpan.FromSeconds(1)) return;
+            _lastCheck = DateTime.Now;
+            var id = DefaultDeviceId();
+            bool switched = id != null && _deviceId != null && id != _deviceId;
+            bool deaf = DateTime.Now - _startedAt > TimeSpan.FromSeconds(4) && DateTime.Now - _lastSound > TimeSpan.FromSeconds(4);
+            if (!switched && !deaf) return;
+            if (deaf && !switched && _restarts >= 3) return; // музыка и правда тихая/на другом устройстве — не дёргаем бесконечно
+            _restarts = switched ? 0 : _restarts + 1;
+            Journal.Info("spectrum", switched ? "сменилось устройство вывода звука — слушаю новое" : "спектр слышит тишину при играющей музыке — перезапускаю захват");
+            Stop();
+            Start();
+        }
+
         /// <summary>Копия текущих полос (безопасно читать из UI).</summary>
         public float[] Snapshot()
         {
@@ -98,18 +128,23 @@ namespace Isle.Services
             return copy;
         }
 
+        private DateTime _failedAt;
+
         public void Start()
         {
             if (_cap != null) return;
+            if (DateTime.Now - _failedAt < TimeSpan.FromSeconds(3)) return; // не пробуем каждый кадр, если устройство недоступно
             try
             {
+                _deviceId = DefaultDeviceId();
+                _startedAt = _lastSound = DateTime.Now;
                 _cap = new WasapiLoopbackCapture();
                 _sampleRate = _cap.WaveFormat.SampleRate;
                 _cap.DataAvailable += OnData;
                 _cap.RecordingStopped += (_, __) => { };
                 _cap.StartRecording();
             }
-            catch { _cap = null; }
+            catch (Exception ex) { _cap = null; _failedAt = DateTime.Now; Journal.Debug("spectrum", "захват звука не запустился: " + ex.Message); }
         }
 
         public void Stop()
@@ -185,15 +220,18 @@ namespace Isle.Services
             // Автоусиление: шкала идёт от недавней самой громкой полосы, а не от фиксированного уровня.
             // Поэтому эквалайзер одинаково живой и на громкости 100%, и почти на нуле —
             // звук, который слышно, всегда даёт движение.
-            _peakDb = Math.Max(loudest, _peakDb - 0.06);      // громкость «забывается» ~3 дБ/с — после убавления звука подстроится за несколько секунд
+            // громкость «забывается» ~7 дБ/с: после громкого припева тихий куплет снова двигает полоски почти сразу
+            // (было ~3 дБ/с — полоски лежали внизу по 3–5 с, «поднимутся — опустятся — и стоят»)
+            _peakDb = Math.Max(loudest, _peakDb - 0.15);
             const double Range = 42;                           // показываем верхние 42 дБ
             bool silent = loudest < -125;                      // настоящая цифровая тишина (пауза, конец трека)
+            if (!silent) _lastSound = DateTime.Now;
             for (int b = 0; b < BandCount; b++)
             {
                 float v = silent ? 0 : (float)Math.Clamp((_db[b] - (_peakDb - Range)) / Range, 0, 1);
                 // своя «громкость» для каждой полосы, чтобы высокие не были всегда внизу, а басы — в потолке
-                _norm[b] = Math.Max(0.3f, Math.Max(v, _norm[b] * 0.998f));
-                float floor = _norm[b] * 0.35f;
+                _norm[b] = Math.Max(0.3f, Math.Max(v, _norm[b] * 0.99f)); // своя громкость полосы забывается за ~1,5 с (было ~15 с)
+                float floor = _norm[b] * 0.3f;
                 fresh[b] = Math.Clamp((v - floor) / Math.Max(0.12f, _norm[b] - floor), 0, 1);
             }
             DetectBeat(silent);

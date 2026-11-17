@@ -2813,17 +2813,20 @@ namespace Isle
         private const double BarMax = 18;
         private Border[] _bars;
         private ScaleTransform[] _barScale;
+        private double[] _barCur; // настоящая высота полосок; на экран отдаём, когда разница заметна
 
         private Border[] InitBars()
         {
             var bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 };
             _barScale = new ScaleTransform[bars.Length];
+            _barCur = new double[bars.Length];
             for (int i = 0; i < bars.Length; i++)
             {
                 double h = bars[i].Height;
                 bars[i].Height = BarMax;
                 bars[i].RenderTransformOrigin = new Point(0.5, 1);
                 bars[i].RenderTransform = _barScale[i] = new ScaleTransform(1, h / BarMax);
+                _barCur[i] = h;
             }
             return bars;
         }
@@ -2865,7 +2868,7 @@ namespace Isle
             // спектр включаем только пока играет музыка и чёлка свёрнута
             var md = AppHost.Media?.Current;
             bool wantSpectrum = md != null && md.HasSession && md.IsPlaying && State != IslandState.Expanded && !_oledHidden && Scaler.Visibility == Visibility.Visible;
-            if (wantSpectrum) { _specIdle = 0; if (!AppHost.Spectrum.Running) AppHost.Spectrum.Start(); }
+            if (wantSpectrum) { _specIdle = 0; if (!AppHost.Spectrum.Running) AppHost.Spectrum.Start(); else AppHost.Spectrum.Watchdog(); }
             else if (AppHost.Spectrum.Running && (_specIdle += _frameDt) > 2) AppHost.Spectrum.Stop();
             Edge.Active = State != IslandState.Expanded && !_oledHidden;
             Helpers.FrameClock.Hidden = _oledHidden; // спрятанный остров не рисуем — экономим процессор
@@ -2928,11 +2931,14 @@ namespace Isle
                     double target = 3 + Math.Min(15, level * 15);
                     // вверх быстро, вниз плавно — как у настоящего эквалайзера.
                     // Меняем масштаб, а не высоту: без пересчёта раскладки 30 раз в секунду
+                    // Высоту копим в своём массиве: на мониторе 144–240 Гц шаг за кадр меньше 0,05 px,
+                    // и раньше, сравнивая с уже нарисованным, полоски почти не двигались
                     var st = _barScale[i];
-                    double cur = st.ScaleY * BarMax;
+                    double cur = _barCur[i];
                     double k = Helpers.FrameClock.Lerp(target > cur ? 0.75 : 0.28);
                     double next = cur + (target - cur) * k;
-                    if (Math.Abs(next - cur) > 0.05) st.ScaleY = next / BarMax;
+                    _barCur[i] = next;
+                    if (Math.Abs(next - st.ScaleY * BarMax) > 0.05) st.ScaleY = next / BarMax;
                 }
             }
             else if (IdleRow.Visibility == Visibility.Visible && DateTime.Now >= _nextBlink)
