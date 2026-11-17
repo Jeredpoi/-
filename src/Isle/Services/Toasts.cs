@@ -125,6 +125,7 @@ namespace Isle.Services
         public const string More = "M5.5 12h.01M12 12h.01M18.5 12h.01";
         public const string Code = "M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5M13.5 5l-3 14";
         public const string Layers = "M12 4l8.5 4.5L12 13 3.5 8.5zM3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5";
+        public const string Phone = "M8 3.5h8A1.5 1.5 0 0 1 17.5 5v14a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 19V5A1.5 1.5 0 0 1 8 3.5zM11 17.5h2";
         public const string Folder = "M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2h8A1.5 1.5 0 0 1 20.5 9v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z";
         public const string Shield = "M12 3.5L19 6v5.5c0 4.4-3 7.6-7 9c-4-1.4-7-4.6-7-9V6zM9 12l2 2 4-4";
         public const string Bold = "M7 4.5h6a3.75 3.75 0 0 1 0 7.5H7zM7 12h7a3.75 3.75 0 0 1 0 7.5H7z";

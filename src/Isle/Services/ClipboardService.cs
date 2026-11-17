@@ -611,6 +611,9 @@ namespace Isle.Services
             catch (Exception ex) { App.Log("clip image: " + ex.Message); }
         }
 
+        /// <summary>Запись не из буфера Windows (например, с телефона) — в историю, как обычная копия.</summary>
+        public void AddExternal(ClipItem item) => Insert(null, item);
+
         /// <summary>Добавляет новый элемент наверх (или поднимает уже существующий).</summary>
         private void Insert(ClipItem existing, ClipItem fresh)
         {

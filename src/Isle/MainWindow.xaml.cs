@@ -317,6 +317,7 @@ namespace Isle
                 };
                 trim.Start();
                 App.Trace("все модули запущены");
+                ApplyTabs();
                 // заранее создаём вкладки в простое — первое открытие без рывка
                 _ = Dispatcher.InvokeAsync(() => { foreach (var t in TabOrder) GetView(t); }, DispatcherPriority.ApplicationIdle);
             };
@@ -1093,6 +1094,7 @@ namespace Isle
             if (sender == TabHome) SelectTab("home");
             else if (sender == TabClip) SelectTab("clip");
             else if (sender == TabShelf) SelectTab("shelf");
+            else if (sender == TabPhone) SelectTab("phone");
             else if (sender == TabText) SelectTab("text");
             else if (sender == TabChat) SelectTab("chat");
             else if (sender == TabNotes) SelectTab("notes");
@@ -1107,6 +1109,7 @@ namespace Isle
             {
                 "clip" => new Views.ClipboardView(),
                 "shelf" => new Views.ShelfView(),
+                "phone" => new Views.PhoneView(),
                 "text" => new Views.TextView(),
                 "chat" => new Views.ChatView(),
                 "notes" => new Views.NotesView(),
@@ -1118,7 +1121,24 @@ namespace Isle
             return v;
         }
 
-        private static readonly string[] TabOrder = { "home", "clip", "shelf", "text", "chat", "notes", "weather", "controls" };
+        /// <summary>Видимые вкладки в порядке из настроек (Настройки → Внешний вид → Вкладки).</summary>
+        private static string[] TabOrder => Helpers.IslandTabs.Visible().ToArray();
+
+        /// <summary>Расставить вкладки по настройкам: порядок и какие спрятаны. Вызывается и из Настроек — сразу видно в чёлке.</summary>
+        public void ApplyTabs()
+        {
+            var order = Helpers.IslandTabs.Order();
+            var buttons = order.Select(TabButton).ToList();
+            TabBar.Children.Clear();
+            foreach (var (id, rb) in order.Zip(buttons))
+            {
+                rb.Visibility = Helpers.IslandTabs.IsHidden(id) ? Visibility.Collapsed : Visibility.Visible;
+                TabBar.Children.Add(rb);
+            }
+            Journal.Info("island", "вкладки: " + string.Join(", ", Helpers.IslandTabs.Visible()));
+            if (Helpers.IslandTabs.IsHidden(_currentTab)) SelectTab("home");
+            else MoveTabIndicator(TabButton(_currentTab), false);
+        }
 
         /// <summary>Подсветка плавно переезжает под выбранную вкладку и подстраивается по ширине.</summary>
         private void MoveTabIndicator(RadioButton rb, bool animate)
@@ -1127,6 +1147,9 @@ namespace Isle
             {
                 try
                 {
+                    // вкладка спрятана в настройках, но её открыли горячей клавишей — подсветку не показываем
+                    TabIndicator.Opacity = rb.Visibility == Visibility.Visible ? 1 : 0;
+                    if (rb.Visibility != Visibility.Visible) return;
                     var x = rb.TranslatePoint(new Point(0, 0), TabBar).X;
                     double w = rb.ActualWidth - 2; // у вкладок справа отступ 2
                     var dur = TimeSpan.FromMilliseconds(animate ? 380 : 0);
@@ -1140,7 +1163,7 @@ namespace Isle
 
         private RadioButton TabButton(string tab) => tab switch
         {
-            "clip" => TabClip, "shelf" => TabShelf, "text" => TabText, "chat" => TabChat, "notes" => TabNotes,
+            "clip" => TabClip, "shelf" => TabShelf, "phone" => TabPhone, "text" => TabText, "chat" => TabChat, "notes" => TabNotes,
             "weather" => TabWeather, "controls" => TabControls, _ => TabHome
         };
 
