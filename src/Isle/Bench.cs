@@ -38,6 +38,38 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "on";
+                await Task.Delay(9000);
+                int W = (int)w.ActualWidth, H = 230;
+                var sheet = new System.Windows.Media.Imaging.RenderTargetBitmap(W * 2, H * 2 * 3, 192, 192, PixelFormats.Pbgra32);
+                var dvs = new DrawingVisual();
+                using (var dcs = dvs.RenderOpen())
+                    for (int f = 0; f < 3; f++)
+                    {
+                        await Task.Delay(700);
+                        w.UpdateLayout();
+                        var one = new System.Windows.Media.Imaging.RenderTargetBitmap(W * 2, H * 2, 192, 192, PixelFormats.Pbgra32);
+                        var dv = new DrawingVisual();
+                        using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(50, 60, 110), Color.FromRgb(110, 60, 120), 90), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(w.Content as Visual) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top, ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, W, H) }, null, new Rect(0, 0, W, H)); }
+                        one.Render(dv);
+                        dcs.DrawImage(one, new Rect(0, f * H, W, H));
+                    }
+                sheet.Render(dvs);
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(sheet));
+                using (var fs = File.Create(Path.Combine(dir, "snow.png"))) enc.Save(fs);
+                File.WriteAllText(Path.Combine(dir, "log.txt"), "снег активен: " + ((Isle.Helpers.SnowFall)w.FindName("Snow")).Active + "\n");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
