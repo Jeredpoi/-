@@ -340,14 +340,30 @@ namespace Isle.Views
             el.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)));
         }
 
+        private const string PhoneLinkFamily = "Microsoft.YourPhone_8wekyb3d8bbwe";
+
+        /// <summary>Установлена ли «Связь с телефоном» (Phone Link) у этого пользователя.</summary>
+        private static bool PhoneLinkInstalled()
+        {
+            try { return new Windows.Management.Deployment.PackageManager().FindPackagesForUser("", PhoneLinkFamily).Any(); }
+            catch (Exception ex) { Journal.Debug("phone", "не удалось проверить «Связь с телефоном»: " + ex.Message); return true; }
+        }
+
         private void OnOpenPhoneLink(object s, RoutedEventArgs e)
         {
-            // «Связь с телефоном» встроена в Windows 10/11; если её нет — раздел «Мобильные устройства» в параметрах
-            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "shell:AppsFolder\\Microsoft.YourPhone_8wekyb3d8bbwe!App") { UseShellExecute = true }); }
-            catch
+            // «Связь с телефоном» — приложение Windows. Нет её — открываем страницу в Microsoft Store, а если и он не открылся — «Мобильные устройства» в параметрах
+            bool installed = PhoneLinkInstalled();
+            Journal.Info("phone", "«Подключить телефон»: «Связь с телефоном» " + (installed ? "установлена — открываю" : "не установлена — открываю Microsoft Store"));
+            bool Run(string target)
             {
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:mobile-devices") { UseShellExecute = true }); } catch { }
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true }); return true; }
+                catch (Exception ex) { Journal.Warn("phone", "не открылось " + target + ": " + ex.Message); return false; }
             }
+            bool ok = installed
+                ? Run("shell:AppsFolder\\" + PhoneLinkFamily + "!App") || Run("ms-phone:")
+                : Run("ms-windows-store://pdp/?productid=9NMPJ99VJBWV");
+            if (!ok) ok = Run("ms-settings:mobile-devices");
+            if (!ok) ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Не открылась «Связь с телефоном»", Subtitle = "Найди её в меню «Пуск»", Icon = Icons.Phone, Important = true, Duration = TimeSpan.FromSeconds(3) });
             AppHost.Window.Collapse();
         }
 

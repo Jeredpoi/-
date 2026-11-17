@@ -136,7 +136,7 @@
                     </Border>
                     <TextBlock Text="Уведомления телефона в чёлке" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4"/>
                     <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextAlignment="Center" TextWrapping="Wrap"
-                               Text="Подключи телефон по Bluetooth во встроенной «Связи с телефоном» Windows — сообщения и звонки с телефона будут всплывать в Isle."/>
+                               Text="Свяжи телефон в приложении «Связь с телефоном» — обычного подключения по Bluetooth в параметрах Windows мало. На iPhone потом включи «Показывать уведомления» для этого компьютера: Настройки → Bluetooth → (i) рядом с ним."/>
                     <Button Style="{StaticResource Flat}" Padding="14,7" Margin="0,12,0,0" HorizontalAlignment="Center" Click="OnOpenPhoneLink">
                         <StackPanel Orientation="Horizontal"><h:Icon Kind="Bluetooth" Width="13" Height="13"/><TextBlock Text="Подключить телефон" FontSize="12" Margin="7,0,0,0"/></StackPanel>
                     </Button>
