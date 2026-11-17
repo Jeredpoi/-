@@ -33,13 +33,15 @@ namespace Isle.Views
             IsVisibleChanged += (_, __) =>
             {
                 PhoneLink.KeepAlive = IsVisible;
+                if (!IsVisible) _lastFit = -1;
                 if (IsVisible) { PhoneLink.Start(); _status.Start(); Refresh(); } else _status.Stop();
             };
             if (!_hooked) { _hooked = true; PhoneLink.ItemReceived += OnReceived; }
             PhoneLink.PageOpened += () => { if (IsVisible) PlayConnected(); };
             PhoneLink.NoticesChanged += () => Dispatcher.InvokeAsync(BuildNotices);
             QrHost.SizeChanged += (_, __) => FitQr();
-            LayoutUpdated += (_, __) => FitQr();
+            // размер клеток пересчитываем, когда вкладку показали (после анимации раскрытия), а не на каждый проход раскладки
+            IsVisibleChanged += (_, __) => { if (IsVisible) { _lastFit = -1; Dispatcher.InvokeAsync(FitQr, DispatcherPriority.Background); DispatcherTimerOnce(500, FitQr); } UpdateBreath(); };
             BuildNotices();
         }
 
@@ -103,6 +105,7 @@ namespace Isle.Views
             {
                 var url = PhoneLink.Url(_ip);
                 if (url != _url) { Qr.Source = MakeQr(url, out _qrModules); _lastFit = -1; FitQr(); }
+                UpdateBreath();
                 QrNone.Visibility = Visibility.Collapsed;
                 _url = url; CopyLink.ToolTip = "Скопировать адрес странички\n" + url;
             }
@@ -139,7 +142,36 @@ namespace Isle.Views
                     StatusPulse.BeginAnimation(OpacityProperty, null); StatusPulse.Opacity = 0;
                     if (!_snaking) Snake.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(400)));
                 }
+                UpdateBreath();
             }
+        }
+
+        private void DispatcherTimerOnce(int ms, Action a)
+        {
+            var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+            t.Tick += (_, __) => { t.Stop(); a(); };
+            t.Start();
+        }
+
+        private bool _breathing;
+
+        /// <summary>Оранжевая рамка «дышит», пока вкладка открыта и телефон не подключён. Вкладку закрыли — анимация стоит, ресурсы не тратит.</summary>
+        private void UpdateBreath()
+        {
+            bool want = IsVisible && !_snaking && !PhoneLink.PhoneOnline && Qr.Source != null;
+            if (want == _breathing) return;
+            _breathing = want;
+            if (want)
+            {
+                var a = new System.Windows.Media.Animation.DoubleAnimation(0.15, 1, TimeSpan.FromSeconds(1.4))
+                {
+                    AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut },
+                };
+                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(a, 30);
+                Breath.BeginAnimation(OpacityProperty, a);
+            }
+            else Breath.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(300)));
         }
 
         private double _lastFit = -1;
@@ -163,7 +195,7 @@ namespace Isle.Views
             catch { return; }
             if (scale <= 0 || Math.Abs(scale - _lastFit) < 0.0005) return;
             _lastFit = scale;
-            double inner = QrHost.Width - 26; // белые поля вокруг кода
+            double inner = QrHost.Width - 32; // тёмные поля вокруг кода — чтобы камера уверенно нашла его границы
             int k = Math.Max(1, (int)Math.Floor(inner * scale / _qrModules));
             double side = _qrModules * k / scale;
             Qr.Width = side; Qr.Height = side;
@@ -176,10 +208,11 @@ namespace Isle.Views
         {
             if (_snaking) return;
             _snaking = true;
+            UpdateBreath();
             Snake.BeginAnimation(OpacityProperty, null);
             Snake.Opacity = 1;
-            double w = QrHost.ActualWidth + 12, h = QrHost.ActualHeight + 12, th = Snake.StrokeThickness;
-            double perim = (2 * (w + h) - (8 - 2 * Math.PI) * 23) / th; // периметр скруглённого квадрата в толщинах линии
+            double w = QrHost.ActualWidth, h = QrHost.ActualHeight, th = Snake.StrokeThickness;
+            double perim = 2 * (w + h - 2 * th) / th; // периметр квадрата (по середине линии) в толщинах линии
             var start = DateTime.Now;
             QrTitle.Text = "Телефон подключён";
             QrSub.Text = "Страничка открыта — можно отправлять";
@@ -205,6 +238,7 @@ namespace Isle.Views
                     QrOk.Opacity = 0;
                     _snaking = false;
                     Snake.StrokeDashArray = null;
+                    UpdateBreath();
                     // рамка остаётся тонким зелёным контуром, пока телефон на связи
                     Snake.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(PhoneLink.PhoneOnline ? 0.45 : 0, TimeSpan.FromMilliseconds(500)));
                     QrTitle.Text = "Наведи камеру телефона";
@@ -295,7 +329,7 @@ namespace Isle.Views
                 int w = m.Width, h = m.Height;
                 modules = w;
                 var px = new byte[w * h];
-                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) px[y * w + x] = m[x, y] ? (byte)0 : (byte)255;
+                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) px[y * w + x] = m[x, y] ? (byte)236 : (byte)0; // светлые клетки на чёрном
                 var b = BitmapSource.Create(w, h, 96, 96, PixelFormats.Gray8, null, px, w);
                 b.Freeze();
                 return b;

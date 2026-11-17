@@ -26,20 +26,25 @@
                 <StackPanel VerticalAlignment="Center">
                     <!-- сам код: квадрат, размер подгоняется под целое число пикселей на клетку -->
                     <Grid x:Name="QrHost" HorizontalAlignment="Center" VerticalAlignment="Center" Width="184" Height="184">
-                        <Border x:Name="QrCard" Background="White" CornerRadius="18">
+                        <!-- ровный квадрат на чёрном: светлые клетки на чёрном фоне -->
+                        <Border x:Name="QrCard" Background="Black">
                             <Grid>
                                 <Image x:Name="Qr" RenderOptions.BitmapScalingMode="NearestNeighbor" Stretch="Fill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="QrNone" Text="Нет сети" Foreground="#555" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <TextBlock x:Name="QrNone" Text="Нет сети" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
+                        <!-- ждёт телефон: оранжевая рамка «дышит» — разгорается и гаснет -->
+                        <Rectangle x:Name="Breath" Stroke="#FB923C" StrokeThickness="2" IsHitTestVisible="False" Opacity="0.25" SnapsToDevicePixels="True">
+                            <Rectangle.Effect><DropShadowEffect Color="#FB923C" BlurRadius="16" ShadowDepth="0" Opacity="0.9"/></Rectangle.Effect>
+                        </Rectangle>
                         <!-- телефон открыл страничку: по краю пробегает зелёная змейка и замыкается в рамку -->
-                        <Rectangle x:Name="Snake" Margin="-6" RadiusX="23" RadiusY="23" Stroke="#4ADE80" StrokeThickness="3" StrokeDashCap="Round"
+                        <Rectangle x:Name="Snake" Stroke="#4ADE80" StrokeThickness="3" StrokeDashCap="Flat"
                                    IsHitTestVisible="False" Opacity="0">
                             <Rectangle.Effect><DropShadowEffect x:Name="SnakeGlow" Color="#4ADE80" BlurRadius="14" ShadowDepth="0" Opacity="0.8"/></Rectangle.Effect>
                         </Rectangle>
                         <Border x:Name="QrOk" Width="64" Height="64" CornerRadius="32" Background="#4ADE80" Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
                             <Border.RenderTransform><ScaleTransform x:Name="QrOkScale" ScaleX="0.5" ScaleY="0.5"/></Border.RenderTransform>
-                            <Border.Effect><DropShadowEffect Color="#000" BlurRadius="18" ShadowDepth="0" Opacity="0.35"/></Border.Effect>
+                            <Border.Effect><DropShadowEffect Color="#000" BlurRadius="18" ShadowDepth="0" Opacity="0.5"/></Border.Effect>
                             <h:Icon Kind="Check" Width="30" Height="30" StrokeWidth="3" Foreground="#05210F"/>
                         </Border>
                     </Grid>
