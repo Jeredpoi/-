@@ -10,10 +10,10 @@ namespace Isle.Helpers
     /// </summary>
     public class VoiceWave : FrameworkElement
     {
-        private const int Bars = 32;
-        private const double Step = 0.12; // новый столбик каждые 120 мс — волна идёт спокойно, не мельтешит
+        private const int Bars = 28;
+        private const double Step = 0.18; // новый столбик каждые 180 мс — волна плывёт медленно и спокойно
         private readonly double[] _levels = new double[Bars];
-        private double _pending, _acc, _shown;
+        private double _pending, _acc, _shown, _grow;
         private bool _subscribed;
 
         public Brush Fill { get; set; } = Brushes.White;
@@ -28,7 +28,7 @@ namespace Isle.Helpers
         /// <summary>Громкость с микрофона 0..1 (приходит много раз за кадр — берём максимум за шаг).</summary>
         public void Push(float level) => _pending = Math.Max(_pending, level);
 
-        public void Clear() { Array.Clear(_levels); _pending = 0; _shown = 0; InvalidateVisual(); }
+        public void Clear() { Array.Clear(_levels); _pending = 0; _shown = 0; _grow = 0; InvalidateVisual(); }
 
         private void Subscribe() { if (_subscribed) return; _subscribed = true; FrameClock.Tick += OnFrame; }
         private void Unsubscribe() { if (!_subscribed) return; _subscribed = false; FrameClock.Tick -= OnFrame; }
@@ -42,10 +42,12 @@ namespace Isle.Helpers
                 Array.Copy(_levels, 1, _levels, 0, Bars - 1);
                 // тихая речь тоже должна быть заметна: усиливаем и «сжимаем» корнем; сглаживаем с соседним столбиком
                 double v = Math.Sqrt(Math.Min(1, _pending * 3.5));
-                _levels[Bars - 1] = _levels[Bars - 2] * 0.35 + v * 0.65;
+                _levels[Bars - 1] = _levels[Bars - 2] * 0.45 + v * 0.55;
                 _pending = 0;
             }
             _shown = _acc / Step; // плавный сдвиг между столбиками
+            // самый свежий столбик растёт плавно, а не прыгает на новую высоту
+            _grow += (_levels[Bars - 1] - _grow) * FrameClock.Lerp(0.2);
             InvalidateVisual();
         }
 
@@ -59,7 +61,8 @@ namespace Isle.Helpers
             {
                 double x = (i - _shown) * slot;
                 if (x < -bar) continue;
-                double amp = Math.Max(bar, _levels[i] * h); // в тишине — точка
+                double lv = i == Bars - 1 ? _grow : _levels[i];
+                double amp = Math.Max(bar, lv * h * 0.96); // в тишине — точка; громко — почти во всю высоту
                 double fade = Math.Min(1, (x + bar) / (w * 0.18)); // слева столбики плавно гаснут
                 dc.PushOpacity(Math.Clamp(fade, 0, 1));
                 dc.DrawRoundedRectangle(Fill, null, new Rect(x, mid - amp / 2, bar, amp), bar / 2, bar / 2);

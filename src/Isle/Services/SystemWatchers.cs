@@ -72,11 +72,14 @@ namespace Isle.Services
         public bool HasBattery { get; private set; }
 
         public event Action<bool> FullscreenChanged;
+        /// <summary>Сейчас на переднем плане полноэкранное приложение (игра, видео).</summary>
+        public bool IsFullscreen => _lastFullscreen;
         public event Action LanguageChanged;
 
         public void Start()
         {
             _fast.Tick += (_, __) => Fast();
+            StartCapsWatch();
             _slow.Tick += (_, __) => Slow();
             _fast.Start();
             _slow.Start();
@@ -125,15 +128,93 @@ namespace Isle.Services
 
             ReadLanguage(s.LayoutToasts);
 
-            // Caps Lock
-            bool caps = (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
-            if (_lastCaps.HasValue && caps != _lastCaps.Value && s.CapsToasts)
-                ToastBus.Show(new Toast
+        }
+
+        // ---------- Caps Lock: настоящее состояние ----------
+        // GetKeyState у фоновой программы показывает устаревшее состояние (оно обновляется, только когда сама программа
+        // получает нажатия) — в игре Isle не замечал Caps Lock. Поэтому отдельный поток каждые 120 мс читает состояние
+        // окна, которое сейчас впереди (подключаясь к его вводу), и сообщает об изменении. Отдельный поток — чтобы
+        // зависшая игра не подвесила интерфейс Isle.
+        private System.Threading.Thread _capsThread;
+        private bool? _capsTruthSent;
+
+        private void StartCapsWatch()
+        {
+            if (_capsThread != null) return;
+            var ui = System.Windows.Application.Current.Dispatcher;
+            _capsThread = new System.Threading.Thread(() =>
+            {
+                bool loggedFail = false;
+                while (true)
                 {
-                    Kind = ToastKind.Caps, Title = caps ? "Caps Lock включён" : "Caps Lock выключен",
-                    Icon = Icons.Caps, On = caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4)
-                });
+                    System.Threading.Thread.Sleep(120);
+                    bool? caps = ReadCapsTruth(out string how);
+                    if (caps == null)
+                    {
+                        if (!loggedFail) { loggedFail = true; Journal.Debug("caps", "не удалось прочитать состояние у окна впереди (" + how + ") — остаётся перехват клавиатуры"); }
+                        continue;
+                    }
+                    loggedFail = false;
+                    if (caps == _capsTruthSent) continue;
+                    _capsTruthSent = caps;
+                    bool v = caps.Value;
+                    ui.BeginInvoke(new Action(() => OnCapsTruth(v, how)));
+                }
+            }) { IsBackground = true, Name = "Isle Caps Lock", Priority = System.Threading.ThreadPriority.BelowNormal };
+            _capsThread.Start();
+        }
+
+        private static bool? ReadCapsTruth(out string how)
+        {
+            how = "";
+            try
+            {
+                var fg = Win32.GetForegroundWindow();
+                uint fgThread = Win32.GetWindowThreadProcessId(fg, out _);
+                uint me = Win32.GetCurrentThreadId();
+                if (fgThread == 0) { how = "нет окна"; return null; }
+                if (!Win32.AttachThreadInput(me, fgThread, true)) { how = "окно не даёт подключиться — возможно, запущено от администратора"; return null; }
+                try { return (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0; }
+                finally { Win32.AttachThreadInput(me, fgThread, false); }
+            }
+            catch (Exception ex) { how = ex.Message; return null; }
+        }
+
+        /// <summary>Настоящее состояние сменилось: если плашка показывает другое (нажатие не дошло до перехвата) — поправляем.</summary>
+        private void OnCapsTruth(bool caps, string how)
+        {
+            if (_lastCaps == caps) return;
+            bool afterPress = DateTime.Now - _capsKeyAt < TimeSpan.FromSeconds(3);
+            Journal.Info("caps", "состояние: Caps Lock " + (caps ? "вкл" : "выкл") + (_lastCaps.HasValue ? (afterPress ? " (поправка после нажатия)" : " (нажатие не дошло до перехвата)") : " (начальное)"));
+            bool first = !_lastCaps.HasValue;
             _lastCaps = caps;
+            if (!first) ShowCaps(caps);
+        }
+
+        private DateTime _capsKeyAt = DateTime.MinValue;
+
+        /// <summary>
+        /// Нажали Caps Lock (из перехвата клавиатуры): переключаем плашку сразу, без ожидания опроса.
+        /// Если состояние на самом деле не сменилось (клавиша переназначена), опрос через 0,7 с поправит.
+        /// </summary>
+        public void OnCapsKey()
+        {
+            if (!_lastCaps.HasValue) _lastCaps = ReadCapsTruth(out _) ?? (Win32.GetKeyState(Win32.VK_CAPITAL) & 1) != 0;
+            bool caps = !_lastCaps.Value;
+            _lastCaps = caps;
+            _capsKeyAt = DateTime.Now;
+            Journal.Info("caps", "нажатие: Caps Lock " + (caps ? "вкл" : "выкл"));
+            ShowCaps(caps);
+        }
+
+        private static void ShowCaps(bool caps)
+        {
+            if (!AppSettings.Current.CapsToasts) return;
+            ToastBus.Show(new Toast
+            {
+                Kind = ToastKind.Caps, Title = caps ? "Caps Lock включён" : "Caps Lock выключен",
+                Icon = Icons.Caps, On = caps, ReplaceKey = "caps", Duration = TimeSpan.FromSeconds(1.4)
+            });
         }
 
         private void Slow()
@@ -178,6 +259,15 @@ namespace Isle.Services
             if (fs != _lastFullscreen)
             {
                 _lastFullscreen = fs;
+                try
+                {
+                    var fg = Win32.GetForegroundWindow();
+                    Win32.GetWindowRect(fg, out var wr);
+                    var cls = new StringBuilder(64); Win32.GetClassName(fg, cls, cls.Capacity);
+                    Win32.SHQueryUserNotificationState(out int qs);
+                    Journal.Debug("watch", "полноэкранное: " + (fs ? "да" : "нет") + " — " + ProcessOf(fg) + " [" + cls + "] окно " + wr.Left + "," + wr.Top + "–" + wr.Right + "," + wr.Bottom + ", QUNS " + qs);
+                }
+                catch { }
                 FullscreenChanged?.Invoke(fs);
             }
         }
@@ -206,6 +296,9 @@ namespace Isle.Services
                 }
                 var fg = Win32.GetForegroundWindow();
                 if (fg == IntPtr.Zero || fg == Win32.GetDesktopWindow() || fg == Win32.GetShellWindow()) return false;
+                // окна самого Isle (слой снимка экрана на весь экран, настройки) — не «полноэкранная игра»
+                Win32.GetWindowThreadProcessId(fg, out uint fgPid);
+                if (fgPid == (uint)Environment.ProcessId) return false;
                 var cls = new StringBuilder(64);
                 Win32.GetClassName(fg, cls, cls.Capacity);
                 var c = cls.ToString();
@@ -213,6 +306,11 @@ namespace Isle.Services
 
                 var proc = ProcessOf(fg);
                 if (DesktopTools.Any(t => proc.StartsWith(t))) return false;
+
+                // Обычное окно, развёрнутое на весь экран (с рамкой; например, эмулятор при скрытой панели задач),
+                // — не игра и не видео: раньше из-за него чёлка пряталась, и не было видно даже плашек пипетки и таймера
+                const int GWL_STYLE = -16, WS_THICKFRAME = 0x00040000;
+                if (Win32.IsZoomed(fg) && (Win32.GetWindowLong(fg, GWL_STYLE) & WS_THICKFRAME) != 0) return false;
 
                 if (!Win32.GetWindowRect(fg, out var r)) return false;
                 var mon = Win32.MonitorFromWindow(fg, 2);

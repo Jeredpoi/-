@@ -42,14 +42,15 @@ namespace Isle.Overlays
         private bool _markup;
         private Rect _area;                // выделенная область в координатах слоя
         private Grid _page;                // снимок + мозаика + пометки, стоит ровно на месте выделения
+        private Image _baseImage;
         // Снимок — обычная «замороженная» картинка, как и весь экран под слоем. WriteableBitmap на 4K
         // на части видеокарт рисовался кусками: недорисованный кусок оставался чёрным прямоугольником.
         private BitmapSource _crop;
         private int _cropW, _cropH;
         private byte[] _cropPx;
-        private BitmapSource _mosaicSrc;   // весь снимок в квадратах — считается при первой мозаике
-        private Canvas _patches;           // плитки мозаики поверх снимка (каждая — кусок _mosaicSrc)
-        private Image _livePatch;          // плитка, которая тянется за мышью
+        private Canvas _patches;           // плитки мозаики поверх снимка (у каждой свои квадраты — по её размеру)
+        private Helpers.MosaicTiles _livePatch; // плитка, которая тянется за мышью (из кусочков)
+        private int _tilesRebuilt;
         private Int32Rect _livePx;
         private Canvas _ink;
         private Rectangle _outline;
@@ -64,13 +65,24 @@ namespace Isle.Overlays
         private Shape _shape;
         private Polyline _line;
         private TextBox _text;
-        private Grid _mosaicFrame;
+        // Рамка мозаики — 4 стороны отдельными тонкими линиями (каждая — чёрная под белым пунктиром). Слой рисуется
+        // процессором и перерисовывает весь прямоугольник изменившегося элемента: рамка одним элементом заставляла
+        // перерисовывать всю выделенную область на каждое движение мыши — отсюда лаги на большой мозаике.
+        private Canvas _mosaicFrame;
+        private readonly Line[] _frameLines = new Line[8];
 
         private void PlaceFrame(Rect r)
         {
             if (_mosaicFrame == null) return;
-            Canvas.SetLeft(_mosaicFrame, r.X); Canvas.SetTop(_mosaicFrame, r.Y);
-            _mosaicFrame.Width = Math.Max(1, r.Width); _mosaicFrame.Height = Math.Max(1, r.Height);
+            double l = r.X + 0.5, t = r.Y + 0.5, rr = r.X + Math.Max(1, r.Width) - 0.5, b = r.Y + Math.Max(1, r.Height) - 0.5;
+            for (int i = 0; i < 2; i++)
+            {
+                Set(_frameLines[i * 4 + 0], l, t, rr, t);  // верх
+                Set(_frameLines[i * 4 + 1], l, b, rr, b);  // низ
+                Set(_frameLines[i * 4 + 2], l, t, l, b);   // лево
+                Set(_frameLines[i * 4 + 3], rr, t, rr, b); // право
+            }
+            static void Set(Line ln, double x1, double y1, double x2, double y2) { ln.X1 = x1; ln.Y1 = y1; ln.X2 = x2; ln.Y2 = y2; }
         }
 
         private static SolidColorBrush Frz(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
@@ -85,6 +97,7 @@ namespace Isle.Overlays
             _area = area;
             Cursor = Cursors.Arrow;
             _sel.Visibility = Visibility.Collapsed;
+            CompSel(null);
 
             _crop = crop;
             _cropW = crop.PixelWidth; _cropH = crop.PixelHeight;
@@ -92,7 +105,10 @@ namespace Isle.Overlays
             UpdateDim(area);
 
             _page = new Grid { Width = area.Width, Height = area.Height, ClipToBounds = true, Background = Brushes.Transparent, Cursor = Cursors.Cross, RenderTransformOrigin = new Point(0.5, 0.5) };
-            _page.Children.Add(new Image { Source = _crop, Stretch = Stretch.Fill });
+            _baseImage = new Image { Source = _crop, Stretch = Stretch.Fill };
+            // снимок пиксель в пиксель с экраном: без сглаживания перерисовка куска — простое копирование (процессору легко)
+            RenderOptions.SetBitmapScalingMode(_baseImage, BitmapScalingMode.NearestNeighbor);
+            _page.Children.Add(_baseImage);
             _patches = new Canvas { IsHitTestVisible = false };
             _page.Children.Add(_patches);
             _ink = new Canvas();
@@ -101,14 +117,47 @@ namespace Isle.Overlays
             _page.Children.Add(_outline);
             Canvas.SetLeft(_page, area.X); Canvas.SetTop(_page, area.Y);
             _canvas.Children.Add(_page);
+            if (_comp)
+            {
+                // снимок и мозаику на экране показывает графический слой; WPF-копии невидимы (из них склеится картинка)
+                _baseImage.Visibility = Visibility.Hidden;
+                _patches.Visibility = Visibility.Hidden;
+                CompClipPatches(area);
+            }
             _page.MouseLeftButtonDown += MarkDown;
             _page.MouseMove += MarkMove;
             _page.MouseLeftButtonUp += MarkUp;
             // мышь отпустили за пределами окна или захват потерян (Alt+Tab) — завершаем рисование как обычное отпускание
             _page.LostMouseCapture += (_, e) => { if (_drawing) MarkUp(_page, new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent }); };
 
+            // Пометки рисует процессор: видеокарта на части ПК при частичной перерисовке (а при рисовании так и есть)
+            // оставляет чёрные прямоугольники. Видеокарту можно включить в Настройках.
+            // на графическом слое тяжёлое рисует видеокарта, а прозрачное окно WPF с лёгкими пометками — процессор
+            bool gpu = AppSettings.Current.CaptureGpuRender && !_comp;
+            if (!gpu)
+            {
+                try
+                {
+                    if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource hs && hs.CompositionTarget != null)
+                        hs.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+                }
+                catch (Exception ex) { Journal.Warn("capture", "не удалось включить отрисовку процессором: " + ex.Message); }
+            }
+            else
+            {
+                // Видеокарта: чёрные прямоугольники появлялись при ЧАСТИЧНОЙ перерисовке (только изменившийся кусок).
+                // Пока рисуешь, заставляем перерисовывать окно целиком каждый кадр: почти невидимый слой на весь экран
+                // чуть меняет прозрачность — для видеокарты целый кадр 4K ничего не стоит, а частичных обновлений нет.
+                _repaint = new System.Windows.Shapes.Rectangle { Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), IsHitTestVisible = false };
+                _root.Children.Add(_repaint);
+                CompositionTarget.Rendering += OnFullRepaint;
+                Closed += (_, __) => CompositionTarget.Rendering -= OnFullRepaint;
+            }
+            Journal.Info("capture", "пометки: отрисовка " + (gpu ? "видеокартой (из настроек), целыми кадрами" : "процессором"));
+
             BuildBar();
-            _hintText.Text = "Рисуй прямо на снимке · Enter — сохранить · Esc — отмена";
+            BuildHandles();
+            _hintText.Text = "Рисуй прямо на снимке · уголки растягивают область · Enter — сохранить · Esc — отмена";
         }
 
         // ---------- панель ----------
@@ -160,13 +209,7 @@ namespace Isle.Overlays
             _canvas.Children.Add(_bar);
             _bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             var sz = _bar.DesiredSize;
-            // под областью, если влезает; иначе над ней; иначе внутри у нижнего края
-            double y = _area.Bottom + 12;
-            bool below = y + sz.Height <= ActualHeight - 8;
-            if (!below) y = _area.Top - 12 - sz.Height;
-            if (y < 8) y = _area.Bottom - sz.Height - 12;
-            double x = Math.Clamp(_area.X + (_area.Width - sz.Width) / 2, 8, Math.Max(8, ActualWidth - sz.Width - 8));
-            Canvas.SetLeft(_bar, x); Canvas.SetTop(_bar, y);
+            var (x, y, below) = PlaceBar();
             try
             {
                 var dpi = VisualTreeHelper.GetDpi(this);
@@ -188,6 +231,119 @@ namespace Isle.Overlays
 
             SelectMark(Mark.Mosaic);
             SelectColor(0);
+        }
+
+        /// <summary>Панель — под областью, если влезает; иначе над ней; иначе внутри у нижнего края.</summary>
+        private (double x, double y, bool below) PlaceBar()
+        {
+            var sz = _bar.DesiredSize;
+            double y = _area.Bottom + 14;
+            bool below = y + sz.Height <= ScreenH - 8;
+            if (!below) y = _area.Top - 14 - sz.Height;
+            if (y < 8) y = _area.Bottom - sz.Height - 12;
+            double x = Math.Clamp(_area.X + (_area.Width - sz.Width) / 2, 8, Math.Max(8, ActualWidth - sz.Width - 8));
+            Canvas.SetLeft(_bar, x); Canvas.SetTop(_bar, y);
+            return (x, y, below);
+        }
+
+        // ---------- уголки: область можно растянуть или сузить и после выделения ----------
+
+        private readonly List<Border> _handles = new();
+        private int _dragHandle = -1;
+        private Point _dragFrom;
+        private Rect _dragArea;
+        // 0 ↖, 1 ↑, 2 ↗, 3 →, 4 ↘, 5 ↓, 6 ↙, 7 ←
+        private static readonly (double fx, double fy)[] HandleAt = { (0, 0), (0.5, 0), (1, 0), (1, 0.5), (1, 1), (0.5, 1), (0, 1), (0, 0.5) };
+
+        private void BuildHandles()
+        {
+            Cursor[] cursors = { Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE };
+            for (int i = 0; i < 8; i++)
+            {
+                int idx = i;
+                var h = new Border
+                {
+                    Width = 11, Height = 11, CornerRadius = new CornerRadius(3), Background = Brushes.White,
+                    BorderBrush = Frz(Color.FromArgb(200, 0, 0, 0)), BorderThickness = new Thickness(1), Cursor = cursors[i]
+                };
+                h.MouseLeftButtonDown += (_, e) =>
+                {
+                    e.Handled = true;
+                    CommitMarkText();
+                    _dragHandle = idx; _dragFrom = e.GetPosition(_canvas); _dragArea = _area;
+                    h.CaptureMouse();
+                };
+                h.MouseMove += (_, e) =>
+                {
+                    if (_dragHandle != idx || !h.IsMouseCaptured) return;
+                    var p = e.GetPosition(_canvas);
+                    double dx = p.X - _dragFrom.X, dy = p.Y - _dragFrom.Y;
+                    double l = _dragArea.Left, t = _dragArea.Top, r = _dragArea.Right, b = _dragArea.Bottom;
+                    var (fx, fy) = HandleAt[idx];
+                    if (fx == 0) l += dx; else if (fx == 1) r += dx;
+                    if (fy == 0) t += dy; else if (fy == 1) b += dy;
+                    l = Math.Clamp(l, 0, ScreenW); r = Math.Clamp(r, 0, ScreenW);
+                    t = Math.Clamp(t, 0, ScreenH); b = Math.Clamp(b, 0, ScreenH);
+                    const double min = 16;
+                    if (r - l < min) { if (fx == 0) l = r - min; else r = l + min; }
+                    if (b - t < min) { if (fy == 0) t = b - min; else b = t + min; }
+                    SetArea(new Rect(l, t, r - l, b - t));
+                };
+                h.MouseLeftButtonUp += (_, e) =>
+                {
+                    if (_dragHandle != idx) return;
+                    _dragHandle = -1;
+                    h.ReleaseMouseCapture();
+                    e.Handled = true;
+                    Journal.Info("capture", "область изменена: " + _area.X.ToString("0") + "," + _area.Y.ToString("0") + " " + _area.Width.ToString("0") + "×" + _area.Height.ToString("0"));
+                };
+                _handles.Add(h);
+                _canvas.Children.Add(h);
+            }
+            PlaceHandles();
+        }
+
+        private void PlaceHandles()
+        {
+            for (int i = 0; i < _handles.Count; i++)
+            {
+                var (fx, fy) = HandleAt[i];
+                Canvas.SetLeft(_handles[i], _area.X + _area.Width * fx - 5.5);
+                Canvas.SetTop(_handles[i], _area.Y + _area.Height * fy - 5.5);
+            }
+        }
+
+        /// <summary>
+        /// Новая область: снимок под ней берётся заново из «замороженного» экрана, пометки и плитки мозаики
+        /// остаются на своих местах на экране (сдвигаются внутри страницы на разницу начала).
+        /// </summary>
+        private void SetArea(Rect a)
+        {
+            var crop = PixelRect(a);
+            var cb = new CroppedBitmap(_shot, crop);
+            cb.Freeze();
+
+            double shiftX = _area.X - a.X, shiftY = _area.Y - a.Y;
+            if (shiftX != 0 || shiftY != 0)
+                foreach (var host in new Panel[] { _ink, _patches })
+                    foreach (UIElement el in host.Children)
+                    {
+                        double ex = Canvas.GetLeft(el), ey = Canvas.GetTop(el);
+                        Canvas.SetLeft(el, (double.IsNaN(ex) ? 0 : ex) + shiftX);
+                        Canvas.SetTop(el, (double.IsNaN(ey) ? 0 : ey) + shiftY);
+                    }
+
+            _area = a;
+            _crop = cb; _cropW = crop.Width; _cropH = crop.Height;
+            _cropX = crop.X; _cropY = crop.Y;
+            CompClipPatches(a);
+            _cropPx = null;                                    // пиксели для мозаики возьмутся из новой области
+            _baseImage.Source = cb;
+            _page.Width = a.Width; _page.Height = a.Height;
+            Canvas.SetLeft(_page, a.X); Canvas.SetTop(_page, a.Y);
+            UpdateDim(a);
+            PlaceHandles();
+            PlaceBar();
         }
 
         private static Border BarButton(UIElement content, string tip, Action click)
@@ -246,17 +402,35 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    EnsureMosaic();
-                    _livePatch = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false };
-                    RenderOptions.SetBitmapScalingMode(_livePatch, BitmapScalingMode.NearestNeighbor);
+                    {
+                        long e0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                        bool first = _cropPx == null;
+                        EnsureMosaic();
+                        if (first) Journal.Info("capture", "мозаика: пиксели снимка " + _cropW + "×" + _cropH + " подготовлены за "
+                            + Math.Round((System.Diagnostics.Stopwatch.GetTimestamp() - e0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency) + " мс");
+                    }
+                    _patchUpdates = 0; _patchMsSum = 0; _patchMsMax = 0;
+                    _meter.Start();
+                    _livePatch = new Helpers.MosaicTiles();
                     _patches.Children.Add(_livePatch);
+                    CompMirror(_livePatch, _cropX, _cropY);
+                    _tilesRebuilt = 0;
                     _livePx = Int32Rect.Empty;
                     // рамка выделения: тонкий чёрный контур и белый пунктир поверх — видна на любом фоне, ничего не затемняет
-                    _mosaicFrame = new Grid { IsHitTestVisible = false };
-                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.Black, StrokeThickness = 1 });
-                    _mosaicFrame.Children.Add(new Rectangle { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } });
-                    _ink.Children.Add(_mosaicFrame);
-                    PlaceFrame(new Rect(p, p));
+                    if (_comp) CompFrame(new Rect(p, p));
+                    else
+                    {
+                        _mosaicFrame = new Canvas { IsHitTestVisible = false };
+                        for (int i = 0; i < 8; i++)
+                        {
+                            _frameLines[i] = i < 4
+                                ? new Line { Stroke = Brushes.Black, StrokeThickness = 1 }
+                                : new Line { Stroke = Brushes.White, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } };
+                            _mosaicFrame.Children.Add(_frameLines[i]);
+                        }
+                        _ink.Children.Add(_mosaicFrame);
+                        PlaceFrame(new Rect(p, p));
+                    }
                     break;
                 case Mark.Rect:
                     _shape = new Rectangle { Stroke = brush, StrokeThickness = Ink, RadiusX = 4, RadiusY = 4 };
@@ -289,9 +463,23 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
-                    // плитка мозаики тянется за мышью — квадраты видны сразу
-                    ShowPatch(r);
-                    PlaceFrame(r);
+                    // Мышь присылает движения чаще, чем монитор показывает кадры (до 1000 в секунду).
+                    // Запоминаем последнюю рамку, а квадраты и контур обновляем один раз за кадр монитора —
+                    // ровно с его частотой (60/144/240 Гц), и рамка не отстаёт от квадратов.
+                    if (_comp)
+                    {
+                        // на графическом слое — сразу, но не чаще кадра монитора: WPF тут не участвует
+                        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+                        int hz = Math.Max(60, MonitorHz());
+                        if ((now - _mosaicLastAt) * (double)hz < System.Diagnostics.Stopwatch.Frequency * 0.9) { _pendingMosaic = r; HookMosaicFrame(); break; }
+                        _mosaicLastAt = now;
+                        _pendingMosaic = null;
+                        ShowPatch(r);
+                        CompFrame(r);
+                        break;
+                    }
+                    _pendingMosaic = r;
+                    HookMosaicFrame();
                     break;
                 case Mark.Rect when _shape != null:
                     Canvas.SetLeft(_shape, r.X); Canvas.SetTop(_shape, r.Y); _shape.Width = r.Width; _shape.Height = r.Height;
@@ -315,14 +503,20 @@ namespace Isle.Overlays
             switch (_mark)
             {
                 case Mark.Mosaic:
+                    UnhookMosaicFrame();
+                    CompFrame(null);
                     if (_mosaicFrame != null) { _ink.Children.Remove(_mosaicFrame); _mosaicFrame = null; }
                     if (_livePatch != null)
                     {
                         var patch = _livePatch; _livePatch = null;
-                        ShowPatch(r, patch);
-                        if (r.Width >= 3 && r.Height >= 3 && patch.Source != null)
-                            _markUndo.Push(() => _patches.Children.Remove(patch)); // итоговая плитка — та же, что была видна
-                        else _patches.Children.Remove(patch);
+                        ShowPatch(r, patch, force: true);
+                        Journal.Info("capture", "мозаика: рамка " + _livePx.Width + "×" + _livePx.Height + " px, квадрат " + _patchBlock + " px, обновлений " + _patchUpdates
+                            + ", кусочков " + patch.Count + " (пересчитано за всё время " + _tilesRebuilt + ")"
+                            + ", расчёт в среднем " + (_patchUpdates > 0 ? Math.Round(_patchMsSum / _patchUpdates, 1) : 0) + " мс, макс " + Math.Round(_patchMsMax, 1)
+                            + " мс; кадры интерфейса: " + _meter.Stop() + "; монитор " + MonitorHz() + " Гц");
+                        if (r.Width >= 3 && r.Height >= 3 && patch.Count > 0)
+                            _markUndo.Push(() => RemovePatch(patch)); // итоговая плитка — та же, что была видна
+                        else RemovePatch(patch);
                     }
                     break;
                 case Mark.Rect:
@@ -342,34 +536,107 @@ namespace Isle.Overlays
             }
         }
 
+        /// <summary>Пиксели снимка для мозаики — копируются один раз, при первой мозаике.</summary>
         private void EnsureMosaic()
         {
-            if (_mosaicSrc != null) return;
             _cropPx ??= ScreenTools.Bgra(_crop, out _, out _);
-            var m = Mosaic.Build(_cropPx, _cropW, _cropH, Mosaic.BlockFor(_cropW, _cropH));
-            _mosaicSrc = BitmapSource.Create(_cropW, _cropH, 96, 96, PixelFormats.Bgr32, null, m, _cropW * 4);
-            _mosaicSrc.Freeze();
         }
 
-        /// <summary>Плитка мозаики на месте рамки r (в точках снимка): кусок заранее посчитанной мозаики, по сетке пикселей.</summary>
-        private void ShowPatch(Rect r, Image patch = null)
+        private System.Windows.Shapes.Rectangle _repaint;
+        private bool _repaintFlip;
+        /// <summary>Видеокарта: пока рисуешь — каждый кадр окно перерисовывается целиком (без частичных обновлений).</summary>
+        private void OnFullRepaint(object s, EventArgs e)
+        {
+            if (_repaint == null || !_drawing) return;
+            _repaintFlip = !_repaintFlip;
+            _repaint.Opacity = _repaintFlip ? 1 : 0.99;
+        }
+
+        private Rect? _pendingMosaic;   // последняя рамка от мыши, ещё не показанная
+        private bool _mosaicHooked;
+        private long _mosaicLastAt;
+        private TimeSpan _mosaicFrameTime;
+
+        private void HookMosaicFrame()
+        {
+            if (_mosaicHooked) return;
+            _mosaicHooked = true;
+            CompositionTarget.Rendering += OnMosaicFrame;
+        }
+
+        private void UnhookMosaicFrame()
+        {
+            _pendingMosaic = null;
+            _mosaicLastAt = 0;
+            if (!_mosaicHooked) return;
+            _mosaicHooked = false;
+            CompositionTarget.Rendering -= OnMosaicFrame;
+        }
+
+        /// <summary>Кадр монитора: показать последнюю рамку мозаики (одно обновление на кадр, не больше и не меньше).</summary>
+        private void OnMosaicFrame(object s, EventArgs e)
+        {
+            if (e is RenderingEventArgs re)
+            {
+                if (re.RenderingTime == _mosaicFrameTime) return; // Rendering бывает несколько раз за кадр
+                _mosaicFrameTime = re.RenderingTime;
+            }
+            if (_pendingMosaic is not Rect r) return;
+            _pendingMosaic = null;
+            if (!_drawing || _livePatch == null) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            double gap = _mosaicLastAt > 0 ? (t0 - _mosaicLastAt) * 1000.0 / System.Diagnostics.Stopwatch.Frequency : 0;
+            _mosaicLastAt = t0;
+            ShowPatch(r);
+            PlaceFrame(r);
+            CompFrame(r);
+            // в подробном журнале — каждый медленный кадр мозаики: сколько ждали кадра и сколько считали
+            if (gap > 25)
+                Journal.Debug("mosaic", "кадр через " + Math.Round(gap) + " мс, рамка " + Math.Round(r.Width) + "×" + Math.Round(r.Height) + ", расчёт "
+                    + ((System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency).ToString("0.0") + " мс, кусочков " + _livePatch.Count + ", пересчитано " + _livePatch.LastRebuilt);
+        }
+
+        private int _hz = -1;
+        private int MonitorHz()
+        {
+            if (_hz < 0)
+            {
+                var c = System.Windows.Forms.Cursor.Position;
+                _hz = Helpers.Display.RefreshHz(c.X, c.Y);
+            }
+            return _hz;
+        }
+        private readonly Helpers.FrameMeter _meter = new();
+        private int _patchUpdates; private double _patchMsSum, _patchMsMax; private int _patchBlock;
+
+        /// <summary>
+        /// Плитка мозаики на месте рамки r (в точках снимка). Размер квадратов — по размеру рамки: мелкое сообщение
+        /// закрывается мелкими квадратами, большой блок — крупными. Квадраты считаются прямо для этой рамки
+        /// (крошечная картинка «квадрат = пиксель», растянутая без сглаживания), поэтому даже огромная рамка не тормозит.
+        /// </summary>
+        private static readonly int[] BlockSteps = { 6, 8, 12, 16, 20, 24 };
+
+        private void ShowPatch(Rect r, Helpers.MosaicTiles patch = null, bool force = false)
         {
             patch ??= _livePatch;
-            if (patch == null || _mosaicSrc == null) return;
+            if (patch == null || _cropPx == null) return;
             double k = PxPerDip;
             int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, _cropW), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, _cropH);
             int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), 0, _cropW), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), 0, _cropH);
+            if (x1 - x0 <= 0 || y1 - y0 <= 0) { patch.Reset(); _livePx = Int32Rect.Empty; return; }
+            // размер квадрата — ступеньками (6, 8, 12…24): пока тянешь, он меняется редко, и квадраты не «дрожат»
+            int want = Mosaic.BlockForPatch(x1 - x0, y1 - y0), block = BlockSteps[0];
+            foreach (var b in BlockSteps) if (b <= want) block = b;
             var ir = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
-            if (ir.Width <= 0 || ir.Height <= 0) { patch.Source = null; return; }
-            if (!ir.Equals(_livePx) || patch.Source == null)
-            {
-                var cb = new CroppedBitmap(_mosaicSrc, ir);
-                cb.Freeze();
-                patch.Source = cb;
-                _livePx = ir;
-            }
-            Canvas.SetLeft(patch, x0 / k); Canvas.SetTop(patch, y0 / k);
-            patch.Width = ir.Width / k; patch.Height = ir.Height / k;
+            if (ir.Equals(_livePx) && patch.Count > 0 && !force) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            // сетка привязана к точке начала: меняются и перерисовываются только кусочки у края рамки
+            int ax = Math.Clamp((int)Math.Round(_from.X * k), 0, _cropW), ay = Math.Clamp((int)Math.Round(_from.Y * k), 0, _cropH);
+            patch.Update(_cropPx, _cropW, _cropH, ax, ay, ir, block, k, final: force);
+            _tilesRebuilt += patch.LastRebuilt;
+            _livePx = ir;
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            _patchUpdates++; _patchMsSum += ms; if (ms > _patchMsMax) _patchMsMax = ms; _patchBlock = block;
         }
 
         private static Geometry Arrow(Point a, Point b, double t)
@@ -435,15 +702,17 @@ namespace Isle.Overlays
         }
 
         /// <summary>Esc: сначала отменяет набираемый текст, потом — весь снимок.</summary>
-        private void OnEscape()
+        private void OnEscape(string how)
         {
+            Journal.Info("capture", "Esc (" + how + ") через " + _openedFor.ElapsedMilliseconds + " мс после открытия" + (_saving ? " — снимок уже сохраняется, не отменяю" : ""));
+            if (_saving) return; // снимок уже улетает — Esc его не отменяет
             if (_markup && _text != null) { MarkUndo(); return; }
             Finish(null);
         }
 
         private void OnMarkupKey(KeyEventArgs e)
         {
-            if (!_markup || _text != null) return;
+            if (!_markup || _text != null || _saving) return; // во время сохранения пометки уже склеиваются — их не трогаем
             if (e.Key == Key.Enter) { SaveMarkup(); e.Handled = true; }
             else if (e.Key == Key.Z && (Keyboard.Modifiers & ModifierKeys.Control) != 0) { MarkUndo(); e.Handled = true; }
         }
@@ -457,53 +726,124 @@ namespace Isle.Overlays
             if (_saving) return;
             CommitMarkText();
             _saving = true;
-            int w = _cropW, h = _cropH;
+            var t0 = System.Diagnostics.Stopwatch.StartNew();
+            Journal.Info("capture", "сохранение: слоёв пометок " + _ink.Children.Count + ", плиток мозаики " + _patches.Children.Count);
             _outline.Visibility = Visibility.Hidden;
+            foreach (var hd in _handles) hd.Visibility = Visibility.Collapsed;
+            // невидимые на экране WPF-копии снимка и мозаики — нужны для склейки картинки
+            _baseImage.Visibility = Visibility.Visible;
+            _patches.Visibility = Visibility.Visible;
             _page.UpdateLayout();
+
+            // Пометки переносим в отдельный (невидимый) контейнер — из него после полёта склеится полная картинка.
+            // В полёт уходит маленькая копия: процессору нечего пересчитывать, а большую склейку экран не ждёт.
+            var content = new Grid { Width = _area.Width, Height = _area.Height };
+            while (_page.Children.Count > 0)
+            {
+                var c = _page.Children[0];
+                _page.Children.RemoveAt(0);
+                content.Children.Add(c);
+            }
+            content.Measure(new Size(_area.Width, _area.Height));
+            content.Arrange(new Rect(0, 0, _area.Width, _area.Height));
+            content.UpdateLayout();
+            // копия для полёта: снимок стартует с настоящего размера — копия почти полная, чтобы не было мыла;
+            // когда рисует процессор (игра), окошко маленькое — хватит и 900 px
+            double k = Math.Min(1, ((AppHost.Window?.SoftRender ?? false) ? 900.0 : 1600.0) / Math.Max(_cropW, _cropH));
+            var preview = RenderFlat(content, Math.Max(1, (int)(_cropW * k)), Math.Max(1, (int)(_cropH * k)));
+            _page.Children.Add(new Image { Source = preview, Stretch = Stretch.Fill });
+            Journal.Info("capture", "сохранение: копия для полёта " + preview.PixelWidth + "×" + preview.PixelHeight + " за " + t0.ElapsedMilliseconds + " мс");
+
+            // слой убираем сразу, а в чёлку летит отдельное маленькое окошко с копией (см. ShotFlight)
+            _escPoll.Stop();
+            IsHitTestVisible = false;
+            var fromPx = new Rect(_area.X * Kx + _vs.X, _area.Y * Ky + _vs.Y, _area.Width * Kx, _area.Height * Ky);
+            bool saved = false;
+            void Complete(string how)
+            {
+                if (saved) return;
+                saved = true;
+                var t1 = System.Diagnostics.Stopwatch.StartNew();
+                BitmapSource full = null;
+                try
+                {
+                    Hide();
+                    full = ComposeFull(content, out bool plain);
+                    Journal.Info("capture", "сохранение: картинка " + _cropW + "×" + _cropH + (plain ? " без пометок — пиксель в пиксель" : " склеена")
+                        + " за " + t1.ElapsedMilliseconds + " мс" + how);
+                }
+                catch (Exception ex) { Journal.Error("capture", "склейка не удалась: " + ex); }
+                finally { Finish(full); } // слой обязательно закрывается — иначе снимки «залипали» до перезапуска
+            }
+            // страховка: если окошко полёта почему-то не появилось — всё равно сохраняем (иначе слой завис бы без Esc)
+            var guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            guard.Tick += (_, __) => { guard.Stop(); if (!saved) Journal.Warn("capture", "полёт не завершился за 3 с — сохраняю без него"); Complete(" (страховка)"); };
+            guard.Start();
+            try
+            {
+                // сначала на экране появляется окошко с копией, и только потом прячется слой — без «провала»
+                // окошко на экране: прячем слой и сразу возвращаем чёлку — снимок летит в неё, а не в пустоту
+                ShotFlight.Fly(preview, fromPx, () =>
+                {
+                    if (!saved) Hide();
+                    try { AppHost.Window.Visibility = Visibility.Visible; } catch { }
+                }, () => { guard.Stop(); Complete(""); });
+            }
+            catch (Exception ex)
+            {
+                Journal.Error("capture", "полёт не запустился: " + ex.Message);
+                guard.Stop();
+                Complete(" (без полёта)");
+            }
+        }
+
+        /// <summary>
+        /// Итоговая картинка в полном разрешении. Раньше вся страница (вместе со снимком) шла через VisualBrush:
+        /// при масштабе Windows 125–150 % снимок по дороге ужимался до размера в точках и растягивался обратно —
+        /// выходило мыльнее, чем на экране. Теперь без пометок отдаём сам вырезанный кусок экрана, а с пометками
+        /// кладём его 1:1 и рисуем пометки поверх.
+        /// </summary>
+        private BitmapSource ComposeFull(FrameworkElement content, out bool plain)
+        {
+            var crop = _crop;
+            if (crop.CanFreeze && !crop.IsFrozen) crop.Freeze();
+            plain = _ink.Children.Count == 0 && _patches.Children.Count == 0 && _compPatches.Count == 0;
+            if (plain) return crop;
+            _baseImage.Visibility = Visibility.Hidden; // снимок рисуем сами, без пересчёта размера
+            content.UpdateLayout();
             var dv = new DrawingVisual();
             using (var dc = dv.RenderOpen())
-                dc.DrawRectangle(new VisualBrush(_page) { Stretch = Stretch.Fill }, null, new Rect(0, 0, w, h));
+            {
+                dc.DrawImage(crop, new Rect(0, 0, _cropW, _cropH));
+                dc.DrawRectangle(new VisualBrush(content)
+                {
+                    Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute,
+                    Viewbox = new Rect(0, 0, content.Width, content.Height)
+                }, null, new Rect(0, 0, _cropW, _cropH));
+            }
+            var rtb = new RenderTargetBitmap(_cropW, _cropH, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(dv);
+            rtb.Freeze();
+            return rtb;
+        }
+
+        /// <summary>Склеить снимок с пометками в картинку w×h.</summary>
+        private static BitmapSource RenderFlat(FrameworkElement content, int w, int h)
+        {
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+                // Viewbox — ровно размер снимка: иначе пометка у края (маркер, текст) расширяла рамку
+                // содержимого, и вся картинка сжималась и сдвигалась
+                dc.DrawRectangle(new VisualBrush(content)
+                {
+                    Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute,
+                    Viewbox = new Rect(0, 0, content.Width, content.Height)
+                }, null, new Rect(0, 0, w, h));
             var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(dv);
             rtb.Freeze();
-            _outline.Visibility = Visibility.Visible;
-            FlyToIsland(() => Finish(rtb));
+            return rtb;
         }
 
-        /// <summary>Снимок сжимается и улетает в чёлку (верх основного экрана), затемнение тает.</summary>
-        private void FlyToIsland(Action done)
-        {
-            _escPoll.Stop();
-            IsHitTestVisible = false;
-            // центр чёлки: верх основного монитора по центру (в координатах слоя)
-            double primaryW = Isle.Native.Win32.GetSystemMetrics(0);
-            var target = new Point((primaryW / 2 - _vs.X) / Kx, (0 - _vs.Y) / Ky + 20);
-            var center = new Point(_area.X + _area.Width / 2, _area.Y + _area.Height / 2);
-            double scale = Math.Clamp(44 / Math.Max(_area.Width, _area.Height), 0.02, 1);
-
-            var st = new ScaleTransform(1, 1);
-            var tt = new TranslateTransform();
-            var g = new TransformGroup(); g.Children.Add(st); g.Children.Add(tt);
-            _page.RenderTransform = g;
-            _page.Clip = new RectangleGeometry(new Rect(0, 0, _area.Width, _area.Height), 0, 0);
-
-            var dur = TimeSpan.FromMilliseconds(520);
-            var move = new CubicEase { EasingMode = EasingMode.EaseInOut };
-            var shrink = new QuinticEase { EasingMode = EasingMode.EaseIn };
-            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
-            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, scale, dur) { EasingFunction = shrink });
-            tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, target.X - center.X, dur) { EasingFunction = move });
-            var fly = new DoubleAnimation(0, target.Y - center.Y, dur) { EasingFunction = move };
-            // углы скругляются по мере полёта — к чёлке подлетает «плитка»
-            double r = Math.Min(_area.Width, _area.Height) / 2;
-            ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusXProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
-            ((RectangleGeometry)_page.Clip).BeginAnimation(RectangleGeometry.RadiusYProperty, new DoubleAnimation(0, Math.Min(r, 14 / scale), dur));
-            _page.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)) { BeginTime = TimeSpan.FromMilliseconds(400) });
-            _bar.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
-            _hint.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
-            _dim.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(380)));
-            fly.Completed += (_, __) => done();
-            tt.BeginAnimation(TranslateTransform.YProperty, fly);
-        }
     }
 }

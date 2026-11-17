@@ -59,6 +59,7 @@ namespace Isle
 
         public static async Task FullShot()
         {
+            ClipboardService.NoteShotApp(); // весь экран тоже относится к приложению, которое было впереди
             BitmapSource bmp;
             if (AppSettings.Current.ShowInCaptures) { bmp = await ShotWithIslandAsync(); Done(bmp); return; }
             await HideIslandAsync();
@@ -79,18 +80,51 @@ namespace Isle
             return ScreenTools.CaptureAll();
         }
 
+        /// <summary>Уменьшенная копия (не держит исходную картинку).</summary>
+        public static BitmapSource Thumb(BitmapSource bmp, int maxSide = 360)
+        {
+            try
+            {
+                double k = Math.Min(1, maxSide / (double)Math.Max(bmp.PixelWidth, bmp.PixelHeight));
+                if (k >= 1) return bmp;
+                var wb = new System.Windows.Media.Imaging.WriteableBitmap(new System.Windows.Media.Imaging.TransformedBitmap(bmp, new System.Windows.Media.ScaleTransform(k, k)));
+                wb.Freeze();
+                return wb;
+            }
+            catch { return bmp; }
+        }
+
         private static void Done(BitmapSource bmp)
         {
-            ScreenTools.CopyImage(bmp);
+            ClipboardService.ShotTaken();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            bool copied = ScreenTools.CopyImage(bmp);
+            long copyMs = sw.ElapsedMilliseconds;
             string path = null;
-            if (AppSettings.Current.SaveScreenshots) { try { path = ScreenTools.SavePng(bmp); } catch { } }
+            if (AppSettings.Current.SaveScreenshots)
+            {
+                // PNG 4K сжимается долго — в фоне, чтобы экран не замирал (картинка заморожена, из другого потока читать можно)
+                path = ScreenTools.NewShotPath();
+                var target = path;
+                if (!bmp.IsFrozen) bmp.Freeze();
+                _ = Task.Run(() =>
+                {
+                    var s2 = System.Diagnostics.Stopwatch.StartNew();
+                    try { ScreenTools.SavePng(bmp, target); Journal.Info("capture", "PNG сохранён за " + s2.ElapsedMilliseconds + " мс: " + System.IO.Path.GetFileName(target)); }
+                    catch (Exception ex) { Journal.Error("capture", "PNG не сохранился: " + ex.Message); }
+                });
+            }
+            Journal.Info("capture", "снимок " + bmp.PixelWidth + "×" + bmp.PixelHeight + " в буфере за " + copyMs + " мс");
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = "Снимок скопирован",
-                Subtitle = path != null ? "Сохранён в Изображения\\Isle" : "В буфере обмена",
-                Image = bmp, Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
-                FilePath = path, EditImage = bmp
+                Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Снимок скопирован" : "Буфер обмена занят",
+                Subtitle = path != null ? "Сохранён в Изображения\\Isle" : copied ? "В буфере обмена" : "Снимок не скопировался — попробуй ещё раз",
+                // в уведомлении — маленькая копия, а для «редактировать» снимок читается из файла: полноразмерный
+                // 4K-снимок (десятки мегабайт) больше не висит в памяти, пока не придёт следующее уведомление
+                Image = Thumb(bmp), Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
+                FilePath = path, EditImage = path == null ? bmp : null, EditFromFile = path != null
             });
+            Helpers.MemoryTrim.Soon("снимок");
         }
 
         public static async Task OcrShot()

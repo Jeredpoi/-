@@ -78,11 +78,11 @@ namespace Isle.Views
         private void Animate(WeatherNow w)
         {
             var c = CultureInfo.CurrentCulture;
-            CountUp(Temp, w.Temp, 0, v => Math.Round(v) + "°", 750);
-            CountUp(Wind, w.Wind, 0, v => v.ToString("0.#", c) + " м/с " + w.WindFrom, 650);
-            CountUp(Hum, w.Humidity, 0, v => Math.Round(v) + "%", 650);
-            CountUp(Prec, w.Precip, 0, v => v.ToString("0.#", c) + " мм", 650);
-            CountUp(Feels, w.TodayMax, 0, v => "Сегодня " + Math.Round(w.TodayMin) + "°…" + Math.Round(v) + "°", 650);
+            CountUp(Temp, w.Temp, 0, v => Math.Round(v) + "°", 1200);
+            CountUp(Wind, w.Wind, 0, v => v.ToString("0.#", c) + " м/с " + w.WindFrom, 1050);
+            CountUp(Hum, w.Humidity, 0, v => Math.Round(v) + "%", 1050);
+            CountUp(Prec, w.Precip, 0, v => v.ToString("0.#", c) + " мм", 1050);
+            CountUp(Feels, w.TodayMax, 0, v => "Сегодня " + Math.Round(w.TodayMin) + "°…" + Math.Round(v) + "°", 1050);
 
             var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
             if (GlyphAnim.RenderTransform is not ScaleTransform gs)
@@ -90,25 +90,25 @@ namespace Isle.Views
                 GlyphAnim.RenderTransform = gs = new ScaleTransform(1, 1);
                 GlyphAnim.RenderTransformOrigin = new Point(0.5, 0.5);
             }
-            var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(520) };
+            var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(820) };
             pop.KeyFrames.Add(new EasingDoubleKeyFrame(0.55, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
-            pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(500)), new QuinticEase { EasingMode = EasingMode.EaseOut }));
+            pop.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(820)), new SineEase { EasingMode = EasingMode.EaseInOut }));
             gs.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
             gs.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
 
             // строки появляются, когда WPF создаст их элементы
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                Rise(Hours, 10, 35, ease);
-                Rise(Days, 12, 55, ease);
+                Rise(Hours, 10, 60, ease); // медленнее — чтобы успеть заметить, как «встают» часы
+                Rise(Days, 12, 90, ease);
                 // полоски «от мин. до макс.» у дней вырастают слева направо
                 for (int i = 0; i < Days.Items.Count; i++)
                     if (Days.ItemContainerGenerator.ContainerFromIndex(i) is DependencyObject row && FindBar(row) is Border bar)
                     {
                         if (bar.RenderTransform is not ScaleTransform bs) { bar.RenderTransform = bs = new ScaleTransform(1, 1); bar.RenderTransformOrigin = new Point(0, 0.5); }
                         bs.BeginAnimation(ScaleTransform.ScaleXProperty,
-                            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(600)) { BeginTime = TimeSpan.FromMilliseconds(120 + i * 55), EasingFunction = ease });
+                            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(950)) { BeginTime = TimeSpan.FromMilliseconds(180 + i * 90), EasingFunction = ease });
                     }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
@@ -140,8 +140,8 @@ namespace Isle.Views
                 var begin = TimeSpan.FromMilliseconds(60 + i * stepMs);
                 if (el.RenderTransform is not TranslateTransform tt) el.RenderTransform = tt = new TranslateTransform();
                 tt.Y = offset; el.Opacity = 0; // до своей очереди — внизу и прозрачный
-                tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offset, 0, TimeSpan.FromMilliseconds(480)) { BeginTime = begin, EasingFunction = ease });
-                el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(360)) { BeginTime = begin });
+                tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offset, 0, TimeSpan.FromMilliseconds(760)) { BeginTime = begin, EasingFunction = ease });
+                el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(560)) { BeginTime = begin });
             }
         }
 

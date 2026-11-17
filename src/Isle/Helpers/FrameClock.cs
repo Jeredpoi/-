@@ -24,6 +24,16 @@ namespace Isle.Helpers
         private static Action<double>[] _handlers = Array.Empty<Action<double>>();
         private static readonly Dictionary<Action<double>, double> FailingSince = new();
 
+        private static int _statFrames; private static double _statWorst; private static double _statFrom;
+        /// <summary>Для подробного журнала: кадров общего такта и худший кадр с прошлого вызова.</summary>
+        public static (double fps, double worstMs, bool running) TakeStats()
+        {
+            double now = Watch.Elapsed.TotalSeconds, span = now - _statFrom;
+            var r = (span > 0 ? _statFrames / span : 0, _statWorst * 1000, _hooked);
+            _statFrames = 0; _statWorst = 0; _statFrom = now;
+            return r;
+        }
+
         /// <summary>Ограничение кадров в секунду; 0 — как у монитора.</summary>
         public static int MaxFps { get; set; } = 60;
 
@@ -65,6 +75,7 @@ namespace Isle.Helpers
             int max = MaxFps;
             if (max > 0 && elapsed < 1.0 / max - 0.002) return; // ограничение частоты
             _last = now;
+            _statFrames++; if (elapsed > _statWorst) _statWorst = elapsed;
             double dt = Math.Clamp(elapsed, 0.001, 0.1);
             K = dt / BaseStep;
 

@@ -37,6 +37,9 @@ namespace Isle.Views
                 ChatBuddy.Outfit = MainWindow.OutfitForWeather();
                 ChatBuddy.Mood = night ? Isle.Helpers.Mood.Drowsy : Isle.Helpers.Mood.Idle;
             };
+            // в чате по Клоди тоже можно тыкнуть
+            ChatBuddy.Cursor = System.Windows.Input.Cursors.Hand;
+            ChatBuddy.MouseLeftButtonUp += (_, e) => { ChatBuddy.Poke(); e.Handled = true; };
             foreach (var idea in Ideas)
             {
                 var b = new Button { Content = idea, Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 0, 6), HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(14, 6, 14, 6) };
@@ -151,7 +154,8 @@ namespace Isle.Views
 
         public async void Ask(string text)
         {
-            if (_busy) return;
+            // ИИ ещё отвечает — не теряем вопрос: кладём его в поле ввода, отправить можно следом
+            if (_busy) { if (!string.IsNullOrWhiteSpace(text)) { Input.Text = text; Input.CaretIndex = text.Length; } return; }
             _busy = true;
             SendBtn.IsEnabled = false;
             Welcome.Visibility = Visibility.Collapsed;
@@ -186,6 +190,7 @@ namespace Isle.Views
             var shown = clean + (reports.Count > 0 ? (clean.Length > 0 ? "\n\n" : "") + string.Join("\n", reports) : "");
             var idx = _msgs.IndexOf(thinking);
             if (idx >= 0) _msgs[idx] = new ChatMessage { Role = "assistant", Text = string.IsNullOrWhiteSpace(shown) ? "(пустой ответ)" : shown };
+            NameChatAsync(text, shown);
             foreach (var a in confirm) _msgs.Add(new ChatMessage { Role = "action", Text = "Нужно подтверждение", Pending = a });
             Scroll.ScrollToEnd();
             _busy = false;
@@ -233,13 +238,30 @@ namespace Isle.Views
 
         private ChatSession _session = new();
 
+        /// <summary>После первого ответа ИИ придумывает разговору короткое красивое название (в фоне, не мешая чату).</summary>
+        private async void NameChatAsync(string question, string answer)
+        {
+            var session = _session;
+            if (session == null || session.AiTitle || IsServiceError(answer ?? "")) return;
+            if (_msgs.Count(m => m.IsUser) != 1) return; // только по первому вопросу разговора
+            var title = await AiService.TitleAsync(question, answer);
+            if (title == null || !ReferenceEquals(session, _session)) return;
+            session.Title = title;
+            session.AiTitle = true;
+            SaveSession();
+        }
+
         private void SaveSession()
         {
-            var real = _msgs.Where(m => m.Role == "user" || m.Role == "assistant").ToList();
+            // «…» — заглушка, пока ИИ думает; в историю её не пишем (иначе она уйдёт модели как ответ)
+            var real = _msgs.Where(m => (m.Role == "user" || m.Role == "assistant") && !(m.Role == "assistant" && m.Text == "…")).ToList();
             if (real.Count == 0) return;
             _session.Messages = real.Select(m => new ChatMessage { Role = m.Role, Text = m.Text }).ToList();
-            _session.Title = real.FirstOrDefault(m => m.IsUser)?.Text ?? "Разговор";
-            if (_session.Title.Length > 48) _session.Title = _session.Title.Substring(0, 48) + "…";
+            if (!_session.AiTitle)
+            {
+                _session.Title = real.FirstOrDefault(m => m.IsUser)?.Text ?? "Разговор";
+                if (_session.Title.Length > 48) _session.Title = _session.Title.Substring(0, 48) + "…";
+            }
             _session.Updated = DateTime.Now;
             ChatHistory.Save(_session);
         }

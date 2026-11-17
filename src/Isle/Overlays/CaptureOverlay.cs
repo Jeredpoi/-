@@ -31,6 +31,9 @@ namespace Isle.Overlays
         private readonly TaskCompletionSource<object> _tcs = new();
         private readonly System.Windows.Threading.DispatcherTimer _escPoll = new() { Interval = TimeSpan.FromMilliseconds(30) };
         private bool _escWasDown = true, _escArmed;
+        private long _escPressAt;
+        /// <summary>Когда Esc последний раз пришёл обычным путём (KeyDown) — чтобы опрос клавиатуры не обработал то же нажатие второй раз.</summary>
+        private long _escKeyAt = -10_000;
 
         private CaptureOverlay(BitmapSource shot, Int32Rect vs, CaptureMode mode)
         {
@@ -45,8 +48,10 @@ namespace Isle.Overlays
             Cursor = Cursors.Cross;
             Left = 0; Top = 0; Width = 100; Height = 100;
 
-            var img = new Image { Source = shot, Stretch = Stretch.Fill };
-            var root = new Grid();
+            var img = _shotImage = new Image { Source = shot, Stretch = Stretch.Fill };
+            // снимок лежит пиксель в пиксель с экраном: без сглаживания процессору при перерисовке остаётся простое копирование
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
+            var root = _root = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             root.Children.Add(img);
             root.Children.Add(_canvas);
             _canvas.Children.Add(_dim);
@@ -68,6 +73,8 @@ namespace Isle.Overlays
             };
             root.Children.Add(_hint);
             Content = root;
+            // снимок, затемнение и мозаику — на графический слой Windows (окно под этим), если он доступен
+            if (mode != CaptureMode.Pipette) TryEnableComp(img);
 
             _hintText.Text = mode switch
             {
@@ -80,27 +87,51 @@ namespace Isle.Overlays
             Loaded += (_, __) =>
             {
                 var h = new WindowInteropHelper(this).Handle;
+                // Выделение рисует видеокарта (там всё перерисовывается целиком — артефактов нет). Пометки — процессор
+                // (см. EnterMarkup): видеокарта на части ПК оставляет чёрные прямоугольники при частичной перерисовке.
                 SetWindowPos(h, new IntPtr(-1), _vs.X, _vs.Y, _vs.Width, _vs.Height, 0x0040);
+                var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+                _root.Width = _vs.Width * dev.M11;
+                _root.Height = _vs.Height * dev.M22;
+                Journal.Info("capture", "слой: окно " + _vs.Width + "×" + _vs.Height + " px, " + Math.Round(_root.Width) + "×" + Math.Round(_root.Height)
+                    + " точек, tier " + (RenderCapability.Tier >> 16) + ", открыт через " + _openedFor.ElapsedMilliseconds + " мс");
                 // Windows не даёт фоновой программе забрать фокус обычным Activate() — без фокуса не доходил Esc
                 Isle.Native.Win32.ForceForeground(h);
                 Activate();
                 Focus();
                 Keyboard.Focus(this);
+                // прозрачное окно поверх графического слоя: процессор перерисовывает только изменившиеся кусочки
+                // (видеокарте пришлось бы каждый кадр возвращать картинку всего окна в память)
+                if (_comp)
+                    try { if (PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null) hs.CompositionTarget.RenderMode = RenderMode.SoftwareOnly; } catch { }
                 UpdateDim(Rect.Empty);
-                _escPoll.Start();
+                var fg = Isle.Native.Win32.GetForegroundWindow();
+                Journal.Info("capture", fg == h ? "слой впереди, Esc придёт клавишей" : "слой не стал передним окном (Windows не дала) — Esc ловим опросом клавиатуры");
             };
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) { OnEscape(); e.Handled = true; } else OnMarkupKey(e); };
-            // Подстраховка: Esc ловим напрямую с клавиатуры, даже если окно так и не получило фокус
+            KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Escape) { _escKeyAt = Environment.TickCount64; OnEscape("клавиша"); e.Handled = true; }
+                else OnMarkupKey(e);
+            };
+            // Подстраховка: Esc ловим напрямую с клавиатуры. Раньше она молчала, если окно «думало», что фокус у него
+            // (IsKeyboardFocusWithin), — а при открытии по PrintScreen Windows иногда не делает слой передним окном:
+            // фокус у слоя есть, но нажатия уходят в прошлую программу, и Esc срабатывал только после клика.
+            // Теперь: если это же нажатие не пришло обычным путём за 120 мс — закрываем по опросу.
             _escPoll.Tick += (_, __) =>
             {
                 bool down = (Isle.Native.Win32.GetAsyncKeyState(0x1B) & 0x8000) != 0;
-                // своё окно в фокусе — Esc уже обработан в KeyDown (там он сначала отменяет набираемый текст)
-                if (down && !_escWasDown && _escArmed && !IsKeyboardFocusWithin) OnEscape();
+                if (down && !_escWasDown && _escArmed) _escPressAt = Environment.TickCount64;
+                if (_escPressAt > 0 && Environment.TickCount64 - _escPressAt >= 120)
+                {
+                    long at = _escPressAt; _escPressAt = 0;
+                    if (_escKeyAt < at - 40) OnEscape("опрос клавиатуры");
+                }
                 _escWasDown = down;
                 _escArmed = true; // Esc, зажатый ещё до открытия слоя, не считается
             };
+            _escPoll.Start(); // сразу, а не после загрузки: Esc в первые мгновения тоже должен сработать
             // окно закрыли не через Finish (Alt+F4 и т. п.) — всё равно завершаем, иначе чёлка останется скрытой, а снимки — заблокированы
-            Closed += (_, __) => { _escPoll.Stop(); _tcs.TrySetResult(null); };
+            Closed += (_, __) => { _escPoll.Stop(); _meter.Stop(); UnhookMosaicFrame(); _tcs.TrySetResult(null); Helpers.MemoryTrim.Soon("слой снимка"); }; // замер кадров не должен пережить слой
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
@@ -123,6 +154,7 @@ namespace Isle.Overlays
         {
             // прошлый слой почему-то остался на экране — закрываем, иначе он попадёт в новый снимок второй панелью
             if (_open != null) { try { _open.Finish(null); } catch { } _open = null; }
+            ClipboardService.NoteShotApp(); // что снимаем — чтобы снимок попал в папку этого приложения
             var vs = ScreenTools.VirtualScreen();
             shot ??= ScreenTools.Capture(vs);
             var w = new CaptureOverlay(shot, vs, mode);
@@ -140,16 +172,25 @@ namespace Isle.Overlays
             Journal.Info("capture", _mode + ": " + (result switch
             {
                 null => "отменено",
-                BitmapSource b => "готово " + b.PixelWidth + "×" + b.PixelHeight + (_markup ? " (с пометками)" : ""),
+                BitmapSource b => "готово " + b.PixelWidth + "×" + b.PixelHeight,
                 Color c => "цвет " + Hex(c),
                 _ => result.GetType().Name
             }) + " через " + _openedFor.ElapsedMilliseconds + " мс");
+            // приложение снимка — только настоящему снимку области; отмена, текст с экрана, пипетка, QR — забываем
+            if (result is BitmapSource && _mode == CaptureMode.Region) ClipboardService.ShotTaken();
+            else ClipboardService.ForgetShotApp();
             _tcs.TrySetResult(result);
             Close();
         }
 
-        private double Kx => _shot.PixelWidth / Math.Max(1, ActualWidth);
-        private double Ky => _shot.PixelHeight / Math.Max(1, ActualHeight);
+        private Grid _root;
+        private Image _shotImage;
+        private int _cropX, _cropY; // начало области в пикселях экрана (для мозаики на графическом слое)
+        /// <summary>Размер экрана в точках слоя (окно на 1 px выше — лишняя строка не в счёт).</summary>
+        private double ScreenW => _root != null && _root.ActualWidth > 0 ? _root.ActualWidth : ActualWidth;
+        private double ScreenH => _root != null && _root.ActualHeight > 0 ? _root.ActualHeight : ActualHeight;
+        private double Kx => _shot.PixelWidth / Math.Max(1, ScreenW);
+        private double Ky => _shot.PixelHeight / Math.Max(1, ScreenH);
 
         private void OnDown(object s, MouseButtonEventArgs e)
         {
@@ -162,7 +203,7 @@ namespace Isle.Overlays
                 return;
             }
             _start = e.GetPosition(_canvas);
-            _sel.Visibility = Visibility.Visible;
+            if (_comp) CompSel(new Rect(_start.Value, _start.Value)); else _sel.Visibility = Visibility.Visible;
             CaptureMouse();
         }
 
@@ -179,10 +220,30 @@ namespace Isle.Overlays
             }
             if (_start == null) return;
             var r = new Rect(_start.Value, p);
-            Canvas.SetLeft(_sel, r.X); Canvas.SetTop(_sel, r.Y);
-            _sel.Width = r.Width; _sel.Height = r.Height;
+            if (_comp) CompSel(r);
+            else { Canvas.SetLeft(_sel, r.X); Canvas.SetTop(_sel, r.Y); _sel.Width = r.Width; _sel.Height = r.Height; }
             UpdateDim(r);
-            _hintText.Text = (int)(r.Width * Kx) + " × " + (int)(r.Height * Ky);
+            var px = PixelRect(r);
+            _hintText.Text = px.Width + " × " + px.Height;
+        }
+
+        /// <summary>
+        /// Область в точках → пиксели снимка, по краям, а не «начало + ширина». Курсор не может встать за последний
+        /// пиксель экрана: при масштабе 125 % правый край выделения — 3839-й пиксель, и снимок всего экрана выходил
+        /// 3839×2159. Край в пределах пикселя от края экрана — это сам край.
+        /// </summary>
+        private Int32Rect PixelRect(Rect r)
+        {
+            int W = _shot.PixelWidth, H = _shot.PixelHeight;
+            int x0 = (int)Math.Round(r.X * Kx), y0 = (int)Math.Round(r.Y * Ky);
+            int x1 = (int)Math.Round(r.Right * Kx), y1 = (int)Math.Round(r.Bottom * Ky);
+            if (x0 <= 1) x0 = 0;
+            if (y0 <= 1) y0 = 0;
+            if (x1 >= W - 1) x1 = W;
+            if (y1 >= H - 1) y1 = H;
+            x0 = Math.Clamp(x0, 0, W - 1); y0 = Math.Clamp(y0, 0, H - 1);
+            x1 = Math.Clamp(x1, x0 + 1, W); y1 = Math.Clamp(y1, y0 + 1, H);
+            return new Int32Rect(x0, y0, x1 - x0, y1 - y0);
         }
 
         private void OnUp(object s, MouseButtonEventArgs e)
@@ -190,26 +251,37 @@ namespace Isle.Overlays
             if (_markup || _mode == CaptureMode.Pipette || _start == null) return;
             ReleaseMouseCapture();
             var r = new Rect(_start.Value, e.GetPosition(_canvas));
-            r.Intersect(new Rect(0, 0, ActualWidth, ActualHeight));
+            r.Intersect(new Rect(0, 0, ScreenW, ScreenH));
             _start = null;
             if (r.IsEmpty) { Finish(null); return; }
             if (r.Width < 4 || r.Height < 4) { Finish(null); return; }
-            var crop = new Int32Rect(
-                (int)Math.Max(0, r.X * Kx), (int)Math.Max(0, r.Y * Ky),
-                (int)Math.Min(_shot.PixelWidth - r.X * Kx, r.Width * Kx),
-                (int)Math.Min(_shot.PixelHeight - r.Y * Ky, r.Height * Ky));
-            if (crop.Width <= 0 || crop.Height <= 0) { Finish(null); return; }
+            var crop = PixelRect(r);
             var cb = new CroppedBitmap(_shot, crop);
             cb.Freeze();
+            _cropX = crop.X; _cropY = crop.Y;
             // обычный снимок области — сначала пометки прямо на месте (мозаика, стрелки…), «Сохранить» — в чёлку
             if (_mode == CaptureMode.Region) { EnterMarkup(r, cb); return; }
             Finish(cb);
         }
 
+        // Затемнение вокруг выделения: два прямоугольника с правилом EvenOdd — внутренний вырезает «окно».
+        // Раньше на каждое движение мыши строилась CombinedGeometry на весь 4K-экран: это булева операция на CPU,
+        // курсор при выделении «шёл» заметно медленнее частоты монитора.
+        private readonly RectangleGeometry _dimOuter = new(), _dimHole = new();
+        private GeometryGroup _dimGroup;
+
         private void UpdateDim(Rect hole)
         {
-            var full = new RectangleGeometry(new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight)));
-            _dim.Data = hole.IsEmpty ? full : new CombinedGeometry(GeometryCombineMode.Exclude, full, new RectangleGeometry(hole));
+            if (_dimGroup == null)
+            {
+                _dimGroup = new GeometryGroup { FillRule = FillRule.EvenOdd };
+                _dimGroup.Children.Add(_dimOuter);
+                _dimGroup.Children.Add(_dimHole);
+                _dim.Data = _dimGroup;
+            }
+            _dimOuter.Rect = new Rect(0, 0, Math.Max(1, ScreenW), Math.Max(1, ScreenH));
+            _dimHole.Rect = hole.IsEmpty ? Rect.Empty : hole;
+            CompDim(hole);
         }
 
         private Color ColorAt(Point p)

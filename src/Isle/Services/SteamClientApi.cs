@@ -455,7 +455,13 @@ namespace Isle.Services
                 try
                 {
                     var ws = new ClientWebSocket();
-                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token)) { cts.CancelAfter(3000); await ws.ConnectAsync(new Uri(page.ws), cts.Token); }
+                    try
+                    {
+                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        cts.CancelAfter(3000);
+                        await ws.ConnectAsync(new Uri(page.ws), cts.Token);
+                    }
+                    catch { ws.Dispose(); throw; } // не подключились — сокет не копится (повтор каждые 5 с)
                     _ws = ws;
                     var probe = await CallAsync("Runtime.evaluate", new { expression = ProbeJs, returnByValue = true }, token);
                     bool ok = probe.TryGetProperty("result", out var r1) && r1.TryGetProperty("value", out var v1) && v1.ValueKind == JsonValueKind.True;

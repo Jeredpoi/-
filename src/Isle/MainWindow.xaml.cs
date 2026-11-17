@@ -31,7 +31,6 @@ namespace Isle
         private Toast _currentToast;
         private readonly DispatcherTimer _toastTimer = new();
         private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
-        private readonly DispatcherTimer _hoverOpen = new() { Interval = TimeSpan.FromMilliseconds(220) };
         private readonly DispatcherTimer _leaveClose = new() { Interval = TimeSpan.FromMilliseconds(550) };
         private readonly DispatcherTimer _oledHide = new();
         private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(20) };
@@ -108,6 +107,10 @@ namespace Isle
             AppHost.Lyrics = new LyricsState(AppHost.Media);
             AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
+            // по Клоди в чёлке можно тыкнуть — курсор-«рука» подсказывает это
+            Buddy.Cursor = BuddyMedia.Cursor = BuddyTimer.Cursor = Cursors.Hand;
+            // плашка подсвечена (получилось / ошибка / внимание) — край, который тянется к курсору, того же цвета
+            Edge.Tint = () => _glowColor is Color g && StatusGlow.Opacity > 0.02 ? (g, StatusGlow.Opacity) : null;
             AppHost.Media.TrackChanged += m => Edge.SpikeColor = DominantColor(m.Cover) ?? AccentColor();
             AiService.BusyChanged += busy => Dispatcher.InvokeAsync(() => { _aiBusy = busy; if (!busy) { Buddy.Cheer(); Edge.DropBead(); } });
             if (!s.ScaleFixV2)
@@ -124,7 +127,7 @@ namespace Isle
             if (AppSettings.IsFreshInstall && !s.WelcomeShown)
             {
                 var welcome = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
-                welcome.Tick += (_, __) => { welcome.Stop(); if (s.WelcomeShown) return; try { new Views.WelcomeWindow().Show(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
+                welcome.Tick += (_, __) => { welcome.Stop(); if (s.WelcomeShown) return; try { Views.WelcomeWindow.ShowOnce(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
                 welcome.Start();
             }
             AppHost.Vpn = new VpnService();
@@ -160,7 +163,15 @@ namespace Isle
                 LangChip.Text = AppHost.Watchers.LanguageCode;
                 AnimateLangChip();
             };
-            AppHost.Watchers.FullscreenChanged += fs => { _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen; ApplyVisibility(); };
+            AppHost.Watchers.FullscreenChanged += fs =>
+            {
+                _fullscreenHidden = fs && AppSettings.Current.HideInFullscreen;
+                ApplyVisibility();
+                // Сам по себе полноэкранный режим — не повод уходить на процессор (видео, развёрнутый браузер,
+                // мощная видеокарта — на процессоре чёлка на 144 Гц как раз подлагивала). Решает замер раскрытия.
+                _slowExpands = 0;
+                if (!fs) SetSoftRender(false, "полноэкранное приложение закрыто");
+            };
             AppHost.WeatherChanged += UpdateWeatherMini;
 
             _toastTimer.Tick += (_, __) => { _toastTimer.Stop(); NextToast(); };
@@ -172,7 +183,6 @@ namespace Isle
                 _hoverGrown = false;
                 if (State == IslandState.Collapsed) ShowCollapsedContent(false);
             };
-            _hoverOpen.Tick += (_, __) => { _hoverOpen.Stop(); if (State != IslandState.Expanded && Island.IsMouseOver && !TimerRow.IsMouseOver) Expand(null); };
             _leaveClose.Tick += (_, __) =>
             {
                 if (CursorNearIsland(14) || SuppressAutoCollapse || CursorOverOurPopup()) return; // ещё рядом или в нашем меню — ждём
@@ -196,14 +206,13 @@ namespace Isle
                 _oledHide.Stop();
                 _ungrow.Stop();
                 if (State == IslandState.Collapsed && !_hoverGrown) { _hoverGrown = true; AnimateSize(Island.Width + 16, Math.Max(38, Island.Height), 260); } // остров «тянется» к курсору
-                bool miniPlayer = MediaRow.Visibility == Visibility.Visible && AppSettings.Current.MusicPill == "mini";
                 // навёл на всплывашку — она не исчезает, пока курсор на ней (и не превращается в панель)
-                if (State == IslandState.Toast) { _toastTimer.Stop(); return; }
-                if (State != IslandState.Expanded && AppSettings.Current.ExpandOnHover && !miniPlayer && !TimerRow.IsMouseOver) _hoverOpen.Start();
+                if (State == IslandState.Toast) _toastTimer.Stop();
+                // По наведению на саму чёлку панель НЕ открывается: на ней кнопки (папка загрузки, мини-плеер, таймер),
+                // и курсор просто «проходит» по ней. Открывается, когда курсор упирается в верхний край экрана — см. CheckTopPush.
             };
             Island.MouseLeave += (_, __) =>
             {
-                _hoverOpen.Stop();
                 // ушёл со всплывашки — она ещё немного побудет и закроется
                 if (State == IslandState.Toast && _currentToast != null && !AlarmService.Ringing)
                 { _toastTimer.Stop(); _toastTimer.Interval = TimeSpan.FromSeconds(2.5); _toastTimer.Start(); }
@@ -222,6 +231,7 @@ namespace Isle
             _peekTimer.Tick += (_, __) =>
             {
                 if (Island.IsMouseOver || State == IslandState.Expanded) return; // пока пользуются — не прячем
+                if (State == IslandState.Toast && _currentToast != null && PeeksOverFullscreen(_currentToast)) return; // плашка ещё висит
                 _peekTimer.Stop();
                 _fullscreenPeek = false;
                 ApplyVisibility();
@@ -363,7 +373,9 @@ namespace Isle
 
         private void ApplyPrintScreenHook()
         {
-            bool want = AppSettings.Current.PrintScreenIsle;
+            // Перехват клавиатуры нужен всегда: по нему Caps Lock переключает плашку мгновенно.
+            // PrintScreen он забирает себе, только если это включено в Настройках.
+            bool want = true;
             if (want && _kbThread == null)
             {
                 _kbProc = KeyboardHook;
@@ -379,8 +391,8 @@ namespace Isle
                     _kbHook = IntPtr.Zero;
                 }) { IsBackground = true, Name = "Isle keyboard hook" };
                 _kbThread.Start();
-                ready.Wait(2000);
-                if (_kbHook == IntPtr.Zero) _kbThread = null;
+                // не дождались (тяжёлый старт) — поток всё равно поставит перехват позже; второй не запускаем
+                if (ready.Wait(2000) && _kbHook == IntPtr.Zero) _kbThread = null;
             }
             else if (!want && _kbThread != null)
             {
@@ -391,14 +403,24 @@ namespace Isle
             }
         }
 
+        private volatile bool _capsKeyDown;
+
         private IntPtr KeyboardHook(int code, IntPtr wParam, IntPtr lParam)
         {
             if (code >= 0)
             {
                 var k = System.Runtime.InteropServices.Marshal.PtrToStructure<Win32.KBDLLHOOKSTRUCT>(lParam);
+                if (k.vkCode == 0x14)                                                          // VK_CAPITAL
+                {
+                    int m = wParam.ToInt32();
+                    bool down = m == 0x0100 || m == 0x0104;
+                    // нажатие (не автоповтор при удержании) — сообщаем сразу, не дожидаясь опроса
+                    if (down && !_capsKeyDown) Dispatcher.BeginInvoke(new Action(() => AppHost.Watchers?.OnCapsKey()));
+                    _capsKeyDown = down;
+                }
                 bool alt = (k.flags & 0x20) != 0;                                             // LLKHF_ALTDOWN
                 bool win = (Win32.GetAsyncKeyState(0x5B) & 0x8000) != 0 || (Win32.GetAsyncKeyState(0x5C) & 0x8000) != 0;
-                if (k.vkCode == 0x2C && !alt && !win)                                          // VK_SNAPSHOT
+                if (k.vkCode == 0x2C && !alt && !win && AppSettings.Current.PrintScreenIsle)  // VK_SNAPSHOT
                 {
                     int msg = wParam.ToInt32();
                     if (msg == 0x0100 || msg == 0x0104) Dispatcher.BeginInvoke(new Action(() => _ = Tools.RegionShot())); // WM_KEYDOWN / WM_SYSKEYDOWN
@@ -406,6 +428,149 @@ namespace Isle
                 }
             }
             return Win32.CallNextHookEx(_kbHook, code, wParam, lParam);
+        }
+
+        // ---------- приветствие: пока идёт знакомство, чёлки нет; в конце окно «прилетает» на её место ----------
+        private bool _welcomeHidden;
+
+        /// <summary>Спрятать чёлку на время знакомства (или вернуть, если знакомство закрыли без анимации).</summary>
+        public void HideForWelcome(bool hide)
+        {
+            if (hide == _welcomeHidden) return;
+            _welcomeHidden = hide;
+            Root.BeginAnimation(OpacityProperty, null);
+            if (hide)
+            {
+                if (State == IslandState.Expanded) Collapse();
+                Root.Opacity = 0;
+                Root.IsHitTestVisible = false;
+            }
+            else
+            {
+                Root.IsHitTestVisible = true;
+                Root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(280)));
+            }
+            Journal.Info("welcome", hide ? "чёлка спрятана на время знакомства" : "чёлка возвращена");
+        }
+
+        /// <summary>Где свёрнутая чёлка на экране (физические пиксели) и радиус её нижних углов в пикселях.</summary>
+        public Rect IslandScreenRect(out double radiusPx)
+        {
+            var tl = Island.PointToScreen(new Point(0, 0));
+            var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
+            radiusPx = Island.CornerRadius.BottomLeft * (br.X - tl.X) / Math.Max(1, Island.ActualWidth);
+            // свёрнутая чёлка всегда прилегает к верху экрана: если она сейчас сдвинута (спрятана, пружинит) —
+            // берём её место у края окна, иначе пилюля приветствия улетала за верх экрана
+            double top = PointToScreen(new Point(0, 0)).Y;
+            return new Rect(tl.X, top, br.X - tl.X, br.Y - tl.Y);
+        }
+
+        /// <summary>Пилюля приветствия «прилипла»: чёлка проявляется на её месте, пружинит от удара, Клоди радуется.</summary>
+        public void LandFromWelcome()
+        {
+            _welcomeHidden = false;
+            Root.BeginAnimation(OpacityProperty, null);
+            Root.Opacity = 1;
+            Root.IsHitTestVisible = true;
+            Squash(1.07, 0.86, 900);
+            Buddy.ForceActivity(3, 2.2); // Клоди машет: «привет!»
+            Buddy.Cheer();
+            Edge.DropBead();
+            Journal.Info("welcome", "чёлка прилетела на место");
+        }
+
+        /// <summary>
+        /// Чёлка пружинит, как от лёгкого удара: сплющивается до sx×sy и упруго возвращается.
+        /// Пружинка ставится ВМЕСТЕ со сдвигом SlideT (им чёлка прячется в OLED-режиме), а не вместо него.
+        /// </summary>
+        private void Squash(double sx, double sy, int ms)
+        {
+            var st = new ScaleTransform(sx, sy);
+            Scaler.RenderTransformOrigin = new Point(0.5, 0);
+            if (Scaler.RenderTransform is TransformGroup tg && tg.Children.Count == 2 && tg.Children[0] is ScaleTransform)
+                tg.Children[0] = st;
+            else
+            {
+                var group = new TransformGroup();
+                group.Children.Add(st);
+                group.Children.Add(SlideT);
+                Scaler.RenderTransform = group;
+            }
+            var spring = new Helpers.Spring { Damping = 6.5, Frequency = 13 };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(ms)) { EasingFunction = spring });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(ms)) { EasingFunction = spring });
+        }
+
+        /// <summary>Снимок долетел до чёлки — она «проглатывает» его: лёгкий упругий толчок и капля снизу.</summary>
+        public void Gulp()
+        {
+            if (_welcomeHidden || State == IslandState.Expanded) return;
+            Squash(1.05, 0.9, 700);
+            Edge.DropBead();
+        }
+
+        // ---------- плавность, когда видеокарта занята игрой ----------
+        // Окно чёлки прозрачное: каждый кадр Windows забирает из видеокарты в обычную память. Когда игра грузит
+        // видеокарту на 100%, чёлка ждёт своей очереди и раскрывается с 2–3 кадрами в секунду. Маленькое окно
+        // процессор рисует легко — поэтому, пока видеокарта занята, рисуем процессором.
+
+        private bool _softRender;
+        private System.Windows.Media.Effects.Effect _shadowEffect;
+        private DateTime _softUntil = DateTime.MinValue; // до какого времени держать процессор после медленного раскрытия
+        private bool _expandWarm;    // первое раскрытие (прогрев) уже было
+        private int _slowExpands;    // медленных раскрытий подряд
+        private readonly Helpers.FrameMeter _expandMeter = new();
+        private DispatcherTimer _expandMeterStop;
+
+        /// <summary>Чёлка рисуется процессором — видеокарта занята (игра). Полёт снимка тогда тоже идёт процессором.</summary>
+        public bool SoftRender => _softRender;
+
+        private void SetSoftRender(bool soft, string why)
+        {
+            // недавно было медленное раскрытие — держим процессор, пока не пройдут 10 минут
+            if (!soft && DateTime.Now < _softUntil) return;
+            if (soft == _softRender) return;
+            try
+            {
+                if (PresentationSource.FromVisual(this) is HwndSource hs && hs.CompositionTarget != null)
+                {
+                    hs.CompositionTarget.RenderMode = soft ? RenderMode.SoftwareOnly : RenderMode.Default;
+                    _softRender = soft;
+                    // мягкая тень под чёлкой пересчитывается каждый кадр раскрытия — пока идёт игра, без неё
+                    if (soft) { _shadowEffect ??= IslandShadow.Effect; IslandShadow.Effect = null; }
+                    else if (_shadowEffect != null) IslandShadow.Effect = _shadowEffect;
+                    Journal.Info("render", "чёлка: отрисовка " + (soft ? "процессором" : "видеокартой") + " — " + why);
+                }
+            }
+            catch (Exception ex) { Journal.Warn("render", "не удалось сменить отрисовку: " + ex.Message); }
+        }
+
+        /// <summary>Замер раскрытия: если кадров мало (видеокарта занята), переходим на процессор на 10 минут.</summary>
+        private void MeasureExpand()
+        {
+            _expandMeter.Start();
+            _expandMeterStop?.Stop();
+            _expandMeterStop = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(650) };
+            _expandMeterStop.Tick += (_, __) =>
+            {
+                _expandMeterStop.Stop();
+                var (fps, _, text) = _expandMeter.StopStats();
+                Journal.Info("render", "раскрытие (" + (_softRender ? "процессор" : "видеокарта") + "): " + text);
+                // первое раскрытие после запуска всегда медленное (программа «прогревается») — его не считаем
+                if (!_expandWarm) { _expandWarm = true; return; }
+                bool fullscreen = AppHost.Watchers?.IsFullscreen ?? false;
+                if (!_softRender && fps > 0 && fps < 20) _slowExpands++; else if (fps >= 20) _slowExpands = 0;
+                // видеокарта занята: в игре хватает одного медленного раскрытия, на обычном столе — двух подряд
+                if (!_softRender && _slowExpands >= (fullscreen ? 1 : 2))
+                {
+                    _slowExpands = 0;
+                    _softUntil = DateTime.Now.AddMinutes(fullscreen ? 10 : 3);
+                    SetSoftRender(true, "раскрытие шло " + Math.Round(fps) + " к/с — видеокарта занята (на " + (fullscreen ? 10 : 3) + " мин)");
+                }
+                else if (_softRender && DateTime.Now >= _softUntil && !(AppHost.Watchers?.IsFullscreen ?? false))
+                    SetSoftRender(false, "видеокарта снова свободна");
+            };
+            _expandMeterStop.Start();
         }
 
         /// <summary>Включить/выключить PrintScreen через Isle. false — Windows не дала поставить перехват.</summary>
@@ -422,8 +587,19 @@ namespace Isle
         public bool TrySetHotkey(string name, string gesture, out string error)
         {
             error = null;
+            // пустое — сочетание убрано совсем: команда не вызывается с клавиатуры
+            if (string.IsNullOrWhiteSpace(gesture))
+            {
+                var all = HotkeySpecs(AppSettings.Current);
+                if (!all.Any(b => b.Name == name)) { error = "Неизвестная команда."; return false; }
+                SetHotkeyValue(AppSettings.Current, name, "");
+                ApplyHotkeys();
+                AppSettings.Current.Save();
+                Journal.Info("hotkeys", "убрано сочетание: " + name);
+                return true;
+            }
             if (!TryParseHotkey(gesture, out uint mods, out uint key, name == "collapse"))
-            { error = name == "collapse" ? "Выбери клавишу или сочетание клавиш." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
+            { error = name == "collapse" ? "Выбери Esc, F1–F24 или сочетание с Ctrl, Alt, Shift или Win." : "Выбери сочетание из клавиши и хотя бы одного модификатора (Ctrl, Alt, Shift или Win)."; return false; }
             var settings = AppSettings.Current;
             var bindings = HotkeySpecs(settings);
             foreach (var b in bindings.Where(b => b.Name != name))
@@ -480,6 +656,8 @@ namespace Isle
                 if (parsed != Key.None || !Enum.TryParse(parts[i], true, out parsed) || parsed == Key.None || parsed == Key.System) return false;
             }
             if (parsed == Key.None || (!allowNoModifier && modifiers == 0)) return false;
+            // одиночная клавиша (для «свернуть») — только Esc или F1–F24: буква или пробел мешали бы печатать в острове
+            if (modifiers == 0 && parsed != Key.Escape && !(parsed >= Key.F1 && parsed <= Key.F24)) return false;
             key = (uint)KeyInterop.VirtualKeyFromKey(parsed);
             return key is > 0 and <= 0xFF;
         }
@@ -595,6 +773,16 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // у плашки своё действие по клику (обновление и т. п.)
+            if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.OnClick is Action onClick
+                && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
+            {
+                _toastTimer.Stop();
+                NextToast();
+                try { onClick(); } catch (Exception ex) { App.Log("клик по плашке: " + ex.Message); }
+                e.Handled = true;
+                return;
+            }
             // клик по уведомлению другого приложения — открываем это приложение
             if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.LaunchAppId is string appId
                 && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
@@ -615,6 +803,14 @@ namespace Isle
             if (State != IslandState.Expanded)
             {
                 if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return; // кнопки мини-плеера
+                // клик по Клоди — он реагирует, а чёлка не раскрывается (раскрыть — клик в любом другом месте)
+                if (FindParent<Helpers.Character>(e.OriginalSource as DependencyObject) is Helpers.Character buddy)
+                {
+                    buddy.Poke();
+                    Journal.Debug("island", "тык по Клоди");
+                    e.Handled = true;
+                    return;
+                }
                 Expand(null);
                 e.Handled = true;
                 return;
@@ -666,7 +862,8 @@ namespace Isle
         {
             Journal.Info("island", "развернуть" + (tab != null ? " на вкладке " + tab : "") + " (было " + State + ")");
             if (tab == "settings") { OpenSettings(); return; }
-            _hoverOpen.Stop();
+            if (_welcomeHidden) return; // идёт знакомство — чёлка появится в его конце
+            GlowStatus(null); // панель раскрывается — цветная подсветка всплывашки не нужна
             _leaveClose.Stop();
             _oledHide.Stop();
             if (_oledHidden) OledReveal(false);
@@ -686,20 +883,27 @@ namespace Isle
             _collapseVersion++;
             MoveTabIndicator(TabButton(_currentTab), false);
             AnimateSize(ExpandedSize.Width, ExpandedSize.Height, 620, spring: true);
+            MeasureExpand();
             // содержимое проявляется из лёгкого размытия и чуть «подрастает»
             var st = new ScaleTransform(0.95, 0.95);
             ExpandedView.RenderTransformOrigin = new Point(0.5, 0);
             ExpandedView.RenderTransform = st;
-            var blur = new System.Windows.Media.Effects.BlurEffect { Radius = 14, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
-            ExpandedView.Effect = blur;
             var dur = TimeSpan.FromMilliseconds(340);
             var begin = TimeSpan.FromMilliseconds(90);
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, dur) { BeginTime = begin, EasingFunction = ease });
             st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, dur) { BeginTime = begin, EasingFunction = ease });
-            var unblur = new DoubleAnimation(0, dur) { BeginTime = begin, EasingFunction = ease };
-            unblur.Completed += (_, __) => { if (State == IslandState.Expanded) ExpandedView.Effect = null; }; // без эффекта рисуется быстрее
-            blur.BeginAnimation(System.Windows.Media.Effects.BlurEffect.RadiusProperty, unblur);
+            // Размытие на всю панель — самый тяжёлый эффект раскрытия. Пока идёт игра (видеокарта занята, рисует процессор)
+            // его не делаем: на процессоре оно давало ~12 кадров в секунду. Без игры — как раньше.
+            if (!_softRender)
+            {
+                var blur = new System.Windows.Media.Effects.BlurEffect { Radius = 14, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
+                ExpandedView.Effect = blur;
+                var unblur = new DoubleAnimation(0, dur) { BeginTime = begin, EasingFunction = ease };
+                unblur.Completed += (_, __) => { if (State == IslandState.Expanded) ExpandedView.Effect = null; }; // без эффекта рисуется быстрее
+                blur.BeginAnimation(System.Windows.Media.Effects.BlurEffect.RadiusProperty, unblur);
+            }
+            else ExpandedView.Effect = null;
             ExpandedView.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { BeginTime = begin, EasingFunction = ease });
             (TabHost.Content as Views.IIslandView)?.OnShown();
         }
@@ -731,6 +935,7 @@ namespace Isle
                     _currentToast = null;
                     if (!_toasts.Any(t => t.ReplaceKey == downloadToast.ReplaceKey)) _toasts.Enqueue(downloadToast);
                 }
+                else _currentToast = null; // прежняя плашка не «оживает» в свёрнутой чёлке (громкость, Caps Lock)
                 if (_toasts.Count > 0) { NextToast(); return; }
                 ShowCollapsedContent(false);
                 ScheduleOledHide(TimeSpan.FromSeconds(1.2));
@@ -1407,7 +1612,7 @@ namespace Isle
             bool on = AppSettings.Current.DoNotDisturb;
             ToastBus.Show(new Toast
             {
-                Title = on ? "Не беспокоить" : "Уведомления включены", Subtitle = on ? "Уведомления приложений не покажутся" : "Снова показываю уведомления",
+                Title = on ? "Не беспокоить включено" : "Не беспокоить выключено", Subtitle = on ? "Уведомления приложений не покажутся" : "Снова показываю уведомления",
                 Icon = Icons.Moon, On = on, ReplaceKey = "dnd", Important = true, Duration = TimeSpan.FromSeconds(2.5)
             });
         }
@@ -1417,7 +1622,9 @@ namespace Isle
         private void EnqueueToast(Toast t)
         {
             if (t.Kind == ToastKind.Alarm && State == IslandState.Expanded && !_pinned) Collapse(); // будильник важнее открытой панели
-            if (State == IslandState.Expanded && !t.Important) return;
+            if (State == IslandState.Expanded && !t.Important) { Journal.Debug("toast", "не показана (панель открыта): " + Journal.Short(t.Title, 60)); return; }
+            Journal.Debug("toast", "в очередь: " + Journal.Short(t.Title, 60) + ", сейчас " + State + (_currentToast != null ? " («" + Journal.Short(_currentToast.Title, 40) + "»)" : "") + ", в очереди " + _toasts.Count
+                + (_fullscreenHidden ? ", чёлка скрыта в полноэкранном режиме" : "") + (AppSettings.Current.DoNotDisturb ? ", «Не беспокоить»" : ""));
             if (_currentToast?.Kind == ToastKind.Download && t.Kind != ToastKind.Download)
             {
                 if (t.ReplaceKey != null)
@@ -1431,7 +1638,7 @@ namespace Isle
                 NextToast();
                 return;
             }
-            if (t.ReplaceKey != null && _currentToast?.ReplaceKey == t.ReplaceKey)
+            if (t.ReplaceKey != null && _currentToast?.ReplaceKey == t.ReplaceKey && State == IslandState.Toast)
             {
                 RenderToast(t);
                 _toastTimer.Stop();
@@ -1454,6 +1661,12 @@ namespace Isle
             if (State == IslandState.Expanded) { _currentToast = null; return; }
             if (_toasts.Count == 0)
             {
+                GlowStatus(null); // плашки кончились — подсветка гаснет
+                if (_peekForToast && _fullscreenPeek)
+                {
+                    _peekForToast = false;
+                    _peekTimer.Stop(); _peekTimer.Interval = TimeSpan.FromSeconds(1.2); _peekTimer.Start();
+                }
                 if (_currentToast?.Kind == ToastKind.Alarm) AlarmService.Stop();
                 StopAlarmPulse();
                 _currentToast = null;
@@ -1487,9 +1700,27 @@ namespace Isle
             _toastTimer.Start();
         }
 
+        /// <summary>
+        /// Плашка — ответ на действие самого пользователя (пипетка, снимок, таймер, голос, обновление) или ошибка:
+        /// её видно даже поверх полноэкранной игры — остров выглядывает, пока она висит. Чужие уведомления,
+        /// громкость, раскладка и Caps Lock в игре по-прежнему не показываются.
+        /// </summary>
+        /// <summary>Остров выглянул над полноэкранным ради плашки — спрятать вскоре после неё, а не через 10 с.</summary>
+        private bool _peekForToast;
+
+        private static bool PeeksOverFullscreen(Toast t) =>
+            t.Important && (t.Kind is ToastKind.Success or ToastKind.Error or ToastKind.Alarm or ToastKind.Timer or ToastKind.Reminder
+                            || t.Warning || t.ReplaceKey is "voice" or "update");
+
         private void RenderToast(Toast t)
         {
             _currentToast = t;
+            if (_fullscreenHidden && PeeksOverFullscreen(t))
+            {
+                Journal.Debug("toast", "поверх полноэкранного: " + Journal.Short(t.Title, 60));
+                PeekOverFullscreen();
+                _peekForToast = true;
+            }
             SetIslandRadius(18);
             if (t.Kind == ToastKind.Success) { Buddy.Cheer(); Edge.DropBead(); }
             if (t.Kind == ToastKind.Alarm) StartAlarmPulse(); else StopAlarmPulse();
@@ -1501,8 +1732,8 @@ namespace Isle
             ToastEta.Text = t.EtaText ?? "";
             ToastEta.Visibility = string.IsNullOrEmpty(t.EtaText) ? Visibility.Collapsed : Visibility.Visible;
             ToastIcon.Data = t.Icon;
-            ToastIcon.Foreground = t.Icon == Icons.Pipette || t.Icon == Icons.Shield
-                ? new SolidColorBrush(t.Accent)
+            ToastIcon.Foreground = t.Kind == ToastKind.Alarm ? new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71))
+                : t.Icon == Icons.Pipette || t.Icon == Icons.Shield ? new SolidColorBrush(t.Accent)
                 : (Brush)FindResource("Fg");
             ToastImage.Source = t.Image;
             bool weatherIcon = !string.IsNullOrEmpty(t.WeatherKind);
@@ -1522,7 +1753,7 @@ namespace Isle
             ToastIcon.Visibility = t.Image == null && !weatherIcon && !swatch ? Visibility.Visible : Visibility.Collapsed;
             bool download = t.Kind == ToastKind.Download && t.Progress.HasValue;
             ToastRingTrack.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
-            ToastRing.Data = download ? ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), 18, 18, 17) : null;
+            if (!download) ToastRing.Data = null;
             ToastRing.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
             bool compact = string.IsNullOrEmpty(t.Subtitle) && !t.Progress.HasValue;
             // плитка-значок: скруглённый квадрат 36 (одна строка) / 40 (две строки) / 48 (пипетка), как в макете
@@ -1530,13 +1761,27 @@ namespace Isle
             ToastIconBox.Width = ToastIconBox.Height = tile;
             ToastIconBox.CornerRadius = new CornerRadius(download || t.RoundImage ? tile / 2 : swatch ? 14 : 12);
             ToastIcon.Width = ToastIcon.Height = tile >= 40 ? 18 : 17;
-            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2, tile / 2, tile / 2 - 1);
+            // по дорожке (она снаружи плитки); у кольца отступ −3, поэтому центр сдвинут на 3
+            if (download) ToastRing.Data = ProgressArc(Math.Clamp(t.Progress.Value, 0, 1), tile / 2 + 3, tile / 2 + 3, tile / 2 + 2);
+            // своё цветное кольцо (обновление Isle — зелёное); загрузки Steam и браузера — цветом акцента, как раньше
+            bool tinted = download && t.Accent != Color.FromRgb(0xEC, 0xEC, 0xF1);
+            if (tinted)
+            {
+                ToastRing.Stroke = new SolidColorBrush(t.Accent);
+                ToastRingTrack.Stroke = new SolidColorBrush(Color.FromArgb(0x55, t.Accent.R, t.Accent.G, t.Accent.B));
+                ToastIcon.Foreground = new SolidColorBrush(t.Accent);
+            }
+            else
+            {
+                ToastRing.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent");
+                ToastRingTrack.Stroke = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x5F));
+            }
             ToastBar.Visibility = t.Progress.HasValue && !download ? Visibility.Visible : Visibility.Collapsed;
             ToastFolderButton.Tag = t;
             bool hasFolder = (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath)) || (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath));
             ToastFolderButton.Visibility = hasFolder ? Visibility.Visible : Visibility.Collapsed;
             ToastEditButton.Tag = t;
-            ToastEditButton.Visibility = t.EditImage != null ? Visibility.Visible : Visibility.Collapsed;
+            ToastEditButton.Visibility = t.EditImage != null || (t.EditFromFile && File.Exists(t.FilePath)) ? Visibility.Visible : Visibility.Collapsed;
             bool alarmButtons = t.Kind == ToastKind.Alarm && t.RepeatTimer.HasValue;
             if (alarmButtons && ToastAlarmButtons.Visibility != Visibility.Visible) PopAlarmButtons();
             ToastAlarmButtons.Visibility = alarmButtons ? Visibility.Visible : Visibility.Collapsed;
@@ -1553,13 +1798,13 @@ namespace Isle
             bool voiceWave = t.ReplaceKey == "voice" && AppHost.Voice?.Recording == true;
             if (voiceWave && VoiceWave.Visibility != Visibility.Visible) VoiceWave.Clear();
             VoiceWave.Visibility = voiceWave ? Visibility.Visible : Visibility.Collapsed;
-            if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 18; w = Math.Max(w, 320); }
+            if (voiceWave) { ToastBar.Visibility = Visibility.Collapsed; h += 34; w = Math.Max(w, 320); } // волна повыше — есть куда расти
             double imageSize = tile;
             // обложка игры — круглая миниатюра (заполняет круг, без полос), остальные картинки — скруглённый квадрат
             ToastImage.Stretch = t.RoundImage ? Stretch.UniformToFill : Stretch.Uniform;
             ToastImage.Clip = t.Image == null ? null : t.RoundImage
                 ? new EllipseGeometry(new Point(imageSize / 2, imageSize / 2), imageSize / 2, imageSize / 2)
-                : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), 6, 6);
+                : new RectangleGeometry(new Rect(1, 1, imageSize - 2, imageSize - 2), ToastIconBox.CornerRadius.TopLeft - 1, ToastIconBox.CornerRadius.TopLeft - 1);
             if (t.Progress.HasValue)
             {
                 double barW = w - 16 * 2 - tile - 12;
@@ -1728,6 +1973,18 @@ namespace Isle
             }
         }
 
+        /// <summary>
+        /// Открыть Проводник с выделенным файлом. Путь приводим к виду Windows: OBS отдаёт его с прямыми слешами
+        /// («C:/Users/…/Videos/запись.mp4»), а Проводник такой путь в /select не понимает и открывает своё место
+        /// по умолчанию — у кого-то это рабочий стол.
+        /// </summary>
+        public static void ShowInExplorer(string file)
+        {
+            var path = Path.GetFullPath(file.Replace('/', '\\'));
+            Journal.Info("files", "показать в Проводнике: " + path);
+            System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+        }
+
         private void OnToastFolder(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
@@ -1736,7 +1993,7 @@ namespace Isle
             {
                 // снимок — открыть Проводник с выделенным файлом; игра — её папку
                 if (!string.IsNullOrEmpty(t.FilePath) && File.Exists(t.FilePath))
-                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + t.FilePath + "\"");
+                    ShowInExplorer(t.FilePath);
                 else if (!string.IsNullOrWhiteSpace(t.FolderPath) && Directory.Exists(t.FolderPath))
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(t.FolderPath) { UseShellExecute = true });
             }
@@ -1746,8 +2003,18 @@ namespace Isle
         private void OnToastEdit(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
-            if (ToastEditButton.Tag is not Toast t || t.EditImage == null) return;
-            try { new Overlays.ImageEditor(t.EditImage, t.FilePath).Show(); }
+            if (ToastEditButton.Tag is not Toast t) return;
+            try
+            {
+                var img = t.EditImage;
+                if (img == null && t.EditFromFile && File.Exists(t.FilePath))
+                {
+                    var b = new System.Windows.Media.Imaging.BitmapImage();
+                    b.BeginInit(); b.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; b.UriSource = new Uri(t.FilePath); b.EndInit(); b.Freeze();
+                    img = b;
+                }
+                if (img != null) new Overlays.ImageEditor(img, t.FilePath).Show();
+            }
             catch (Exception ex) { App.Log("editor: " + ex); }
         }
 
@@ -1758,6 +2025,35 @@ namespace Isle
         /// Итог действия видно сразу: получилось — значок зелёный и «подпрыгивает»,
         /// не вышло — красный и качается из стороны в сторону (как «нет» головой).
         /// </summary>
+        /// <summary>
+        /// Цветная подсветка чёлки под всплывашку: вспышка (180 мс) → мягко гаснет до едва заметной, пока плашка видна.
+        /// null — погасить (обычная всплывашка или плашек больше нет).
+        /// </summary>
+        /// <summary>Цвет текущей подсветки плашки — «жидкий» край под ней красится в тот же цвет.</summary>
+        private Color? _glowColor;
+
+        private void GlowStatus(Color? c)
+        {
+            if (c is Color gc) _glowColor = gc;
+            if (c is not Color col)
+            {
+                StatusGlow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new SineEase() });
+                return;
+            }
+            StatusGlow.BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, col.R, col.G, col.B));
+            StatusGlow.Background = new LinearGradientBrush(new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(0x00, col.R, col.G, col.B), 0.0),
+                new GradientStop(Color.FromArgb(0x14, col.R, col.G, col.B), 0.55),
+                new GradientStop(Color.FromArgb(0x3C, col.R, col.G, col.B), 1.0),
+            }, 90);
+            var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(1400) };
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(StatusGlow.Opacity, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+            a.KeyFrames.Add(new EasingDoubleKeyFrame(0.45, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            StatusGlow.BeginAnimation(OpacityProperty, a);
+        }
+
         private void PlayToastStatus(Toast t)
         {
             // надпись вместо значка (раскладка) и «включено / выключено» для переключателей
@@ -1787,6 +2083,11 @@ namespace Isle
             // Получилось — зелёная плитка, не получилось — красная, «внимание» — янтарная; значок на ней тёмный.
             bool plainTile = !t.On.HasValue && !badge && ToastIcon.Visibility == Visibility.Visible && t.Icon != Icons.Pipette
                              && !(t.Kind == ToastKind.Alarm);
+            GlowStatus(error ? Color.FromRgb(0xF8, 0x71, 0x71) : warning ? Color.FromRgb(0xFB, 0xBF, 0x24) : success ? Color.FromRgb(0x4A, 0xDE, 0x80) : (Color?)null);
+            // заголовок — в цвет состояния (светлый оттенок, чтобы читался на тёмном)
+            if (error) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xA5, 0xA5));
+            else if (warning) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFD, 0xE6, 0x8A));
+            else if (success) ToastTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x86, 0xEF, 0xAC));
             if (plainTile && (error || success || warning))
             {
                 var (bg, fg) = error ? (Color.FromRgb(0xF8, 0x71, 0x71), Color.FromRgb(0x2B, 0x0A, 0x0A))
@@ -2311,6 +2612,7 @@ namespace Isle
 
         private void PeekOverFullscreen()
         {
+            _peekForToast = false; // выглянул по наведению на край — держим, как обычно
             _fullscreenPeek = true;
             ApplyVisibility();
             KeepOnTop();
@@ -2419,22 +2721,31 @@ namespace Isle
 
         private double _pushTicks; // сколько секунд курсор упирается в верх над островом
 
-        /// <summary>Курсор упёрся в самый верх экрана над островом — открываем (как в оригинале).</summary>
+        /// <summary>
+        /// Курсор упёрся в самый верх экрана над островом и подержался там ~0,2 с — открываем панель.
+        /// Это единственный способ открыть «наведением»: просто водить мышью по чёлке можно спокойно.
+        /// </summary>
         private void CheckTopPush()
         {
-            if (State == IslandState.Expanded || !Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
+            // пока открыта — «упор» считаем уже засчитанным: после сворачивания с клавиатуры курсор у края
+            // не должен сразу открыть её снова, сначала уведи его от края
+            if (State == IslandState.Expanded) { _pushTicks = 1; return; }
+            if (!Win32.GetCursorPos(out var p)) { _pushTicks = 0; return; }
             bool atTop = false;
             try
             {
-                var tl = Island.PointToScreen(new Point(0, 0));
-                var br = Island.PointToScreen(new Point(Island.ActualWidth, Island.ActualHeight));
-                atTop = p.Y <= tl.Y + 1 && p.X >= tl.X && p.X <= br.X; // строго над островом
+                // чуть шире самой чёлки: в свёрнутом виде она узкая, по краю легко промахнуться
+                var tl = Island.PointToScreen(new Point(-12, 0));
+                var br = Island.PointToScreen(new Point(Island.ActualWidth + 12, Island.ActualHeight));
+                var screenTop = PointToScreen(new Point(0, 0)).Y; // окно стоит у самого верха экрана
+                atTop = p.Y <= Math.Max(screenTop, tl.Y) + 1 && p.X >= tl.X && p.X <= br.X;
             }
             catch { }
             if (!atTop) { _pushTicks = 0; return; }
             if (_oledHidden) { OledReveal(); return; }
+            if (!AppSettings.Current.ExpandOnHover) return; // выключено — открывается только кликом и клавишами
             double was = _pushTicks; _pushTicks += _frameDt;
-            if (was < 0.2 && _pushTicks >= 0.2 && Scaler.Visibility == Visibility.Visible) Expand(null);
+            if (was < 0.2 && _pushTicks >= 0.2 && Scaler.Visibility == Visibility.Visible) { Journal.Info("island", "открыта: курсор у верхнего края"); Expand(null); }
         }
 
         private void Animate()

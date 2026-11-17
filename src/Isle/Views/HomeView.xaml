@@ -159,7 +159,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Button Style="{StaticResource Ghost}" Click="OnMute" ToolTip="Выключить звук">
+                <Button Style="{StaticResource Ghost}" Click="OnMute" ToolTip="Выключить / включить звук">
                     <h:Icon x:Name="VolIcon" Kind="Volume" Width="16" Height="16"/>
                 </Button>
                 <Slider x:Name="Volume" Grid.Column="1" Minimum="0" Maximum="100" Margin="8,0" VerticalAlignment="Center" ValueChanged="OnVolume"/>
@@ -200,14 +200,14 @@
         <Grid Grid.Row="4" Grid.ColumnSpan="3">
             <Border x:Name="LauncherBox" Style="{StaticResource CardBox}" Padding="8" AllowDrop="True" Drop="OnLauncherDrop" Height="56">
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Style="{StaticResource Flat}" Height="40" Padding="12,0" Margin="10,0,0,0" Click="OnVoice" ToolTip="Голос в текст: скажи — текст вставится туда, где стоял курсор">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Flat}" Height="38" Padding="12,0" Margin="10,0,0,0" Click="OnVoice" ToolTip="Голос в текст: скажи — текст вставится туда, где стоял курсор">
                         <StackPanel Orientation="Horizontal">
                             <h:Icon Kind="Mic" Width="15" Height="15"/>
                             <TextBlock Text="Голос" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
                             <TextBlock Text="Ctrl+Alt+D" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource Muted}"/>
                         </StackPanel>
                     </Button>
-                    <Button DockPanel.Dock="Left" Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Margin="0,0,10,0" Click="OnLauncherAdd" ToolTip="Добавить программу или файл">
+                    <Button x:Name="LauncherAddBtn" DockPanel.Dock="Left" Style="{StaticResource Flat}" Width="38" Height="38" Padding="0" Margin="0,0,10,0" Click="OnLauncherAdd" ToolTip="Добавить ярлык с рабочего стола">
                         <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
                     </Button>
                     <Grid>
@@ -218,7 +218,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource Ghost}" Width="40" Height="40" Margin="0,0,4,0" Padding="4" Tag="{Binding Path}"
+                                    <Button Style="{StaticResource Ghost}" Width="38" Height="38" Margin="0,0,4,0" Padding="4" Tag="{Binding Path}"
                                             ToolTip="{Binding Name}" Click="OnLaunch" MouseRightButtonUp="OnLaunchRemove">
                                         <Image Source="{Binding Icon}" Width="28" Height="28"/>
                                     </Button>
@@ -230,7 +230,7 @@
             </Border>
             <Grid x:Name="CommandBox" Visibility="Collapsed">
                 <TextBox x:Name="Command" Tag="Команда: приложение, сайт, 2+2*3, «таймер 10», «напомни … через 20 минут», &gt;cmd, ?поиск — Enter · Esc — назад"
-                         KeyDown="OnCommandKey" Padding="38,17,10,17" LostKeyboardFocus="OnCommandLostFocus"/>
+                         KeyDown="OnCommandKey" Height="56" Padding="38,0,10,0" VerticalContentAlignment="Center" LostKeyboardFocus="OnCommandLostFocus"/>
                 <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
                 <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" IsHitTestVisible="False"/>
             </Grid>

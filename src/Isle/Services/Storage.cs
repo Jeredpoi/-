@@ -18,7 +18,15 @@ namespace Isle.Services
             {
                 var path = Path.Combine(Dir, name);
                 if (File.Exists(path))
-                    return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T();
+                {
+                    try { return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T(); }
+                    catch (Exception ex)
+                    {
+                        // битый файл — сохраняем копию, прежде чем его перезапишут настройками по умолчанию
+                        try { File.Copy(path, path + ".bad", true); } catch { }
+                        try { Journal.Error("storage", name + " не прочитался (копия: " + name + ".bad): " + ex.Message); } catch { }
+                    }
+                }
             }
             catch { }
             return new T();
@@ -48,6 +56,8 @@ namespace Isle.Services
         public bool CapsToasts { get; set; } = true;
         public bool BatteryToasts { get; set; } = true;
         public bool NotificationToasts { get; set; } = true;
+        /// <summary>Убирать плашку Windows: уведомление видно только в острове (без дублей справа снизу).</summary>
+        public bool NotificationsOnlyInIsland { get; set; }
         public bool ClipboardHistory { get; set; } = true;
         public int ClipboardLimit { get; set; } = 50;
         public bool HideInFullscreen { get; set; } = true;
@@ -117,6 +127,8 @@ namespace Isle.Services
 
         // OBS (запись экрана через obs-websocket)
         public int ObsPort { get; set; } = 4455;
+        /// <summary>Куда OBS кладёт записи, начатые из Isle (пусто — как в настройках OBS).</summary>
+        public string ObsRecordFolder { get; set; } = "";
         public string ObsPasswordProtected { get; set; } = "";
         [System.Text.Json.Serialization.JsonIgnore]
         public string ObsPassword { get => Unprotect(ObsPasswordProtected); set => ObsPasswordProtected = Protect(value); }
@@ -185,6 +197,12 @@ namespace Isle.Services
         public bool PrintScreenIsle { get; set; }
         /// <summary>Сохранять снимки Isle в «Изображения\\Isle» (а не только в буфер обмена).</summary>
         public bool SaveScreenshots { get; set; } = true;
+        /// <summary>Рисовать пометки на снимке видеокартой (быстрее, но на части ПК — чёрные прямоугольники). По умолчанию — процессор.</summary>
+        public bool CaptureGpuRender { get; set; }
+        /// <summary>Снимок, затемнение и мозаику рисует графический слой Windows (видеокарта, частота монитора).</summary>
+        public bool CaptureComposition { get; set; } = true;
+        /// <summary>Подробный журнал для отладки (временно включён по умолчанию — чтобы по журналу было видно всё).</summary>
+        public bool DebugLog { get; set; } = true;
         public bool Use24h { get; set; } = true;
 
         private static AppSettings _current;

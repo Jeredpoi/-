@@ -75,6 +75,13 @@ namespace Isle.Helpers
             _drag = false; ReleaseMouseCapture(); e.Handled = true;
         }
 
+        // захват мыши отобрали (остров свернулся, Alt+Tab) — отпускания не будет, перестаём «тянуть»
+        protected override void OnLostMouseCapture(MouseEventArgs e)
+        {
+            _drag = false;
+            base.OnLostMouseCapture(e);
+        }
+
         private static Point On(Point c, double r, double deg)
         {
             double a = deg * Math.PI / 180;

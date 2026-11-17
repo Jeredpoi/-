@@ -93,7 +93,70 @@ namespace Isle.Views
             AppHost.Voice.Toggle();
         }
 
+        /// <summary>
+        /// «+»: список ярлыков с рабочего стола (свой и общий) со значками — отмечаешь нужные.
+        /// Меню не закрывается после клика, можно выбрать несколько. «Другой файл…» — обычный выбор файла.
+        /// </summary>
         private void OnLauncherAdd(object s, RoutedEventArgs e)
+        {
+            var menu = new ContextMenu { PlacementTarget = LauncherAddBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Top, MaxHeight = 440, MinWidth = 260 };
+            var desk = DesktopShortcuts();
+            if (desk.Count == 0) menu.Items.Add(new MenuItem { Header = "На рабочем столе нет ярлыков", IsEnabled = false });
+            foreach (var path in desk)
+            {
+                var item = new MenuItem { StaysOpenOnClick = true };
+                // галочка справа — строки не прыгают, как со стандартной галочкой слева
+                var row = new Grid { MinWidth = 240 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+                row.Children.Add(new System.Windows.Controls.Image { Source = Isle.Native.Win32.ShellIcon(path), Width = 20, Height = 20, Margin = new Thickness(0, 0, 10, 0) });
+                var name = new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(path), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis };
+                Grid.SetColumn(name, 1); row.Children.Add(name);
+                var mark = new TextBlock { Text = "✓", FontSize = 13, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Visibility = Has(path) ? Visibility.Visible : Visibility.Hidden };
+                Grid.SetColumn(mark, 2); row.Children.Add(mark);
+                item.Header = row;
+                var p = path;
+                item.Click += (_, __) =>
+                {
+                    if (Has(p)) _launch.Remove(_launch.First(l => string.Equals(l.Path, p, StringComparison.OrdinalIgnoreCase)));
+                    else if (_launch.Count < 16) _launch.Add(new LauncherItem { Path = p });
+                    mark.Visibility = Has(p) ? Visibility.Visible : Visibility.Hidden;
+                    SaveLauncher();
+                };
+                menu.Items.Add(item);
+            }
+            menu.Items.Add(new Separator());
+            var other = new MenuItem { Header = "Другой файл или программа…" };
+            other.Click += (_, __) => PickFile();
+            menu.Items.Add(other);
+            menu.IsOpen = true;
+        }
+
+        private bool Has(string path) => _launch.Any(l => string.Equals(l.Path, path, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>Ярлыки и программы с рабочего стола пользователя и общего (как их видно на экране), по алфавиту.</summary>
+        private static List<string> DesktopShortcuts()
+        {
+            var list = new List<string>();
+            foreach (var dir in new[] { Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory) })
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) continue;
+                    list.AddRange(System.IO.Directory.EnumerateFiles(dir).Where(f =>
+                    {
+                        var ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
+                        return ext is ".lnk" or ".url" or ".exe" or ".appref-ms";
+                    }));
+                }
+                catch { }
+            }
+            return list.GroupBy(f => System.IO.Path.GetFileNameWithoutExtension(f), StringComparer.CurrentCultureIgnoreCase).Select(g => g.First())
+                .OrderBy(f => System.IO.Path.GetFileNameWithoutExtension(f), StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
+        private void PickFile()
         {
             AppHost.Window.SuppressAutoCollapse = true;
             try
@@ -102,7 +165,7 @@ namespace Isle.Views
                 if (dlg.ShowDialog() == true)
                 {
                     foreach (var f in dlg.FileNames)
-                        if (_launch.All(l => !string.Equals(l.Path, f, StringComparison.OrdinalIgnoreCase)) && _launch.Count < 16)
+                        if (!Has(f) && _launch.Count < 16)
                             _launch.Add(new LauncherItem { Path = f });
                     SaveLauncher();
                 }
@@ -427,7 +490,7 @@ namespace Isle.Views
             var v = AppHost.Audio.Volume * 100;
             Volume.Value = v;
             VolText.Text = ((int)Math.Round(v)).ToString();
-            VolIcon.Kind = AppHost.Audio.Muted ? "Mute" : "Volume";
+            VolIcon.Kind = AppHost.Audio.Muted || v < 0.5 ? "Mute" : "Volume"; // как на «Управлении»: на нуле — перечёркнутый
             _settingVolume = false;
         }
 
@@ -500,7 +563,9 @@ namespace Isle.Views
             {
                 double n = double.Parse(timer.Groups[2].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
                 var u = timer.Groups[3].Value.ToLowerInvariant();
-                var span = u.StartsWith("с") || u.StartsWith("s") ? TimeSpan.FromSeconds(n) : u.StartsWith("ч") || u.StartsWith("h") ? TimeSpan.FromHours(n) : TimeSpan.FromMinutes(n);
+                double sec = n * (u.StartsWith("с") || u.StartsWith("s") ? 1 : u.StartsWith("ч") || u.StartsWith("h") ? 3600 : 60);
+                if (!(sec >= 1 && sec <= 100 * 3600)) { ToastBus.Show(new Toast { Kind = ToastKind.Info, Title = "Таймер", Subtitle = "Можно от 1 секунды до 100 часов", Icon = Icons.Timer }); return; } // огромное число роняло TimeSpan
+                var span = TimeSpan.FromSeconds(sec);
                 AppHost.Timer.StartNew(span);
                 HideCommand();
                 AppHost.Window.Collapse();

@@ -21,6 +21,9 @@ namespace Isle.Helpers
         private const int Samples = 72;
         private readonly float[] _spec = new float[Services.SpectrumService.BandCount];
         private readonly double[] _depth = new double[Samples];
+        /// <summary>Точек на каждом скруглённом углу: край начинается прямо со скругления острова и продолжает его.</summary>
+        private const int CornerSamples = 12;
+        private readonly double[] _cornerL = new double[CornerSamples], _cornerR = new double[CornerSamples];
         private double _bulgeX, _bulgeAmp, _sag;
         private readonly List<Drop> _drops = new();
         private readonly Random _rnd = new();
@@ -29,6 +32,11 @@ namespace Isle.Helpers
         private class Drop { public double X, Y, Vy, R, Life; }
 
         public Brush Fill { get; set; } = Brushes.Black;
+        /// <summary>
+        /// Подсветка плашки (цвет и сила 0…1): низ острова под ней тонирован этим цветом, и вытянутый край
+        /// должен продолжать его — иначе под зелёной плашкой «капля» была чёрной с серой обводкой.
+        /// </summary>
+        public Func<(Color color, double strength)?> Tint { get; set; }
         public Color SpikeColor { get; set; } = Color.FromRgb(0xEC, 0xEC, 0xF1);
         public double CornerRadius { get; set; } = 18;
         /// <summary>Поставщик спектра (null — музыки нет).</summary>
@@ -65,7 +73,9 @@ namespace Isle.Helpers
             for (int i = 0; i < _spec.Length; i++)
             {
                 float target = spec != null ? spec[i] : 0;
-                _spec[i] += (target - _spec[i]) * (float)FrameClock.Lerp(0.45);
+                // всплеск — быстро, спад — мягче: спектр приходит реже кадров монитора (на 144–240 Гц),
+                // и при одинаково резком спуске край опускался ступеньками
+                _spec[i] += (target - _spec[i]) * (float)FrameClock.Lerp(target > _spec[i] ? 0.4 : 0.16);
             }
 
             // курсор рядом → край тянется к нему
@@ -78,16 +88,20 @@ namespace Isle.Helpers
                     double dy = local.Y, dxOut = local.X < 0 ? -local.X : local.X > w ? local.X - w : 0;
                     if (dy > -6 && dy < 140 && dxOut < 60)
                     {
-                        double dist = Math.Max(0, dy) + dxOut;
-                        targetAmp = 13 * Math.Max(0, 1 - dist / 140.0);
+                        // сила тянется от нуля на границах зоны: раньше на входе сбоку сразу было ~7 из 13 — капля «выпрыгивала»
+                        double fd = Smooth(1 - Math.Max(0, dy) / 140.0);   // чем ниже курсор — тем слабее
+                        double fx = Smooth(1 - dxOut / 60.0);              // сбоку от острова — слабеет к краю зоны
+                        double fy = dy < 0 ? Smooth(1 + dy / 6.0) : 1;     // курсор заходит на сам остров — капля втягивается
+                        targetAmp = 13 * fd * fx * fy;
                         // центр выпуклости держим подальше от углов: у самого угла кривая уходила вниз почти отвесно
-                        double margin = CornerRadius + 26;
+                        double margin = CornerRadius + 18;
                         targetX = margin < w / 2 ? Math.Clamp(local.X, margin, w - margin) : w / 2;
                     }
                 }
                 catch { }
             }
-            _bulgeAmp += (targetAmp - _bulgeAmp) * FrameClock.Lerp(0.18);
+            // вытягивается неторопливо, как густая жидкость, а втягивается чуть быстрее
+            _bulgeAmp += (targetAmp - _bulgeAmp) * FrameClock.Lerp(targetAmp > _bulgeAmp ? 0.085 : 0.12);
             _bulgeX += (targetX - _bulgeX) * FrameClock.Lerp(0.25);
 
             // провисание, когда пользователя нет
@@ -116,11 +130,32 @@ namespace Isle.Helpers
             bool any = _bulgeAmp > 0.05 || _sag > 0.05 || _drops.Count > 0 || _bristle > 0;
             double r = CornerRadius;
             double span = Math.Max(1, w - 2 * r);
+            // Капля и провисание сходят на нет у самых краёв острова (x = 0 и x = w), а не у начала скругления:
+            // у угла край плавно продолжает дугу. Раньше всё обрывалось ровно там, где кончается скругление, —
+            // капля у края упиралась в угол, и стык выглядел резким.
+            double soft = r + 30;
+            double TaperFull(double x) => Smooth(x / soft) * Smooth((w - x) / soft);
+            double Blob(double x)
+            {
+                double bx = x - _bulgeX;
+                // капля с «шейкой»: широкое мягкое основание + узкий кончик
+                double bulge = _bulgeAmp * (0.45 * Math.Exp(-Math.Pow(bx / 52.0, 2)) + 0.55 * Math.Exp(-Math.Pow(bx / 22.0, 2)));
+                double sag = _sag * Math.Exp(-Math.Pow((x / w - 0.5) / 0.28, 2));
+                return (bulge + sag) * TaperFull(x);
+            }
+            double rho = Math.Max(0, r - 0.5);
+            for (int j = 0; j < CornerSamples; j++)
+            {
+                double th = j / (double)CornerSamples * Math.PI / 2;
+                _cornerL[j] = Blob(r - rho * Math.Cos(th));
+                _cornerR[j] = Blob(w - r + rho * Math.Cos(th));
+                if (_cornerL[j] > 0.05 || _cornerR[j] > 0.05) any = true;
+            }
             for (int i = 0; i < Samples; i++)
             {
                 double t = i / (double)(Samples - 1);
                 double x = r + t * span;
-                // к углам — ноль, и так же плавно, как скругление угла: без излома в месте стыка
+                // спектр и шипы — только на прямом участке; к углам — ноль, так же плавно, как скругление
                 double s0 = Math.Sin(Math.PI * t);
                 double taper = s0 * s0 * (3 - 2 * s0);
                 double fb = t * (_spec.Length - 1);
@@ -128,8 +163,6 @@ namespace Isle.Helpers
                 double k = fb - b0; k = (1 - Math.Cos(k * Math.PI)) / 2;
                 double band = _spec[b0] * (1 - k) + _spec[b1] * k;
                 double music = Math.Pow(band, 1.35) * 15;
-                double bulge = _bulgeAmp * Math.Exp(-Math.Pow((x - _bulgeX) / 34.0, 2));
-                double sag = _sag * Math.Exp(-Math.Pow((t - 0.5) / 0.28, 2));
                 double spike = 0;
                 if (_bristle > 0)
                 {
@@ -138,7 +171,7 @@ namespace Isle.Helpers
                     double jitter = 0.6 + 0.4 * Math.Sin(now * 19 + i * 1.7) * Math.Sin(now * 7.3 + i * 0.9);
                     spike = (i % 2 == 1 ? 10 * jitter : 1.2) * reach;
                 }
-                _depth[i] = (music + bulge + sag + spike) * taper;
+                _depth[i] = (music + spike) * taper + Blob(x);
                 if (_depth[i] > 0.05) any = true;
             }
             if (any || _wasAny) InvalidateVisual();
@@ -146,7 +179,9 @@ namespace Isle.Helpers
         }
 
         private bool _wasAny;
-        private readonly Point[] _pts = new Point[Samples];
+        private static double Smooth(double t) { t = Math.Clamp(t, 0, 1); return t * t * (3 - 2 * t); }
+        private readonly Point[] _pts = new Point[Samples + 2 * CornerSamples];
+        private readonly Point[] _inner = new Point[Samples + 2 * CornerSamples];
         private static readonly Pen OutlinePen = MakeOutline();
         private static Pen MakeOutline() { var p = new Pen(new SolidColorBrush(Color.FromRgb(0x23, 0x23, 0x2A)), 1); p.Freeze(); return p; }
 
@@ -157,48 +192,87 @@ namespace Isle.Helpers
             double r = CornerRadius, span = Math.Max(1, w - 2 * r);
             double maxDepth = 0;
             foreach (var d in _depth) maxDepth = Math.Max(maxDepth, d);
+            foreach (var d in _cornerL) maxDepth = Math.Max(maxDepth, d);
+            foreach (var d in _cornerR) maxDepth = Math.Max(maxDepth, d);
+
+            // цвет низа острова под подсвеченной плашкой: там градиент подсветки доходит до 0x3C/255 её цвета
+            var tint = Tint?.Invoke();
+            Brush fill = Fill;
+            Pen outlinePen = OutlinePen;
+            if (tint is var (tc, ts) && ts > 0.02)
+            {
+                var baseCol = Fill is SolidColorBrush sb ? sb.Color : Colors.Black;
+                double a = 0x3C / 255.0 * ts;
+                var f = Color.FromRgb((byte)(baseCol.R + (tc.R - baseCol.R) * a), (byte)(baseCol.G + (tc.G - baseCol.G) * a), (byte)(baseCol.B + (tc.B - baseCol.B) * a));
+                fill = new SolidColorBrush(f); fill.Freeze();
+                // обводка — как рамка подсветки (её цвет с прозрачностью 0xB0) поверх серого контура
+                double k = 0xB0 / 255.0 * ts;
+                var o = Color.FromRgb((byte)(0x23 + (tc.R - 0x23) * k), (byte)(0x23 + (tc.G - 0x23) * k), (byte)(0x2A + (tc.B - 0x2A) * k));
+                outlinePen = new Pen(new SolidColorBrush(o), 1 + 0.5 * ts); outlinePen.Freeze();
+            }
 
             if (maxDepth > 0.05)
             {
-                var g = new StreamGeometry();
-                using (var c = g.Open())
+                // Контур края = контур острова (скругление угла + прямой низ, центр линии обводки) + глубина.
+                // Скругление: центр (r, 1 − r) в координатах края, радиус r − 0,5 — ровно как у IslandOutline.
+                var pts = _pts; var inner = _inner;
+                double rho = Math.Max(0, r - 0.5);
+                int n = 0;
+                // заливка заходит внутрь острова на 2,5 px ПО НОРМАЛИ к контуру: перекрывает его обводку и рамку
+                // подсветки плашки (1,5 px). Раньше сдвиг был только вниз — на крутой части дуги рамка проступала второй линией
+                const double inset = 2.5;
+                void Add(double x, double baseY, double depth, double nx, double ny)
                 {
-                    c.BeginFigure(new Point(r - 2, -1), true, true);
-                    var pts = _pts;
-                    for (int i = 0; i < Samples; i++) pts[i] = new Point(r + i / (double)(Samples - 1) * span, _depth[i] - 0.5);
-                    // гладкая кривая через точки (Катмулл-Ром → Безье); когда шипы — острые ломаные
-                    for (int i = 0; i < pts.Length - 1; i++)
-                    {
-                        if (_bristle > 0.3) { c.LineTo(pts[i + 1], true, true); continue; }
-                        var p0 = pts[Math.Max(0, i - 1)]; var p1 = pts[i]; var p2 = pts[i + 1]; var p3 = pts[Math.Min(pts.Length - 1, i + 2)];
-                        var c1 = new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6);
-                        var c2 = new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6);
-                        c.BezierTo(c1, c2, p2, true, true);
-                    }
-                    c.LineTo(new Point(w - r + 2, -1), true, true);
+                    pts[n] = new Point(x, baseY + depth);
+                    inner[n] = new Point(x - nx * inset, baseY - ny * inset);
+                    n++;
                 }
-                g.Freeze();
-                dc.DrawGeometry(Fill, null, g);
-
-                // обводка по изгибу — тем же цветом, что и контур острова: «жидкость» видна и на чёрном экране
-                var outline = new StreamGeometry();
-                using (var c = outline.Open())
+                for (int j = 0; j < CornerSamples; j++)
                 {
-                    c.BeginFigure(new Point(r - 2, -0.5), false, false);
-                    c.LineTo(_pts[0], true, true);
-                    for (int i = 0; i < _pts.Length - 1; i++)
+                    double th = j / (double)CornerSamples * Math.PI / 2;
+                    Add(r - rho * Math.Cos(th), 1 - r + rho * Math.Sin(th), _cornerL[j], -Math.Cos(th), Math.Sin(th));
+                }
+                for (int i = 0; i < Samples; i++) Add(r + i / (double)(Samples - 1) * span, 0.5, _depth[i], 0, 1);
+                for (int j = CornerSamples - 1; j >= 0; j--)
+                {
+                    double th = j / (double)CornerSamples * Math.PI / 2;
+                    Add(w - r + rho * Math.Cos(th), 1 - r + rho * Math.Sin(th), _cornerR[j], Math.Cos(th), Math.Sin(th));
+                }
+
+                void Curve(StreamGeometryContext c)
+                {
+                    // гладкая кривая через точки (Катмулл-Ром → Безье); когда шипы — острые ломаные
+                    for (int i = 0; i < n - 1; i++)
                     {
-                        if (_bristle > 0.3) { c.LineTo(_pts[i + 1], true, true); continue; }
-                        var p0 = _pts[Math.Max(0, i - 1)]; var p1 = _pts[i]; var p2 = _pts[i + 1]; var p3 = _pts[Math.Min(_pts.Length - 1, i + 2)];
+                        bool middle = i >= CornerSamples && i < CornerSamples + Samples - 1;
+                        if (_bristle > 0.3 && middle) { c.LineTo(pts[i + 1], true, true); continue; }
+                        var p0 = pts[Math.Max(0, i - 1)]; var p1 = pts[i]; var p2 = pts[i + 1]; var p3 = pts[Math.Min(n - 1, i + 2)];
                         c.BezierTo(new Point(p1.X + (p2.X - p0.X) / 6, p1.Y + (p2.Y - p0.Y) / 6),
                                    new Point(p2.X - (p3.X - p1.X) / 6, p2.Y - (p3.Y - p1.Y) / 6), p2, true, true);
                     }
-                    c.LineTo(new Point(w - r + 2, -0.5), true, true);
+                }
+
+                // заливка: по контуру края, обратно — чуть внутри контура острова
+                var g = new StreamGeometry();
+                using (var c = g.Open())
+                {
+                    c.BeginFigure(pts[0], true, true);
+                    Curve(c);
+                    for (int i = n - 1; i >= 0; i--) c.LineTo(inner[i], true, true);
+                }
+                g.Freeze();
+                dc.DrawGeometry(fill, null, g);
+
+                // обводка по изгибу — тем же цветом, что и контур острова; там, где глубины нет, она совпадает
+                // с контуром острова точка в точку, поэтому стыка не видно
+                var outline = new StreamGeometry();
+                using (var c = outline.Open())
+                {
+                    c.BeginFigure(pts[0], false, false);
+                    Curve(c);
                 }
                 outline.Freeze();
-                dc.PushTransform(new TranslateTransform(0, 1)); // ровно на линии нижнего контура острова, без двойной полоски
-                dc.DrawGeometry(null, OutlinePen, outline);
-                dc.Pop();
+                dc.DrawGeometry(null, outlinePen, outline);
 
                 // кончики всплесков светятся цветом обложки
                 double musicLevel = 0;
@@ -219,8 +293,8 @@ namespace Isle.Helpers
             foreach (var d in _drops)
             {
                 var a = (byte)(255 * Math.Clamp(d.Life, 0, 1));
-                var fill = Fill is SolidColorBrush sb ? new SolidColorBrush(Color.FromArgb(a, sb.Color.R, sb.Color.G, sb.Color.B)) : Fill;
-                dc.DrawEllipse(fill, new Pen(new SolidColorBrush(Color.FromArgb((byte)(a / 3), 255, 255, 255)), 0.6), new Point(d.X, d.Y), d.R, d.R * 1.15);
+                var dropFill = fill is SolidColorBrush sb ? new SolidColorBrush(Color.FromArgb(a, sb.Color.R, sb.Color.G, sb.Color.B)) : Fill;
+                dc.DrawEllipse(dropFill, new Pen(new SolidColorBrush(Color.FromArgb((byte)(a / 3), 255, 255, 255)), 0.6), new Point(d.X, d.Y), d.R, d.R * 1.15);
             }
         }
     }

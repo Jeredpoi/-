@@ -54,6 +54,9 @@ namespace Isle.Services
 
         public static bool Open(string what) => Launch(what, null);
 
+        /// <summary>Известное простое название («блокнот», «ютуб») — открывается без подтверждения.</summary>
+        public static bool IsAlias(string what) => Aliases.ContainsKey((what ?? "").Trim());
+
         /// <summary>Запуск с аргументами (например, OBS с --startrecording).</summary>
         public static bool Launch(string what, string extraArgs)
         {

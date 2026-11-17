@@ -502,8 +502,8 @@ namespace Isle.Tests
             var rnd = new Random(1);
             for (int i = 0; i < 200; i++)
             {
-                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10 }); // быстро и плотно
-                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9 }); // медленно
+                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10, 15, 17, 18, 19 }); // быстро и плотно
+                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9, 14, 20 }); // медленно
                 Assert.NotEqual(3, Isle.Helpers.Character.PickDance(110, 0.4, 3, rnd));                      // не повторяет текущий
             }
         }
@@ -544,6 +544,12 @@ namespace Isle.Tests
         [InlineData("telegram", false)]
         [InlineData("https://youtube.com", false)]
         [InlineData(@"C:\Users\me\Documents", false)]
+        [InlineData(@"C:\Users\me\Pictures\cat.png", false)]
+        [InlineData("file:///C:/Users/u/Downloads/x.exe", true)]
+        [InlineData(@"C:\x\evil.cpl", true)]
+        [InlineData("evil.scr", true)]
+        [InlineData("search-ms:query=x", true)]
+        [InlineData("калькулятор", false)]
         public void OpenOfScriptNeedsConfirm(string arg, bool confirm) =>
             Assert.Equal(confirm, new AiAction { Name = "open", Arg = arg }.NeedsConfirm);
     }
@@ -563,6 +569,7 @@ namespace Isle.Tests
         [InlineData("2м", 120)]
         [InlineData("1ч 20м", 4800)]
         [InlineData("1.5ч", 5400)]
+        [InlineData("4h40m", 16800)] // так присылает ИИ: [[timer: 4h40m]]
         public void Parses(string text, int seconds) => Assert.Equal(TimeSpan.FromSeconds(seconds), TimerService.ParseDuration(text));
 
         [Theory]
@@ -731,6 +738,46 @@ namespace Isle.Tests
                     Assert.Equal(px[(y * w + x) * 4], now[(y * w + x) * 4]);
             live.Cancel();
             Assert.Equal(px, Now());
+        }
+    }
+}
+
+namespace Isle.Tests
+{
+    public class PatchMosaicTests
+    {
+        [Fact]
+        public void SmallFrameGetsSmallBlocksAndBigFrameGetsBigOnes()
+        {
+            int small = Mosaic.BlockForPatch(300, 40);   // одна строка сообщения
+            int big = Mosaic.BlockForPatch(1600, 900);   // большой блок
+            Assert.InRange(small, 6, 8);
+            Assert.True(big >= small * 3);
+            Assert.InRange(big, 6, 24);
+        }
+
+        [Fact]
+        public void CellsAverageEachBlockAndCoverTheWholeFrame()
+        {
+            int w = 40, h = 20;
+            var px = new byte[w * h * 4];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = (y * w + x) * 4;
+                    px[i] = (byte)(x < 20 ? 10 : 200); px[i + 1] = 50; px[i + 2] = 90; px[i + 3] = 255;
+                }
+            var cells = Mosaic.Cells(px, w, h, 0, 0, 40, 20, 10, out int cw, out int ch);
+            Assert.Equal(4, cw);
+            Assert.Equal(2, ch);
+            Assert.Equal(10, cells[0]);                 // левая половина — тёмная
+            Assert.Equal(200, cells[(0 * cw + 3) * 4]); // правая — светлая
+            Assert.Equal(50, cells[1]);
+            Assert.Equal(255, cells[3]);
+            // неровный край: 25×15 при квадрате 10 → 3×2 квадрата, последний ряд частичный
+            Mosaic.Cells(px, w, h, 15, 5, 25, 15, 10, out cw, out ch);
+            Assert.Equal(3, cw);
+            Assert.Equal(2, ch);
         }
     }
 }

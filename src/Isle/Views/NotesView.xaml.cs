@@ -19,6 +19,7 @@ namespace Isle.Views
         private Note _current;
         private bool _loading;
         private DateTime _deleteArmed = DateTime.MinValue;
+        private Note _armedNote; // подтверждение удаления — только для той заметки, где нажали первый раз
         private readonly DispatcherTimer _save = new() { Interval = TimeSpan.FromMilliseconds(600) };
         private readonly DispatcherTimer _disarm = new() { Interval = TimeSpan.FromSeconds(3) };
 
@@ -133,14 +134,16 @@ namespace Isle.Views
         {
             if (_current == null) return;
             // удаление в два нажатия, чтобы не стереть заметку случайно
-            if (!string.IsNullOrWhiteSpace(_current.Text) && (DateTime.Now - _deleteArmed).TotalSeconds > 3)
+            if (!string.IsNullOrWhiteSpace(_current.Text) && (_armedNote != _current || (DateTime.Now - _deleteArmed).TotalSeconds > 3))
             {
                 _deleteArmed = DateTime.Now;
+                _armedNote = _current;
                 Saved.Text = "Нажми ещё раз, чтобы удалить";
                 _disarm.Stop(); _disarm.Start(); // через 3 с подсказка уходит — как и сама возможность удалить
                 return;
             }
             _deleteArmed = DateTime.MinValue;
+            _armedNote = null;
             _data.Notes.Remove(_current);
             if (_data.Notes.Count == 0) _data.Notes.Add(new Note());
             Open(_data.Notes[0]);

@@ -17,7 +17,12 @@ namespace Isle.Services
         private static readonly ConcurrentQueue<string> Queue = new();
         private static readonly Timer Flusher = new(_ => Flush(), null, 400, 400);
         private static readonly object FileLock = new();
-        private const long MaxBytes = 8 * 1024 * 1024;
+        private static long MaxBytes => Verbose ? 32L * 1024 * 1024 : 8L * 1024 * 1024;
+
+        /// <summary>Подробный (отладочный) журнал: пишет и строки DEBUG. Включается в Настройках → Обновления.</summary>
+        public static volatile bool Verbose = true;
+        /// <summary>Отладочная строка — пишется, только когда включён подробный журнал.</summary>
+        public static void Debug(string area, string text) { if (Verbose) Write("DEBUG", area, text); }
 
         public static string PathNow => Path.Combine(Storage.Dir, "isle.log");
 

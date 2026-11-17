@@ -193,8 +193,16 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Открывать при наведении"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Если выключить — остров открывается кликом или Ctrl+Alt+Space."/></StackPanel>
+                                <StackPanel Margin="0,0,70,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Рисовать пометки на снимке видеокартой"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Быстрее, но на части компьютеров при рисовании появляются чёрные квадраты. Если они есть — выключи."/>
+                                </StackPanel>
+                                <CheckBox x:Name="CaptureSoft" HorizontalAlignment="Right" Click="OnToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Открывать у края экрана"/>
+                                    <TextBlock x:Name="HoverNote" Style="{StaticResource RowNote}" Text="Подведи курсор к самому верху экрана над чёлкой. Просто водить по чёлке можно — она не откроется. Если выключить — только кликом или Ctrl+Alt+Space."/></StackPanel>
                                 <CheckBox x:Name="Hover" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
@@ -409,13 +417,13 @@
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,12">
                             <TextBlock Style="{StaticResource RowTitle}" Text="Адрес API и модель"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Кнопка сервиса выше подставляет их сама. «Список» показывает все модели, доступные твоему ключу."/>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Кнопка сервиса выше подставляет их сама. «Модели» показывает все модели, доступные твоему ключу."/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBox x:Name="AiBase" Tag="https://…/v1" LostFocus="OnAiFieldsChanged"/>
                                 <TextBox x:Name="AiModel" Grid.Column="1" Margin="8,0,0,0" Tag="модель" LostFocus="OnAiFieldsChanged"/>
                                 <Button x:Name="ModelsBtn" Grid.Column="2" Style="{StaticResource SFlat}" Margin="8,0,0,0" Click="OnModels">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Список"/><h:Icon Kind="Next" Width="11" Height="11" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform></h:Icon></StackPanel>
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Модели"/><h:Icon Kind="Next" Width="11" Height="11" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform></h:Icon></StackPanel>
                                 </Button>
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
@@ -431,7 +439,7 @@
                     <TextBlock Style="{StaticResource H1}" Text="Голос в текст"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowNote}" Margin="0" Text="Нажми Ctrl+Alt+D, скажи и нажми ещё раз: текст окажется в буфере. Запись уходит в выбранный сервис распознавания (Whisper)."/>
+                            <TextBlock x:Name="VoiceNote" Style="{StaticResource RowNote}" Margin="0" Text="Нажми Ctrl+Alt+D, скажи и нажми ещё раз: текст окажется в буфере. Запись уходит в выбранный сервис распознавания (Whisper)."/>
                             <WrapPanel Margin="0,12,0,0">
                                 <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpGroq" Click="OnVoicePreset" Tag="groq">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="Groq · Whisper"/><Border Background="#1F2A22" CornerRadius="6" Padding="5,1" Margin="8,0,0,0"><TextBlock Text="бесплатно" FontSize="10" Foreground="#8BD49E"/></Border></StackPanel>
@@ -448,8 +456,8 @@
                             <TextBlock Style="{StaticResource RowTitle}" Text="Адрес API и модель"/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox x:Name="VoiceBase" LostFocus="OnVoiceFields"/>
-                                <TextBox x:Name="VoiceModel" Grid.Column="1" Margin="8,0,0,0" LostFocus="OnVoiceFields"/>
+                                <TextBox x:Name="VoiceBase" Tag="https://…/v1" LostFocus="OnVoiceFields"/>
+                                <TextBox x:Name="VoiceModel" Grid.Column="1" Margin="8,0,0,0" Tag="модель" LostFocus="OnVoiceFields"/>
                                 <Button x:Name="VoiceModelsBtn" Grid.Column="2" Style="{StaticResource SFlat}" Content="Модели" Margin="8,0,0,0" Click="OnVoiceModels"
                                         ToolTip="Только модели «голос → текст», от дешёвых к дорогим"/>
                             </Grid>
@@ -512,11 +520,19 @@
                                     <TextBlock Style="{StaticResource RowNote}" Text="Пока OBS записывает или ведёт трансляцию, в чёлке горит REC или LIVE, а сохранённая запись приходит карточкой."/></StackPanel>
                                 <CheckBox x:Name="ObsStatus" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnToggle"/>
                             </Grid>
+                            <Grid Margin="0,14,0,4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0"><TextBlock Style="{StaticResource RowTitle}" Text="Папка для записей"/>
+                                    <TextBlock x:Name="ObsFolder" Style="{StaticResource RowNote}" TextTrimming="CharacterEllipsis"/></StackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Выбрать…" VerticalAlignment="Center" Click="OnObsFolder"/>
+                                <Button Grid.Column="2" Style="{StaticResource SFlat}" Content="Как в OBS" Margin="8,0,0,0" VerticalAlignment="Center" Click="OnObsFolderReset"/>
+                            </Grid>
                             <TextBlock Style="{StaticResource RowNote}" Text="Порт по умолчанию 4455. Пароль — тот, что показан в настройках сервера WebSocket (если включена аутентификация)."/>
-                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                <Button Style="{StaticResource Primary}" Content="Проверить подключение" Click="OnObsTest" Padding="16,8"/>
-                                <TextBlock x:Name="ObsResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                            </StackPanel>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <Button Style="{StaticResource Primary}" Content="Проверить подключение" Click="OnObsTest" Padding="16,8" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" x:Name="ObsResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -554,6 +570,12 @@
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Уведомления других приложений"/><TextBlock x:Name="NotifStatus" Style="{StaticResource RowNote}"/></StackPanel>
                                 <CheckBox x:Name="Notif" HorizontalAlignment="Right" Click="OnToggle"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Уведомления только в острове"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Isle убирает плашку Windows справа снизу — уведомление видно только в чёлке. Оно пропадает и из центра уведомлений Windows."/></StackPanel>
+                                <CheckBox x:Name="NotifOnly" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Статус VPN и страна"/><CheckBox x:Name="Vpn" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
@@ -625,6 +647,18 @@
                                     <TextBlock Style="{StaticResource RowNote}" Text="Список изменений и установщики на GitHub"/></StackPanel>
                                 <Button Style="{StaticResource SFlat}" Content="Открыть" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnReleases"/>
                             </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Приветствие"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="То, что показывается при первом запуске: возможности Isle, точная скорость Steam и PrintScreen"/></StackPanel>
+                                <Button Style="{StaticResource SFlat}" Content="Показать" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnShowWelcome"/>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Подробный журнал (отладка)"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Пишет всё: кадры анимаций, зависания, процессор и память, мониторы, ошибки. Без буфера обмена, клавиш и паролей. Журнал — %AppData%\Isle\isle.log"/></StackPanel>
+                                <CheckBox x:Name="DebugLog" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnToggle"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -632,7 +666,7 @@
                 <!-- ============ КЛАВИШИ ============ -->
                 <StackPanel x:Name="SecKeys" Visibility="Collapsed">
                     <TextBlock Style="{StaticResource H1}" Text="Клавиши"/>
-                    <TextBlock Style="{StaticResource RowNote}" Margin="0,0,0,10" Text="Нажми на сочетание, затем введи новое. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если глобальную комбинацию заняла Windows или другое приложение."/>
+                    <TextBlock Style="{StaticResource RowNote}" Margin="0,0,0,10" Text="Нажми на сочетание и введи новое; ↺ — вернуть как было, ✕ — убрать совсем. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если глобальную комбинацию заняла Windows или другое приложение."/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,8" x:Name="KeysList"/>
                     </Border>

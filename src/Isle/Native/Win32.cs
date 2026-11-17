@@ -18,6 +18,7 @@ namespace Isle.Native
         public const int VK_LWIN = 0x5B;
 
         [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
@@ -207,11 +208,116 @@ namespace Isle.Native
         private static readonly System.Collections.Generic.Dictionary<string, System.Windows.Media.ImageSource> IconCache = new();
 
         /// <summary>Настоящая иконка файла/папки/ярлыка из оболочки Windows.</summary>
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHDefExtractIcon(string iconFile, int index, uint flags, out IntPtr large, out IntPtr small, uint size);
+
+        [ComImport, Guid("00021401-0000-0000-C000-000000000046")] private class ShellLinkCo { }
+
+        [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("000214F9-0000-0000-C000-000000000046")]
+        private interface IShellLinkW
+        {
+            void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder file, int cch, IntPtr fd, uint flags);
+            void GetIDList(out IntPtr ppidl);
+            void SetIDList(IntPtr pidl);
+            void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder name, int cch);
+            void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+            void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder dir, int cch);
+            void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string dir);
+            void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder args, int cch);
+            void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string args);
+            void GetHotkey(out short hotkey);
+            void SetHotkey(short hotkey);
+            void GetShowCmd(out int cmd);
+            void SetShowCmd(int cmd);
+            void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder iconPath, int cch, out int index);
+            void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath, int index);
+            void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string rel, uint reserved);
+            void Resolve(IntPtr hwnd, uint flags);
+            void SetPath([MarshalAs(UnmanagedType.LPWStr)] string file);
+        }
+
+        /// <summary>
+        /// Откуда брать значок ярлыка без стрелки: (файл со значком, номер) или файл, на который ярлык ведёт.
+        /// .lnk — через IShellLink, .url — из IconFile/IconIndex (так у ярлыков Steam и сайтов).
+        /// </summary>
+        private static (string iconFile, int index, string target) ResolveShortcut(string path)
+        {
+            try
+            {
+                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                if (ext == ".url")
+                {
+                    string file = null; int idx = 0;
+                    foreach (var line in System.IO.File.ReadLines(path))
+                    {
+                        if (line.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase)) file = line.Substring(9).Trim();
+                        else if (line.StartsWith("IconIndex=", StringComparison.OrdinalIgnoreCase)) int.TryParse(line.Substring(10).Trim(), out idx);
+                    }
+                    return (file, idx, null);
+                }
+                if (ext != ".lnk") return (null, 0, null);
+                var link = (IShellLinkW)new ShellLinkCo();
+                ((System.Runtime.InteropServices.ComTypes.IPersistFile)link).Load(path, 0);
+                var icon = new System.Text.StringBuilder(520);
+                link.GetIconLocation(icon, icon.Capacity, out int index);
+                var target = new System.Text.StringBuilder(520);
+                link.GetPath(target, target.Capacity, IntPtr.Zero, 0);
+                Marshal.ReleaseComObject(link);
+                return (icon.Length > 0 ? icon.ToString() : null, index, target.Length > 0 ? target.ToString() : null);
+            }
+            catch { return (null, 0, null); }
+        }
+
+        private static System.Windows.Media.ImageSource FromHIcon(IntPtr h)
+        {
+            if (h == IntPtr.Zero) return null;
+            try
+            {
+                var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(h, System.Windows.Int32Rect.Empty,
+                    System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                src.Freeze();
+                return src;
+            }
+            finally { DestroyIcon(h); }
+        }
+
+        /// <summary>Значок из файла (exe, dll, ico) размером 48 px — чётче, чем 32 px из SHGetFileInfo.</summary>
+        private static System.Windows.Media.ImageSource ExtractIcon(string file, int index)
+        {
+            if (string.IsNullOrEmpty(file)) return null;
+            file = Environment.ExpandEnvironmentVariables(file);
+            if (!System.IO.File.Exists(file)) return null;
+            if (SHDefExtractIcon(file, index, 0, out var large, out var small, 48 | (16 << 16)) != 0) return null;
+            if (small != IntPtr.Zero) DestroyIcon(small);
+            return FromHIcon(large);
+        }
+
+        private static System.Windows.Media.ImageSource FileInfoIcon(string path)
+        {
+            var info = new SHFILEINFO();
+            SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<SHFILEINFO>(), 0x100 | 0x0); // SHGFI_ICON | SHGFI_LARGEICON
+            return FromHIcon(info.hIcon);
+        }
+
+        /// <summary>Значок файла, программы или ярлыка. У ярлыков — значок самой программы, без стрелки.</summary>
         public static System.Windows.Media.ImageSource ShellIcon(string path)
         {
             if (string.IsNullOrEmpty(path)) return null;
             if (IconCache.TryGetValue(path, out var cached)) return cached;
             System.Windows.Media.ImageSource result = null;
+            try
+            {
+                var (iconFile, index, target) = ResolveShortcut(path);
+                result = ExtractIcon(iconFile, index);
+                if (result == null && !string.IsNullOrEmpty(target))
+                {
+                    if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) result = ExtractIcon(target, 0);
+                    if (result == null && (System.IO.File.Exists(target) || System.IO.Directory.Exists(target))) result = FileInfoIcon(target);
+                }
+                if (result == null && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) result = ExtractIcon(path, 0);
+            }
+            catch { }
+            if (result != null) { IconCache[path] = result; return result; }
             try
             {
                 var info = new SHFILEINFO();
@@ -312,6 +418,23 @@ namespace Isle.Native
                 var h = GetClipboardOwner();
                 if (h == IntPtr.Zero) return "";
                 GetWindowThreadProcessId(h, out uint pid);
+                using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                return p.ProcessName;
+            }
+            catch { return ""; }
+        }
+
+        public delegate void WinEventProc(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
+        [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr hmod, WinEventProc proc, uint pid, uint tid, uint flags);
+        public const uint EVENT_SYSTEM_FOREGROUND = 0x0003, WINEVENT_OUTOFCONTEXT = 0x0000;
+
+        /// <summary>Имя процесса, которому принадлежит окно (пусто — не удалось).</summary>
+        public static string ProcessNameOf(IntPtr hwnd)
+        {
+            try
+            {
+                if (hwnd == IntPtr.Zero) return "";
+                GetWindowThreadProcessId(hwnd, out uint pid);
                 using var p = System.Diagnostics.Process.GetProcessById((int)pid);
                 return p.ProcessName;
             }

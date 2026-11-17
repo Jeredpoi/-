@@ -16,11 +16,15 @@ namespace Isle
         private TrayIcon _tray;
         private bool _started;
 
-        /// <summary>Режим съёмки для README (--readme-shots папка): без диалогов, после съёмки выходим.</summary>
+        /// <summary>Стенд проверки снимков (--bench папка): сценарий настоящей мышью, после него выходим.</summary>
+        private string _benchDir;
+        /// <summary>Режим съёмки для README (--readme-shots папка).</summary>
         private string _shotsDir;
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            int bi = Array.IndexOf(e.Args, "--bench");
+            if (bi >= 0 && bi + 1 < e.Args.Length) _benchDir = Path.GetFullPath(e.Args[bi + 1]);
             int si = Array.IndexOf(e.Args, "--readme-shots");
             if (si >= 0 && si + 1 < e.Args.Length) _shotsDir = Path.GetFullPath(e.Args[si + 1]);
             _single = new Mutex(true, MutexName, out bool first);
@@ -39,7 +43,16 @@ namespace Isle
                 return;
             }
 
-            if (_shotsDir == null && SwitchToInstalledCopy()) { Shutdown(); return; }
+            // «покажись» от второго запуска слушаем сразу: пока первый ещё грузится, второй иначе решал, что Isle «не отвечает»
+            _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            var t = new Thread(() =>
+            {
+                while (_showEvent.WaitOne())
+                    Dispatcher.InvokeAsync(() => AppHost.Window?.BringUp());
+            }) { IsBackground = true, Name = "Isle.ShowListener" };
+            t.Start();
+
+            if (_benchDir == null && _shotsDir == null && SwitchToInstalledCopy()) { Shutdown(); return; }
 
             try { SystemControls.RepairAutostartPath(); }
             catch (Exception ex) { Log("autostart repair: " + ex.Message); }
@@ -47,6 +60,7 @@ namespace Isle
             DispatcherUnhandledException += OnError;
             AppDomain.CurrentDomain.UnhandledException += (_, a) => { Log(a.ExceptionObject?.ToString()); Journal.Flush(); };
             System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, a) => { Journal.Error("task", a.Exception); a.SetObserved(); };
+            Journal.Verbose = AppSettings.Current.DebugLog;
             LogSession();
             base.OnStartup(e);
 
@@ -58,6 +72,9 @@ namespace Isle
                 w.Show();
                 Trace("окно показано: " + w.Left + "," + w.Top + " " + w.Width + "×" + w.Height);
                 _started = true;
+                try { DebugProbe.Start(); } catch (Exception ex) { Log("debug probe: " + ex.Message); }
+                Helpers.MemoryTrim.Soon("запуск", 25000); // после запуска остаётся мусор загрузки модулей
+                if (_benchDir != null) _ = Bench.RunAsync(w, _benchDir);
                 if (_shotsDir != null) _ = ReadmeShots.RunAsync(w, _shotsDir);
             }
             catch (Exception ex)
@@ -66,15 +83,8 @@ namespace Isle
                 return;
             }
 
-            try { _tray = new TrayIcon(); } catch (Exception ex) { Log("tray: " + ex); }
+            try { _tray = new TrayIcon(); AppHost.Tray = _tray; } catch (Exception ex) { Log("tray: " + ex); }
 
-            _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-            var t = new Thread(() =>
-            {
-                while (_showEvent.WaitOne())
-                    Dispatcher.InvokeAsync(() => AppHost.Window?.BringUp());
-            }) { IsBackground = true, Name = "Isle.ShowListener" };
-            t.Start();
         }
 
         /// <summary>Шапка сессии в подробном журнале: версия, система, экраны, язык, настройки (без ключей).</summary>
@@ -118,12 +128,6 @@ namespace Isle
         {
             Log("FATAL: " + ex);
             Trace("ОШИБКА ЗАПУСКА: " + ex.Message);
-            if (_shotsDir != null)
-            {
-                try { Directory.CreateDirectory(_shotsDir); File.WriteAllText(Path.Combine(_shotsDir, "error.txt"), ex.ToString()); } catch { }
-                Shutdown();
-                return;
-            }
             MessageBox.Show(
                 "Isle не смог запуститься.\n\n" + ex.GetType().Name + ": " + ex.Message +
                 "\n\nПодробности записаны в " + Path.Combine(Storage.Dir, "errors.log"),
