@@ -268,6 +268,8 @@ namespace Isle
             {
                 UpdateClip();
                 Edge.Margin = new Thickness(24, Math.Max(0, Island.ActualHeight - 1), 24, 0);
+                Snow.Margin = new Thickness(24, Island.ActualHeight, 24, 0);
+                Snow.SourceWidth = Island.ActualWidth;
                 Edge.CornerRadius = Island.CornerRadius.BottomLeft;
             };
             // Подсказку «положу на полку» показываем только у свёрнутой чёлки: в открытой файл можно бросить на нужное место (ярлыки, полка)
@@ -1457,6 +1459,21 @@ namespace Isle
         }
 
         /// <summary>Акцент, прозрачность и персонаж из настроек.</summary>
+        /// <summary>Снег из-под чёлки: зимой (1 декабря — 14 января), когда за окном снег, или всегда — по настройке.</summary>
+        private void UpdateSnow(bool weatherSnow)
+        {
+            var mode = AppSettings.Current.WinterSnow ?? "auto";
+            var d = DateTime.Today;
+            bool season = d.Month == 12 || (d.Month == 1 && d.Day <= 14);
+            bool on = mode == "on" || (mode == "auto" && (season || weatherSnow));
+            // над раскрытой панелью и в спрятанной чёлке снег не нужен
+            bool active = on && State != IslandState.Expanded && !_oledHidden && Scaler.Visibility == Visibility.Visible;
+            if (Snow.Active == active) return;
+            Snow.Active = active;
+            Snow.Sync();
+            Journal.Debug("island", "снег из-под чёлки: " + (active ? "идёт" : "нет") + " (режим " + mode + (season ? ", зима" : "") + (weatherSnow ? ", снег за окном" : "") + ")");
+        }
+
         public void ApplyAppearance()
         {
             var s = AppSettings.Current;
@@ -2780,6 +2797,9 @@ namespace Isle
             Edge.Away = idle > TimeSpan.FromMinutes(2);
             Edge.Raining = AppHost.Weather != null && (AppHost.Weather.Code >= 51 && AppHost.Weather.Code <= 67 || AppHost.Weather.Code >= 80);
 
+            // снег — до раннего выхода: спрятали чёлку — он должен остановиться
+            var wc = AppHost.Weather?.Code ?? 0;
+            UpdateSnow(wc is >= 71 and <= 77 or 85 or 86);
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
             UpdateMiniLive();
             AnimateDownloadRing(_frameDt);

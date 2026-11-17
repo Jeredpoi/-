@@ -147,6 +147,8 @@ namespace Isle.Services
         public List<string> HiddenTabs { get; set; } = new();
         /// <summary>Порт странички для телефона (постоянный — разрешение брандмауэра не теряется).</summary>
         public int PhonePort { get; set; }
+        /// <summary>Снег из-под чёлки: «auto» — с 1 декабря по 14 января и когда за окном снег, «on» — всегда, «off» — никогда.</summary>
+        public string WinterSnow { get; set; } = "auto";
         public bool FirstRunDone { get; set; } = false;
         /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
         public bool WelcomeShown { get; set; }
