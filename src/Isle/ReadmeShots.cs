@@ -68,7 +68,13 @@ namespace Isle
                 Save(island, Path.Combine(dir, "toast.png"), 40);
                 await Task.Delay(5500);
 
-                foreach (var tab in new[] { "home", "chat", "notes", "weather", "text", "controls" })
+                // буфер: записи за несколько дней (картинки и тексты), чтобы видно было разделители по дням
+                SeedClipboard();
+                await PhoneShotsAsync(w, island, dir);
+                await SnowShotAsync(w, dir);
+                await SettingsShotAsync(dir);
+
+                foreach (var tab in new[] { "home", "clip", "chat", "notes", "weather", "text", "controls" })
                 {
                     w.Expand(tab);
                     w.SelectTab(tab);
@@ -93,13 +99,150 @@ namespace Isle
             }
         }
 
+        private static void SeedClipboard()
+        {
+            Directory.CreateDirectory(ClipboardService.ImagesDir);
+            string Png(string name, Color a, Color b)
+            {
+                var bmp = new RenderTargetBitmap(320, 180, 96, 96, PixelFormats.Pbgra32);
+                var d = new DrawingVisual(); using (var dc = d.RenderOpen()) dc.DrawRectangle(new LinearGradientBrush(a, b, 35), null, new Rect(0, 0, 320, 180));
+                bmp.Render(d);
+                WritePng(bmp, Path.Combine(ClipboardService.ImagesDir, name));
+                return name;
+            }
+            var now = DateTime.Now;
+            var items = new[]
+            {
+                new ClipItem { Kind = ClipKind.Text, Text = "Встреча перенесена на 19:30, адрес тот же", Source = "Telegram", Time = now.AddMinutes(-2) },
+                new ClipItem { Kind = ClipKind.Image, Text = "Изображение 320×180", ImageFile = Png("r1.png", Color.FromRgb(0xF9, 0x73, 0x16), Color.FromRgb(0xDB, 0x27, 0x77)), Source = "chrome", Time = now.AddMinutes(-15) },
+                new ClipItem { Kind = ClipKind.Link, Text = "https://github.com/Jeredpoi/-", Source = "chrome", Time = now.AddMinutes(-48) },
+                new ClipItem { Kind = ClipKind.Image, Text = "Изображение 320×180", ImageFile = Png("r2.png", Color.FromRgb(0x38, 0xBD, 0xF8), Color.FromRgb(0x63, 0x66, 0xF1)), Source = "Discord", Time = now.AddDays(-1).AddHours(-2) },
+                new ClipItem { Kind = ClipKind.Text, Text = "+7 999 123-45-67", Source = "Telegram", Time = now.AddDays(-1).AddHours(-5) },
+                new ClipItem { Kind = ClipKind.Text, Text = "git commit -m \"готово\"", Source = "Terminal", Time = now.AddDays(-3) },
+            };
+            foreach (var it in items) it.Kind = it.Kind == ClipKind.Text ? ClipboardService.Classify(it.Text, "") : it.Kind;
+            foreach (var it in items) AppHost.Clipboard.Items.Add(it);
+        }
+
+        /// <summary>Вкладка «Телефон»: подключение (анимация QR), пришедшие фото и текст, уведомления телефона.</summary>
+        private static async Task PhoneShotsAsync(MainWindow w, FrameworkElement island, string dir)
+        {
+            w.Expand("phone"); w.SelectTab("phone");
+            await Task.Delay(2000);
+            var addrs = PhoneLink.Addresses();
+            var url = PhoneLink.Url(addrs.Count > 0 ? addrs[0].ip : "127.0.0.1");
+            var view = FindChild<Views.PhoneView>(island);
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            // ждёт телефон: оранжевая рамка дышит — дадим статусу «нет телефона» установиться
+            await Task.Delay(1500);
+            Save(island, Path.Combine(dir, "phone-wait.png"), 28);
+            // телефон открывает страничку — снимаем анимацию подключения по кадрам
+            var card = view?.FindName("QrHost") as FrameworkElement;
+            var qrDir = Path.Combine(dir, "qr"); Directory.CreateDirectory(qrDir);
+            var get = http.GetAsync(url);
+            int frame = 0;
+            var until = DateTime.Now.AddSeconds(3.6);
+            while (DateTime.Now < until && card != null)
+            {
+                await Task.Delay(40);
+                Save(card, Path.Combine(qrDir, "frame_" + (frame++).ToString("0000") + ".png"), 16, 1.5);
+            }
+            await get;
+            // фото и текст «с телефона», файл «на телефон»
+            var bmp = new RenderTargetBitmap(640, 480, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual(); using (var dc = dv.RenderOpen()) dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0xFB, 0x92, 0x3C), Color.FromRgb(0xDB, 0x27, 0x77), 40), null, new Rect(0, 0, 640, 480));
+            bmp.Render(dv);
+            var ms = new MemoryStream(); var je = new JpegBitmapEncoder(); je.Frames.Add(BitmapFrame.Create(bmp)); je.Save(ms);
+            await http.PostAsync(url + "up?name=" + Uri.EscapeDataString("IMG_2041.jpg"), new System.Net.Http.ByteArrayContent(ms.ToArray()));
+            await http.PostAsync(url + "text", new System.Net.Http.StringContent("Код из СМС: 4821"));
+            var tmp = Path.Combine(Path.GetTempPath(), "Презентация.pdf"); File.WriteAllText(tmp, "pdf");
+            PhoneLink.Offer(new[] { tmp });
+            await Task.Delay(2500);
+            w.Expand("phone"); w.SelectTab("phone");
+            await Task.Delay(800);
+            Save(island, Path.Combine(dir, "phone.png"), 28);
+            // уведомления телефона (через «Связь с телефоном»)
+            PhoneLink.AddNotice(new PhoneNotice { Title = "Мама", Body = "Ты сегодня приедешь на ужин?", Time = DateTime.Now.AddMinutes(-12) });
+            PhoneLink.AddNotice(new PhoneNotice { Title = "Доставка", Body = "Курьер будет через 10 минут", Time = DateTime.Now.AddMinutes(-3) });
+            PhoneLink.AddNotice(new PhoneNotice { Title = "Аня", Body = "Скинь фотки с выходных 📸", Time = DateTime.Now });
+            if (view?.FindName("PaneNotices") is System.Windows.Controls.Primitives.ToggleButton pn)
+            {
+                pn.IsChecked = true;
+                pn.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            }
+            await Task.Delay(800);
+            Save(island, Path.Combine(dir, "phone-notices.png"), 28);
+            if (view?.FindName("PaneFiles") is System.Windows.Controls.Primitives.ToggleButton pf)
+            {
+                pf.IsChecked = true;
+                pf.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            }
+            w.Collapse();
+            await Task.Delay(1000);
+        }
+
+        /// <summary>Снег из-под свёрнутой чёлки.</summary>
+        private static async Task SnowShotAsync(MainWindow w, string dir)
+        {
+            AppSettings.Current.WinterSnow = "on";
+            await Task.Delay(4500);
+            var root = (FrameworkElement)w.Content;
+            var island = (FrameworkElement)w.FindName("Island");
+            var p = island.TranslatePoint(new Point(0, 0), root);
+            double cx = p.X + island.ActualWidth / 2;
+            SaveRegion(root, new Rect(cx - 210, 0, 420, 190), Path.Combine(dir, "snow.png"));
+            AppSettings.Current.WinterSnow = "auto";
+            await Task.Delay(1500);
+        }
+
+        /// <summary>Настройки → Внешний вид: превью чёлки с вкладками, вкладки (галочки и порядок), снег, режим выреза.</summary>
+        private static async Task SettingsShotAsync(string dir)
+        {
+            var sw = new Views.SettingsWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -4000, Top = -4000, ShowActivated = false };
+            sw.Show();
+            await Task.Delay(1200);
+            if (sw.FindName("NavLook") is System.Windows.Controls.RadioButton nav)
+            {
+                nav.IsChecked = true;
+                nav.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            }
+            await Task.Delay(900);
+            if (sw.Content is FrameworkElement c) Save(c, Path.Combine(dir, "settings-look.png"), 0);
+            sw.Close();
+            await Task.Delay(300);
+        }
+
+        private static T FindChild<T>(DependencyObject d) where T : DependencyObject
+        {
+            if (d is T t) return t;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++)
+                if (FindChild<T>(VisualTreeHelper.GetChild(d, i)) is T r) return r;
+            return null;
+        }
+
+        /// <summary>Снимок прямоугольника из окна (2×) на тёмном фоне.</summary>
+        private static void SaveRegion(FrameworkElement root, Rect r, string path)
+        {
+            root.UpdateLayout();
+            const double scale = 2;
+            var brush = new VisualBrush(root) { Stretch = Stretch.None, Viewbox = r, ViewboxUnits = BrushMappingMode.Absolute, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top };
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+            {
+                dc.DrawRoundedRectangle(new SolidColorBrush(Backdrop), null, new Rect(0, 0, r.Width, r.Height), 18, 18);
+                dc.DrawRectangle(brush, null, new Rect(0, 0, r.Width, r.Height));
+            }
+            var bmp = new RenderTargetBitmap((int)(r.Width * scale), (int)(r.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            bmp.Render(dv);
+            WritePng(bmp, path);
+        }
+
         /// <summary>Снимок элемента в 2× на тёмном фоне с полями.</summary>
-        private static void Save(FrameworkElement el, string path, double pad)
+        private static void Save(FrameworkElement el, string path, double pad, double scale = 2)
         {
             el.UpdateLayout();
             double w = Math.Ceiling(el.ActualWidth), h = Math.Ceiling(el.ActualHeight);
             if (w < 2 || h < 2) return;
-            const double scale = 2;
             // через VisualBrush: RenderTargetBitmap.Render(el) учитывает сдвиг элемента в окне и обрезает его
             var brush = new VisualBrush(el) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top };
             var dv = new DrawingVisual();

@@ -32,7 +32,7 @@ jobs:
           # обложка игры для снимка загрузки — та же картинка, что Steam показывает в библиотеке
           try { Invoke-WebRequest "https://cdn.cloudflare.steamstatic.com/steam/apps/730/library_600x900.jpg" -OutFile "$dir/game.jpg" } catch { Write-Host "нет обложки" }
           $p = Start-Process -FilePath "out/app/Isle.exe" -ArgumentList "--readme-shots", "`"$dir`"" -PassThru
-          if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
+          if (-not $p.WaitForExit(300000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
           Get-ChildItem $dir -Recurse | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }
           if (Test-Path "$dir/error.txt") { Get-Content "$dir/error.txt" }
           $log = Join-Path $env:APPDATA "Isle/errors.log"
@@ -44,6 +44,7 @@ jobs:
           python -m pip install --quiet pillow
           python .github/scripts/make_gif.py shots/clawd shots/clawd-dance.gif
           python .github/scripts/make_gif.py shots/life shots/clawd-life.gif 70
+          python .github/scripts/make_gif.py shots/qr shots/phone-connect.gif 40
 
       - uses: actions/upload-artifact@v4
         with:
@@ -65,6 +66,7 @@ jobs:
           Copy-Item shots/*.png docs/screenshots/
           Copy-Item shots/clawd-dance.gif docs/screenshots/
           Copy-Item shots/clawd-life.gif docs/screenshots/
+          Copy-Item shots/phone-connect.gif docs/screenshots/
           git add docs/screenshots
           git commit -m "Снимки интерфейса для README"
           git push -f origin shots-assets
