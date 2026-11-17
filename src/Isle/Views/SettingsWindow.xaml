@@ -250,8 +250,23 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
-                            <TextBlock Text="Свёрнутый остров" FontSize="11" Foreground="#6F6F79" VerticalAlignment="Bottom" Margin="14,0,0,10"/>
+                            <!-- ряд вкладок раскрытой чёлки — сразу видно порядок и какие спрятаны -->
+                            <Border Background="Black" CornerRadius="16" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,56,0,0"
+                                    Padding="6" BorderBrush="#26262B" BorderThickness="1">
+                                <StackPanel x:Name="PreviewTabs" Orientation="Horizontal"/>
+                            </Border>
+                            <TextBlock Text="Свёрнутая чёлка и вкладки" FontSize="11" Foreground="#6F6F79" VerticalAlignment="Bottom" Margin="14,0,0,10"/>
                         </Grid>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid Style="{StaticResource Row}">
+                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Вкладки"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Галочка — вкладка видна в чёлке, стрелки — порядок. «Главную» спрятать нельзя."/>
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel x:Name="TabsList" Margin="0,4,0,0"/>
+                        </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
