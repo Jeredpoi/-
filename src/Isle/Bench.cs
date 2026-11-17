@@ -35,7 +35,72 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)v.ActualWidth, (int)v.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                var island = (FrameworkElement)w.FindName("Island");
+                string Isl() { var b = island.PointToScreen(new Point(0, island.ActualHeight)); return "низ чёлки " + Math.Round(b.Y); }
+                AppSettings.Current.NotchMode = "always"; Helpers.NotchBar.Update();
+                await Task.Delay(1200);
+                L("обычная: рабочая область сверху " + SystemParameters.WorkArea.Top + ", " + Isl());
+                AppSettings.Current.Scale = 1.5; w.ApplyScale();
+                await Task.Delay(1500);
+                L("масштаб 150%: рабочая область сверху " + SystemParameters.WorkArea.Top + ", " + Isl());
+                // загрузка — чёлка выше
+                var mt = typeof(MainWindow);
+                var bf = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                ((System.Windows.Threading.DispatcherTimer)mt.GetField("_steamTimer", bf).GetValue(w)).Stop();
+                var dsT = mt.GetNestedType("DownloadState", System.Reflection.BindingFlags.NonPublic);
+                var ds = Activator.CreateInstance(dsT, new object[] { "Euro Truck Simulator 2", "Steam", 0.66, "18,8 МБ/с", "10:39", null, 0L, 0L, false, null });
+                mt.GetMethod("SetDownload", bf).Invoke(w, new[] { ds });
+                await Task.Delay(1500);
+                L("загрузка, 150%: рабочая область сверху " + SystemParameters.WorkArea.Top + ", " + Isl());
+                AppSettings.Current.Scale = 1.0; w.ApplyScale();
+                await Task.Delay(1500);
+                L("загрузка, 100%: рабочая область сверху " + SystemParameters.WorkArea.Top + ", " + Isl());
+                mt.GetMethod("SetDownload", bf).Invoke(w, new object[] { null });
+                await Task.Delay(1500);
+                L("без загрузки: рабочая область сверху " + SystemParameters.WorkArea.Top + ", " + Isl());
+                Helpers.NotchBar.Unregister();
+                // телефон: «Не открывается?»
+                w.SuppressAutoCollapse = true;
+                w.Expand("phone"); await Task.Delay(1500);
+                var pv = FindT<Isle.Views.PhoneView>(w);
+                pv.GetType().GetMethod("OnHelp", bf).Invoke(pv, new object[] { null, null });
+                await Task.Delay(500);
+                L("подсказка «Не открывается?»: " + ((FrameworkElement)pv.FindName("HelpCard")).Visibility);
+                SnapEl((FrameworkElement)w.Content, dir, "phone-help");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        private static T FindT<T>(DependencyObject d) where T : DependencyObject
+        {
+            if (d is T t) return t;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++) if (FindT<T>(VisualTreeHelper.GetChild(d, i)) is T r) return r;
+            return null;
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
