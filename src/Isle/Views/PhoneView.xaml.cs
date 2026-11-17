@@ -168,7 +168,7 @@ namespace Isle.Views
                     AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut },
                 };
-                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(a, 30);
+                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(a, 24);
                 Breath.BeginAnimation(OpacityProperty, a);
             }
             else Breath.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(300)));
