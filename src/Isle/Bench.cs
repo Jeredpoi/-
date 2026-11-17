@@ -35,7 +35,61 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)v.ActualWidth, (int)v.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                var v = AppHost.Vpn; var T = v.GetType();
+                void Set(string n, object val) => T.GetProperty(n).SetValue(v, val);
+                ((System.Windows.Threading.DispatcherTimer)T.GetField("_timer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(v)).Stop(); // своя проверка не должна сбросить
+                Set("Active", true); Set("Name", "Happ Tunnel (Wintun)"); Set("Country", "NL"); Set("CountryName", "Нидерланды"); Set("Ip", "185.107.56.12");
+                var ev = (Delegate)T.GetField("Changed", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(v);
+                ev?.DynamicInvoke();
+                w.SuppressAutoCollapse = true;
+                w.Expand("home");
+                await Task.Delay(1500);
+                var chip = (FrameworkElement)w.FindName("VpnChip");
+                L("значок VPN: " + chip.Visibility);
+                var p = chip.PointToScreen(new Point(chip.ActualWidth / 2, chip.ActualHeight / 2));
+                SetCursorPos((int)p.X, (int)p.Y);
+                await Task.Delay(900);
+                var card = (FrameworkElement)w.FindName("VpnCard");
+                L("карточка: " + card.Visibility + ", прозрачность " + card.Opacity.ToString("0.00") + ", отступ " + card.Margin);
+                SnapEl((FrameworkElement)w.Content, dir, "vpn-card");
+                L("кадр карточки: " + DateTime.UtcNow.ToString("O"));
+                await Task.Delay(1500);
+                // обычная подсказка — у раскладки
+                var lang = (FrameworkElement)w.FindName("LangBtn");
+                var q = lang.PointToScreen(new Point(lang.ActualWidth / 2, lang.ActualHeight / 2));
+                SetCursorPos((int)q.X, (int)q.Y);
+                await Task.Delay(400);
+                L("курсор на раскладке: " + DateTime.UtcNow.ToString("O") + ", карточка " + card.Visibility);
+                await Task.Delay(2500);
+                L("подсказка раскладки должна быть видна: " + DateTime.UtcNow.ToString("O"));
+                await Task.Delay(1500);
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));

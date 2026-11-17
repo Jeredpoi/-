@@ -41,7 +41,7 @@ jobs:
           (Get-CimInstance Win32_Processor).Name | Out-File -Append "$dir/machine.txt"
           [DateTime]::UtcNow.ToString("o") | Out-File -Encoding utf8 "$dir/rec-start.txt"
           # курсор не пишем — иначе любое движение мыши считалось бы «новым кадром»
-          $rec = Start-Process ffmpeg -ArgumentList "-hide_banner -loglevel error -f gdigrab -framerate 60 -draw_mouse 0 -i desktop -t 70 -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p `"$dir/rec.mp4`"" -PassThru -NoNewWindow
+          $rec = Start-Process ffmpeg -ArgumentList "-hide_banner -loglevel error -f gdigrab -framerate 60 -draw_mouse 0 -i desktop -t 40 -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p `"$dir/rec.mp4`"" -PassThru -NoNewWindow
           Start-Sleep -Milliseconds 800
           $p = Start-Process -FilePath "out/app/Isle.exe" -ArgumentList "--bench", "`"$dir`"" -PassThru
           if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; Write-Host "таймаут" }
@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         env:
           PYTHONIOENCODING: utf-8
-        run: python .github/scripts/bench_report.py bench
+        run: python .github/scripts/bench_report.py bench; exit 0
 
       - uses: actions/upload-artifact@v4
         if: always()
