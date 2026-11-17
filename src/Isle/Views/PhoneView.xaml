@@ -1,0 +1,72 @@
+<UserControl x:Class="Isle.Views.PhoneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:h="clr-namespace:Isle.Helpers">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- QR-код: телефон сканирует камерой и открывает страничку -->
+        <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="18">
+            <StackPanel>
+                <Border Background="White" CornerRadius="14" Padding="12" HorizontalAlignment="Center">
+                    <Grid Width="196" Height="196">
+                        <Image x:Name="Qr" RenderOptions.BitmapScalingMode="NearestNeighbor" Stretch="Fill"/>
+                        <TextBlock x:Name="QrNone" Text="Нет сети" Foreground="#555" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
+                <TextBlock Text="Наведи камеру телефона" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,2"/>
+                <TextBlock Text="Откроется страничка — приложение не нужно" Style="{StaticResource MutedText}" FontSize="11" HorizontalAlignment="Center"/>
+                <StackPanel x:Name="Status" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                    <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#6F6F79" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="StatusText" FontSize="12" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+                <WrapPanel x:Name="Networks" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                <TextBox x:Name="UrlBox" IsReadOnly="True" FontSize="11" Height="30" Padding="10,0" VerticalContentAlignment="Center" Margin="0,10,0,0" Foreground="#A1A1AB"/>
+                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0" TextAlignment="Center"
+                           Text="Телефон и компьютер — в одной сети: общий Wi-Fi или интернет с телефона (точка доступа или USB). Не открывается — разреши Isle в брандмауэре Windows."/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="С ТЕЛЕФОНА" Style="{StaticResource MutedText}" FontSize="10" FontWeight="SemiBold" Margin="4,0,0,8"/>
+                <Grid>
+                    <TextBlock x:Name="InEmpty" Style="{StaticResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360"
+                               Text="Здесь появится всё, что пришлёшь с телефона: фото, видео, файлы и текст. Они же попадут в «Буфер», файлы — в «Загрузки\Isle с телефона»."/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="InList"/>
+                    </ScrollViewer>
+                </Grid>
+            </DockPanel>
+
+            <!-- на телефон: перетащи файлы сюда -->
+            <Border x:Name="Drop" Grid.Row="1" Margin="0,12,0,0" CornerRadius="14" BorderThickness="1.5" BorderBrush="#2A2A33" Background="#0A0A0C" Padding="14,12"
+                    AllowDrop="True" Drop="OnDrop" DragEnter="OnDragEnter" DragLeave="OnDragLeave">
+                <StackPanel>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Style="{StaticResource Flat}" Padding="12,6" Margin="0,0,6,0" Click="OnPickFiles">
+                                <StackPanel Orientation="Horizontal"><h:Icon Kind="File" Width="13" Height="13"/><TextBlock Text="Файлы…" FontSize="12" Margin="6,0,0,0"/></StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Flat}" Padding="12,6" Click="OnSendClipboard" ToolTip="Текст из буфера обмена — на страничку телефона">
+                                <StackPanel Orientation="Horizontal"><h:Icon Kind="Clipboard" Width="13" Height="13"/><TextBlock Text="Буфер" FontSize="12" Margin="6,0,0,0"/></StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="На телефон" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="OutHint" Style="{StaticResource MutedText}" FontSize="11" Text="Перетащи сюда файлы — на телефоне появится «Скачать»"/>
+                        </StackPanel>
+                    </DockPanel>
+                    <WrapPanel x:Name="OutList" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
