@@ -248,6 +248,23 @@ namespace Isle.Views
             CompositionTarget.Rendering += Frame;
         }
 
+        /// <summary>«Не открывается?» — открыть/закрыть подсказку прямо в карточке.</summary>
+        private void OnHelp(object s, RoutedEventArgs e)
+        {
+            bool show = HelpCard.Visibility != Visibility.Visible;
+            if (show)
+            {
+                HelpCard.Visibility = Visibility.Visible;
+                HelpCard.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+            }
+            else
+            {
+                var a = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
+                a.Completed += (_, __) => { if (HelpCard.Opacity < 0.01) HelpCard.Visibility = Visibility.Collapsed; };
+                HelpCard.BeginAnimation(OpacityProperty, a);
+            }
+        }
+
         private void OnCopyLink(object s, RoutedEventArgs e)
         {
             if (_url == null) return;
