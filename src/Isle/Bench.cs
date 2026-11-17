@@ -35,7 +35,84 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string cls, string title);
+        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out Isle.Native.Win32.RECT r);
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+
+        private static System.Diagnostics.Process Form(string exe, string title)
+        {
+            var script = "Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.Form; $f.Text='" + title + "'; $f.BackColor='SteelBlue'; $f.WindowState='Maximized'; $f.TopMost=$false; [System.Windows.Forms.Application]::Run($f)";
+            return System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "-NoProfile -Command \"" + script + "\"") { UseShellExecute = false });
+        }
+
+        private static string Rect(string title)
+        {
+            var h = FindWindow(null, title);
+            if (h == IntPtr.Zero) return "окно не найдено";
+            GetWindowRect(h, out var r);
+            return r.Left + "," + r.Top + " → " + r.Right + "," + r.Bottom;
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            var procs = new System.Collections.Generic.List<System.Diagnostics.Process>();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                L("масштаб " + dev.M22 + ", высота полосы " + Helpers.NotchBar.Height() + " px");
+                L("рабочая область до: " + SystemParameters.WorkArea);
+
+                AppSettings.Current.NotchMode = "always";
+                Helpers.NotchBar.Update();
+                await Task.Delay(1500);
+                L("[always] рабочая область: " + SystemParameters.WorkArea);
+                L("[always] полоса: " + Rect("Isle notch"));
+                var ps = @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+                procs.Add(Form(ps, "BenchMax"));
+                await Task.Delay(5000);
+                L("[always] развёрнутое окно: " + Rect("BenchMax"));
+                L("[always] чёлка Top=" + w.Top + " Topmost=" + w.Topmost);
+
+                AppSettings.Current.NotchMode = "browser";
+                Helpers.NotchBar.Update();
+                await Task.Delay(1500);
+                L("[browser, впереди powershell] рабочая область: " + SystemParameters.WorkArea);
+                L("[browser, впереди powershell] развёрнутое окно: " + Rect("BenchMax"));
+
+                // «браузер»: копия powershell под именем chrome.exe
+                var fake = Path.Combine(dir, "chrome.exe");
+                try { File.Copy(ps, fake, true); } catch (Exception ex) { L("копия: " + ex.Message); }
+                procs.Add(Form(fake, "BenchChrome"));
+                await Task.Delay(6000);
+                var hc = FindWindow(null, "BenchChrome"); if (hc != IntPtr.Zero) SetForegroundWindow(hc);
+                await Task.Delay(1500);
+                L("[browser, впереди chrome] передний процесс: " + Isle.Native.Win32.ForegroundProcessName());
+                L("[browser, впереди chrome] рабочая область: " + SystemParameters.WorkArea);
+                L("[browser, впереди chrome] окно chrome: " + Rect("BenchChrome"));
+                await Task.Delay(1500);
+                var hm = FindWindow(null, "BenchMax"); if (hm != IntPtr.Zero) SetForegroundWindow(hm);
+                await Task.Delay(1500);
+                L("[browser, снова powershell] передний: " + Isle.Native.Win32.ForegroundProcessName() + ", рабочая область: " + SystemParameters.WorkArea);
+
+                AppSettings.Current.NotchMode = "always";
+                Helpers.NotchBar.Update();
+                await Task.Delay(800);
+                Helpers.NotchBar.Unregister();
+                await Task.Delay(800);
+                L("[выход] рабочая область: " + SystemParameters.WorkArea);
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            foreach (var p in procs) try { p.Kill(); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
