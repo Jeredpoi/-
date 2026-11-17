@@ -135,7 +135,7 @@ namespace Isle
             {
                 VpnChip.Visibility = AppHost.Vpn.Active ? Visibility.Visible : Visibility.Collapsed;
                 VpnText.Text = string.IsNullOrEmpty(AppHost.Vpn.Country) ? "VPN" : AppHost.Vpn.Country;
-                VpnChip.ToolTip = AppHost.Vpn.Tooltip;
+                if (VpnCard.Visibility == Visibility.Visible) FillVpnCard();
             };
 
             ToastBus.Raised += t => Dispatcher.InvokeAsync(() => EnqueueToast(t));
@@ -920,6 +920,7 @@ namespace Isle
 
         public void Collapse()
         {
+            VpnCard.BeginAnimation(OpacityProperty, null); VpnCard.Opacity = 0; VpnCard.Visibility = Visibility.Collapsed;
             if (State == IslandState.Collapsed) return;
             Journal.Info("island", "свернуть (было " + State + ")");
             _leaveClose.Stop();
@@ -1415,6 +1416,55 @@ namespace Isle
             Collapse();
             var err = AppHost.Vpn.OpenClient();
             if (err != null) ToastBus.Show(new Toast { Title = err, Icon = Icons.Shield, Important = true, Duration = TimeSpan.FromSeconds(3) });
+        }
+
+        private DispatcherTimer _vpnHover;
+
+        private void FillVpnCard()
+        {
+            var v = AppHost.Vpn;
+            VpnCardTitle.Text = v.Active ? "VPN подключён" : "VPN выключен";
+            VpnCardName.Text = string.IsNullOrEmpty(v.Name) ? "сетевой адаптер не определён" : v.Name;
+            VpnCardCountry.Text = !string.IsNullOrEmpty(v.CountryName) ? v.CountryName + (string.IsNullOrEmpty(v.Country) ? "" : " · " + v.Country) : "определяю…";
+            VpnCardIp.Text = string.IsNullOrEmpty(v.Ip) ? "—" : v.Ip;
+        }
+
+        /// <summary>Наведение на значок VPN: карточка с подробностями появляется под ним, внутри чёлки.</summary>
+        private void OnVpnEnter(object sender, MouseEventArgs e)
+        {
+            _vpnHover?.Stop();
+            _vpnHover = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+            _vpnHover.Tick += (_, __) =>
+            {
+                _vpnHover.Stop();
+                if (!VpnChip.IsMouseOver || State != IslandState.Expanded) return;
+                FillVpnCard();
+                var host = (FrameworkElement)VpnCard.Parent;
+                VpnCard.Visibility = Visibility.Visible;
+                VpnCard.UpdateLayout();
+                var p = VpnChip.TranslatePoint(new Point(VpnChip.ActualWidth, VpnChip.ActualHeight), host);
+                // правым краем — к правому краю значка, но не за край острова
+                double left = Math.Max(8, Math.Min(p.X - VpnCard.ActualWidth, host.ActualWidth - VpnCard.ActualWidth - 8));
+                VpnCard.Margin = new Thickness(left, p.Y + 8, 0, 0);
+                var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+                VpnCard.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(160)));
+                VpnCardT.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(-6, 0, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+            };
+            _vpnHover.Start();
+        }
+
+        private void OnVpnLeave(object sender, MouseEventArgs e)
+        {
+            _vpnHover?.Stop();
+            HideVpnCard();
+        }
+
+        private void HideVpnCard()
+        {
+            if (VpnCard.Visibility != Visibility.Visible) return;
+            var a = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(120));
+            a.Completed += (_, __) => { if (VpnCard.Opacity < 0.01) VpnCard.Visibility = Visibility.Collapsed; };
+            VpnCard.BeginAnimation(OpacityProperty, a);
         }
 
         private void OnVpnRightClick(object sender, MouseButtonEventArgs e)

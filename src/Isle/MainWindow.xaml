@@ -285,7 +285,7 @@
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                                 <!-- VPN: клик — отключить, правый клик — проверить заново -->
                                 <Button x:Name="VpnChip" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Visibility="Collapsed"
-                                        Click="OnVpnClick" MouseRightButtonUp="OnVpnRightClick" ToolTipService.InitialShowDelay="200">
+                                        Click="OnVpnClick" MouseRightButtonUp="OnVpnRightClick" MouseEnter="OnVpnEnter" MouseLeave="OnVpnLeave">
                                     <Border x:Name="VpnBox" Background="#123A26" CornerRadius="13" Height="26" Padding="10,0">
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                             <h:Icon Kind="Shield" Width="12" Height="12" StrokeWidth="2" Foreground="#4ADE80"/>
@@ -318,6 +318,36 @@
                             <ContentControl.RenderTransform><TranslateTransform x:Name="TabSlide"/></ContentControl.RenderTransform>
                         </ContentControl>
                     </DockPanel>
+
+                    <!-- Карточка VPN при наведении на значок: внутри самой чёлки — не уходит под неё и в цветах Isle -->
+                    <Border x:Name="VpnCard" Visibility="Collapsed" Opacity="0" IsHitTestVisible="False" Panel.ZIndex="50"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Width="270"
+                            Background="#141417" BorderBrush="#26262B" BorderThickness="1" CornerRadius="14" Padding="14,12">
+                        <Border.Effect><DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="4" Opacity="0.6"/></Border.Effect>
+                        <Border.RenderTransform><TranslateTransform x:Name="VpnCardT"/></Border.RenderTransform>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="26" Height="26" CornerRadius="8" Background="#123A26">
+                                    <h:Icon Kind="Shield" Width="13" Height="13" StrokeWidth="2" Foreground="#4ADE80"/>
+                                </Border>
+                                <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="VpnCardTitle" Text="VPN подключён" FontSize="13" FontWeight="SemiBold" Foreground="#4ADE80"/>
+                                    <TextBlock x:Name="VpnCardName" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                                <TextBlock Text="Страна" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,14,4"/>
+                                <TextBlock x:Name="VpnCardCountry" Grid.Column="1" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
+                                <TextBlock Grid.Row="1" Text="Адрес" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,14,0"/>
+                                <TextBlock x:Name="VpnCardIp" Grid.Row="1" Grid.Column="1" FontSize="12" FontWeight="SemiBold" FontFamily="Cascadia Mono, Consolas"/>
+                            </Grid>
+                            <Border Height="1" Background="#222226" Margin="0,12,0,10"/>
+                            <TextBlock FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" LineHeight="16"
+                                       Text="Клик — открыть VPN-клиент&#x0a;Shift+клик — закрыть клиент (выключить VPN)&#x0a;Правый клик — проверить заново"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- Подсветка при перетаскивании файлов -->
                     <Border x:Name="DropHint" Visibility="Collapsed" Background="#E6000000" CornerRadius="0,0,18,18">

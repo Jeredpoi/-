@@ -27,6 +27,28 @@
         <Setter Property="FontSize" Value="12"/>
     </Style>
 
+    <!-- Подсказки при наведении — в цветах Isle, а не белые системные -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Foreground" Value="{StaticResource Fg}"/>
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="#141417" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="10,7" Margin="6" MaxWidth="360">
+                        <Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="2" Opacity="0.55"/></Border.Effect>
+                        <ContentPresenter>
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="CardBox" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource Card}"/>
         <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
