@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -9,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Isle.Services;
+using Isle.Helpers;
 
 namespace Isle.Views
 {
@@ -172,6 +174,7 @@ namespace Isle.Views
             ChEyes.IsChecked = S.Character == "eyes";
             ChNone.IsChecked = S.Character == "none";
             foreach (var rb in Outfits.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.BuddyOutfit ?? "auto");
+            BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
@@ -471,6 +474,84 @@ namespace Isle.Views
             var d = TimeSpan.FromMilliseconds(420);
             PreviewScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, d) { EasingFunction = ease });
             PreviewScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, d) { EasingFunction = ease });
+        }
+
+        // ---------- вкладки чёлки: порядок и видимость ----------
+        private void BuildTabsList()
+        {
+            if (TabsList == null) return;
+            TabsList.Children.Clear();
+            var order = IslandTabs.Order();
+            var hidden = new HashSet<string>(order.Where(IslandTabs.IsHidden));
+            for (int i = 0; i < order.Count; i++)
+            {
+                var tab = IslandTabs.Get(order[i]);
+                int index = i;
+                bool isHome = tab.Id == "home", visible = !hidden.Contains(tab.Id);
+                var row = new Grid { Margin = new Thickness(0, 2, 0, 2), Height = 38 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var fg = (Brush)FindResource(visible ? "Fg" : "Muted");
+                row.Children.Add(new Icon { Kind = tab.Icon, Width = 16, Height = 16, Foreground = fg, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left });
+                var title = new TextBlock { Text = tab.Title + (isHome ? "  · всегда" : ""), Foreground = fg, VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
+                Grid.SetColumn(title, 1); row.Children.Add(title);
+                var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                Button Arrow(string glyph, int delta, bool enabled)
+                {
+                    var b = new Button { Style = (Style)FindResource("Ghost"), Width = 30, Height = 30, Padding = new Thickness(0), IsEnabled = enabled, Opacity = enabled ? 1 : 0.3,
+                        Content = new TextBlock { Text = glyph, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center }, ToolTip = delta < 0 ? "Левее" : "Правее" };
+                    b.Click += (_, __) => MoveTab(index, delta);
+                    return b;
+                }
+                tools.Children.Add(Arrow("↑", -1, i > 0));
+                tools.Children.Add(Arrow("↓", +1, i < order.Count - 1));
+                var cb = new CheckBox { IsChecked = visible, IsEnabled = !isHome, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Opacity = isHome ? 0.4 : 1 };
+                var id = tab.Id;
+                cb.Click += (_, __) => { if (cb.IsChecked == true) hidden.Remove(id); else hidden.Add(id); ApplyTabs(order, hidden); };
+                tools.Children.Add(cb);
+                Grid.SetColumn(tools, 2); row.Children.Add(tools);
+                TabsList.Children.Add(row);
+            }
+            UpdateTabsPreview();
+        }
+
+        private void MoveTab(int index, int delta)
+        {
+            var order = IslandTabs.Order();
+            int j = index + delta;
+            if (j < 0 || j >= order.Count) return;
+            (order[index], order[j]) = (order[j], order[index]);
+            ApplyTabs(order, order.Where(IslandTabs.IsHidden).ToList());
+        }
+
+        private void ApplyTabs(List<string> order, IEnumerable<string> hidden)
+        {
+            IslandTabs.Save(order, hidden);
+            BuildTabsList();
+            AppHost.Window.ApplyTabs(); // в самой чёлке — сразу
+        }
+
+        /// <summary>Превью ряда вкладок: как в чёлке — значки, у первой подпись.</summary>
+        private void UpdateTabsPreview()
+        {
+            if (PreviewTabs == null) return;
+            PreviewTabs.Children.Clear();
+            bool first = true;
+            foreach (var id in IslandTabs.Visible())
+            {
+                var tab = IslandTabs.Get(id);
+                var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                sp.Children.Add(new Icon { Kind = tab.Icon, Width = 15, Height = 15, Foreground = (Brush)FindResource(first ? "Fg" : "Muted"), VerticalAlignment = VerticalAlignment.Center });
+                if (first) sp.Children.Add(new TextBlock { Text = tab.Title, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+                PreviewTabs.Children.Add(new Border
+                {
+                    Child = sp, Height = 28, Padding = new Thickness(8, 0, 8, 0), CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 0, 2, 0),
+                    Background = first ? new SolidColorBrush(Color.FromRgb(0x24, 0x24, 0x2B)) : Brushes.Transparent,
+                    ToolTip = tab.Title,
+                });
+                first = false;
+            }
         }
 
         private void UpdatePreview()
