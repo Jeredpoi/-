@@ -295,6 +295,17 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
+                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Снег из-под чёлки"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="«Зимой» — с 1 декабря по 14 января и когда за окном идёт снег."/>
+                                    <WrapPanel x:Name="SnowModes" Margin="0,10,0,0">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Зимой" Click="OnSnowMode" Tag="auto"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Всегда" Click="OnSnowMode" Tag="on"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Выключен" Click="OnSnowMode" Tag="off"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Акцент"/>
                                     <TextBlock Style="{StaticResource RowNote}" Text="Цвет кнопок, таймера и полосок музыки. По умолчанию — белый."/>
                                     <WrapPanel x:Name="Accents" Margin="0,10,0,0"/>
