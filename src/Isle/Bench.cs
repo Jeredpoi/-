@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -86,6 +87,30 @@ namespace Isle
                 var pv = FindT<Isle.Views.PhoneView>(w);
                 pv.GetType().GetMethod("OnHelp", bf).Invoke(pv, new object[] { null, null });
                 await Task.Delay(500);
+                // https: дождаться сертификата, открыть страничку как телефон — с обычной проверкой сертификата
+                for (int i = 0; i < 40 && !PhoneTls.Ready; i++) await Task.Delay(500);
+                L("сертификат готов: " + PhoneTls.Ready + ", https: " + PhoneLink.Https);
+                var ip = PhoneLink.Addresses().FirstOrDefault().ip ?? "127.0.0.1";
+                var url = PhoneLink.Url(ip);
+                L("адрес начинается с: " + url.Substring(0, url.IndexOf(':', 7)));
+                try
+                {
+                    using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+                    var r = await http.GetAsync(url);
+                    L("https: " + (int)r.StatusCode + ", " + (await r.Content.ReadAsStringAsync()).Length + " символов");
+                    var up = await http.PostAsync(url + "text", new System.Net.Http.StringContent("привет по https"));
+                    L("текст по https: " + (int)up.StatusCode);
+                }
+                catch (Exception ex) { L("https не открылся: " + ex.GetBaseException().Message); }
+                try
+                {
+                    using var http2 = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                    var plain = "http://" + ip + ":" + PhoneLink.Port + url.Substring(url.IndexOf('/', 8));
+                    var r2 = await http2.GetAsync(plain);
+                    L("http по тому же порту: " + (int)r2.StatusCode);
+                }
+                catch (Exception ex) { L("http не открылся: " + ex.GetBaseException().Message); }
+                await Task.Delay(600);
                 L("подсказка «Не открывается?»: " + ((FrameworkElement)pv.FindName("HelpCard")).Visibility);
                 SnapEl((FrameworkElement)w.Content, dir, "phone-help");
             }
