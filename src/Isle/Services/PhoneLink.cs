@@ -472,7 +472,7 @@ known=new Set(d.files.map(f=>f.id));if(d.text)known.add('t:'+d.text)}
 function poll(){fetch(base+'list',{cache:'no-store'}).then(r=>r.json()).then(d=>{if(!online){online=true;isl.classList.remove('off');island(ICON.ok+' Снова на связи',1500)}
 const s=JSON.stringify(d);if(s===last)return;render(d);last=s}).catch(()=>{if(online){online=false;isl.classList.add('off');islT.textContent='Нет связи с ПК'}})}
 setTimeout(()=>island(ICON.ok+' Подключено к компьютеру',2000),350);
-poll();setInterval(poll,2500);
+poll();setInterval(()=>{if(!document.hidden)poll()},2500);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
 </script></body></html>
 """;
     }
