@@ -26,6 +26,16 @@ namespace Isle.Services
         public static readonly HashSet<string> PhotoExt = new() { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif" };
     }
 
+    /// <summary>Уведомление с телефона (через «Связь с телефоном»).</summary>
+    public class PhoneNotice
+    {
+        public string App { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Body { get; init; } = "";
+        public System.Windows.Media.ImageSource Logo { get; init; }
+        public DateTime Time { get; init; } = DateTime.Now;
+    }
+
     /// <summary>Файл, который компьютер предлагает телефону скачать.</summary>
     public class OutgoingFile
     {
@@ -62,6 +72,18 @@ namespace Isle.Services
 
         public static event Action<PhoneItem> ItemReceived;
         public static event Action Changed;
+        /// <summary>Телефон открыл страничку (отсканировал QR-код).</summary>
+        public static event Action PageOpened;
+
+        /// <summary>Уведомления с телефона — их присылает «Связь с телефоном» Windows (телефон по Bluetooth).</summary>
+        public static readonly List<PhoneNotice> Notices = new();
+        public static event Action NoticesChanged;
+        public static void AddNotice(PhoneNotice n)
+        {
+            Notices.Insert(0, n);
+            if (Notices.Count > 100) Notices.RemoveAt(Notices.Count - 1);
+            NoticesChanged?.Invoke();
+        }
 
         public static string SaveDir => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Isle с телефона");
 
@@ -192,13 +214,17 @@ namespace Isle.Services
                     { await Send(stream, 404, "text/plain", Encoding.UTF8.GetBytes("Not found")); return; }
                     _lastRequest = DateTime.Now;
                     string route = parts.Length > 1 ? parts[1] : "";
-                    if (method == "GET" && route == "") await Send(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(Page));
+                    if (method == "GET" && route == "")
+                    {
+                        await Send(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(Page));
+                        Application.Current?.Dispatcher.InvokeAsync(() => PageOpened?.Invoke());
+                    }
                     else if (method == "GET" && route == "list") await Send(stream, 200, "application/json", JsonSerializer.SerializeToUtf8Bytes(new
                     {
-                        files = Outgoing.ToList().Select(o => new { id = o.Id, name = o.Name, size = o.Size }),
+                        files = Outgoing.ToList().Select(o => new { id = o.Id, name = o.Name, size = o.Size, img = ImageType(o.Name) != null }),
                         text = OutgoingText,
                     }));
-                    else if (method == "GET" && route == "f" && parts.Length > 2) await SendFile(stream, Outgoing.FirstOrDefault(o => o.Id == parts[2]));
+                    else if (method == "GET" && route == "f" && parts.Length > 2) await SendFile(stream, Outgoing.FirstOrDefault(o => o.Id == parts[2]), Query(query, "view") == "1");
                     else if (method == "POST" && route == "up") await Receive(stream, headers, leftover, Query(query, "name"));
                     else if (method == "POST" && route == "text") await ReceiveText(stream, headers, leftover);
                     else await Send(stream, 404, "text/plain", Encoding.UTF8.GetBytes("Not found"));
@@ -252,15 +278,25 @@ namespace Isle.Services
             await s.WriteAsync(body);
         }
 
-        private static async Task SendFile(NetworkStream s, OutgoingFile f)
+        private static string ImageType(string name) => System.IO.Path.GetExtension(name).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", ".bmp" => "image/bmp", _ => null,
+        };
+
+        /// <summary>view — показать картинку прямо на страничке (превью), иначе — скачать.</summary>
+        private static async Task SendFile(NetworkStream s, OutgoingFile f, bool view = false)
         {
             if (f == null || !File.Exists(f.Path)) { await Send(s, 404, "text/plain", Encoding.UTF8.GetBytes("Файл больше не доступен")); return; }
+            var img = ImageType(f.Name);
+            if (view && img == null) { await Send(s, 404, "text/plain", Array.Empty<byte>()); return; }
             using var fs = File.OpenRead(f.Path);
-            var head = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + fs.Length
+            var head = view
+                ? "HTTP/1.1 200 OK\r\nContent-Type: " + img + "\r\nContent-Length: " + fs.Length + "\r\nCache-Control: max-age=3600\r\nConnection: close\r\n\r\n"
+                : "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + fs.Length
                 + "\r\nContent-Disposition: attachment; filename*=UTF-8''" + Uri.EscapeDataString(f.Name) + "\r\nConnection: close\r\n\r\n";
             await s.WriteAsync(Encoding.ASCII.GetBytes(head));
             await fs.CopyToAsync(s);
-            Journal.Info("phone", "телефон скачал файл (" + fs.Length / 1024 + " КБ)");
+            if (!view) Journal.Info("phone", "телефон скачал файл (" + fs.Length / 1024 + " КБ)");
         }
 
         private static async Task Receive(NetworkStream s, Dictionary<string, string> h, byte[] leftover, string name)
@@ -326,52 +362,117 @@ namespace Isle.Services
         // ---------- страничка для телефона ----------
         private const string Page = """
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Isle</title><style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:#000;color:#ECECF1;padding:20px 16px 40px}
-h1{font-size:22px;margin:4px 0 2px}p.s{color:#8B8B95;margin:0 0 18px;font-size:14px}
-.card{background:#0E0E10;border:1px solid #1C1C20;border-radius:18px;padding:16px;margin-bottom:14px}
-.card h2{font-size:13px;color:#8B8B95;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px}
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-label.b,button{display:flex;align-items:center;justify-content:center;gap:8px;height:52px;border-radius:14px;border:0;font:600 15px system-ui;background:#1C1C21;color:#ECECF1;cursor:pointer}
-label.b.main{background:#ECECF1;color:#000}button.full{width:100%;margin-top:10px}
-input[type=file]{display:none}textarea{width:100%;min-height:90px;background:#000;color:#ECECF1;border:1px solid #26262B;border-radius:12px;padding:12px;font:15px system-ui;resize:vertical}
-.q{margin-top:12px}.it{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1C1C20;font-size:14px}.it:first-child{border-top:0}
-.it .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.it .st{color:#8B8B95;font-size:12px}.ok{color:#4ADE80!important}.err{color:#F87171!important}
-.bar{height:4px;background:#26262B;border-radius:2px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;width:0;background:#4ADE80;transition:width .15s}
-a.dl{color:#ECECF1;text-decoration:none;background:#1C1C21;border-radius:10px;padding:8px 12px;font-weight:600}
-pre{white-space:pre-wrap;word-break:break-word;background:#000;border:1px solid #26262B;border-radius:12px;padding:12px;margin:0;font:14px system-ui}
-.empty{color:#6F6F79;font-size:14px}
+<meta name="theme-color" content="#000"><title>Isle</title><style>
+:root{color-scheme:dark;--bg:#000;--card:#0E0E10;--line:#1C1C20;--fg:#ECECF1;--mut:#8B8B95;--ok:#4ADE80;--bad:#F87171;--ease:cubic-bezier(.2,.9,.25,1)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font:16px/1.4 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);padding:calc(env(safe-area-inset-top) + 74px) 16px calc(env(safe-area-inset-bottom) + 32px);min-height:100vh}
+/* чёлка сверху — как в Isle: раскрывается, когда что-то произошло */
+#isl{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translateX(-50%);z-index:9;height:38px;min-width:118px;max-width:calc(100vw - 32px);padding:0 16px;border-radius:19px;background:#000;border:1px solid #232328;box-shadow:0 8px 30px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;gap:9px;font:600 14px system-ui;white-space:nowrap;overflow:hidden;transition:all .45s var(--ease)}
+#isl.big{height:52px;border-radius:26px;padding:0 20px;font-size:15px}
+#isl .d{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 0 rgba(74,222,128,.6);animation:pulse 2s infinite}
+#isl.off .d{background:var(--bad);animation:none}
+#isl .t{overflow:hidden;text-overflow:ellipsis}
+#isl svg{flex:none}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(74,222,128,0)}100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
+h1{font-size:28px;letter-spacing:-.02em;margin:0 0 4px}p.s{color:var(--mut);margin:0 0 20px;font-size:14px}
+.in{opacity:0;transform:translateY(14px);animation:up .6s var(--ease) forwards}
+@keyframes up{to{opacity:1;transform:none}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;margin-bottom:14px}
+.card h2{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;margin:2px 2px 12px;font-weight:600}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{position:relative;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;height:118px;padding:14px;border-radius:18px;background:#17171B;color:var(--fg);font:600 15px system-ui;cursor:pointer;overflow:hidden;transition:transform .18s var(--ease),background .2s}
+.tile.main{background:linear-gradient(145deg,#F4F4F7,#C9C9D2);color:#000}
+.tile .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.08)}
+.tile.main .ic{background:rgba(0,0,0,.08)}
+.tile small{display:block;font-weight:500;font-size:12px;opacity:.6;margin-top:-6px}
+.tile:active,.btn:active,.dl:active{transform:scale(.96)}
+input[type=file]{display:none}
+#q:not(:empty){margin-top:8px}
+.tx{position:relative;margin-top:12px}
+textarea{display:block;width:100%;min-height:54px;max-height:200px;background:#000;color:var(--fg);border:1px solid #26262B;border-radius:16px;padding:15px 58px 15px 15px;font:15px system-ui;resize:none;outline:none;transition:border-color .2s}
+textarea:focus{border-color:#55555F}
+.send{position:absolute;right:8px;bottom:8px;width:40px;height:40px;border-radius:12px;border:0;background:var(--fg);color:#000;display:grid;place-items:center;cursor:pointer;transition:transform .18s var(--ease),opacity .2s,background .3s}
+.send:disabled{opacity:.25}.send.done{background:var(--ok)}
+.it{display:flex;align-items:center;gap:12px;padding:10px 2px;border-top:1px solid var(--line);font-size:14px}
+.it:first-child{border-top:0}
+.it.new{animation:slide .45s var(--ease)}
+@keyframes slide{from{opacity:0;transform:translateY(-10px) scale(.98)}}
+.th{width:44px;height:44px;border-radius:12px;background:#1C1C21 center/cover no-repeat;flex:none;display:grid;place-items:center;color:var(--mut)}
+.it .m{flex:1;min-width:0}.it .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.it .st{color:var(--mut);font-size:12px;margin-top:1px}
+.ring{width:34px;height:34px;flex:none}
+.ring circle{fill:none;stroke-width:3}.ring .bg{stroke:#26262B}.ring .fg{stroke:var(--ok);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .2s}
+.ring .ck{fill:none;stroke:var(--ok);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:20;stroke-dashoffset:20}
+.ring.ok .ck{animation:draw .4s .1s var(--ease) forwards}.ring.ok .fg{stroke-dashoffset:0!important}
+.ring.err .fg{stroke:var(--bad)}
+@keyframes draw{to{stroke-dashoffset:0}}
+.dl,.btn{display:inline-flex;align-items:center;gap:6px;color:var(--fg);text-decoration:none;background:#1C1C21;border:0;border-radius:12px;padding:9px 13px;font:600 13px system-ui;flex:none;cursor:pointer;transition:transform .18s var(--ease),background .3s}
+.btn.ok{background:#14321F;color:var(--ok)}
+.txt{background:#000;border:1px solid #26262B;border-radius:16px;padding:14px;margin-bottom:6px}
+.txt pre{white-space:pre-wrap;word-break:break-word;margin:0 0 12px;font:15px/1.45 system-ui;max-height:220px;overflow:auto}
+.empty{color:#6F6F79;font-size:14px;text-align:center;padding:18px 10px}
+.empty svg{display:block;margin:0 auto 10px;opacity:.5}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.in{opacity:1;transform:none}}
 </style></head><body>
-<h1>Isle</h1><p class="s">Отправь на компьютер — без проводов и приложений</p>
-<div class="card"><h2>На компьютер</h2>
-<div class="btns"><label class="b main">📷 Фото и видео<input id="ph" type="file" accept="image/*,video/*" multiple></label>
-<label class="b">📄 Файлы<input id="fl" type="file" multiple></label></div>
-<div id="q" class="q"></div>
-<textarea id="tx" placeholder="Текст или ссылка — появится в буфере обмена компьютера" style="margin-top:12px"></textarea>
-<button class="full" id="sendt">Отправить текст</button></div>
-<div class="card"><h2>С компьютера</h2><div id="out"><div class="empty">Перетащи файлы на вкладку «Телефон» в Isle — они появятся здесь</div></div></div>
+<div id="isl"><span class="d"></span><span class="t">Isle</span></div>
+<h1 class="in">Отправить на ПК</h1><p class="s in" style="animation-delay:.05s">Фото, файлы и текст — прямо в Isle, без проводов и приложений</p>
+<div class="card in" style="animation-delay:.1s"><h2>На компьютер</h2>
+<div class="tiles">
+<label class="tile main"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><circle cx="9" cy="10.5" r="1.6"/><path d="M21 16l-5-5-8 9"/></svg></span>Фото и видео<small>галерея или камера</small><input id="ph" type="file" accept="image/*,video/*" multiple></label>
+<label class="tile"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>Файлы<small>любые документы</small><input id="fl" type="file" multiple></label>
+</div>
+<div id="q"></div>
+<div class="tx"><textarea id="tx" rows="1" placeholder="Текст или ссылка → в буфер ПК"></textarea>
+<button class="send" id="sendt" disabled aria-label="Отправить"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
+</div>
+<div class="card in" style="animation-delay:.18s"><h2>С компьютера</h2><div id="out"></div></div>
 <script>
 const base=location.pathname.endsWith('/')?location.pathname:location.pathname+'/';
-const q=document.getElementById('q');
+const $=id=>document.getElementById(id),q=$('q'),isl=$('isl'),islT=isl.querySelector('.t');
+const ICON={ok:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+file:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+dl:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>',
+cp:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+pc:'<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>'};
+let islTimer,online=true;
+function island(html,ms){isl.classList.add('big');islT.innerHTML=html;clearTimeout(islTimer);islTimer=setTimeout(()=>{isl.classList.remove('big');islT.textContent=online?'Isle':'Нет связи с ПК'},ms||1800)}
+function buzz(){try{navigator.vibrate&&navigator.vibrate(18)}catch(e){}}
 function fmt(n){return n>1048576?(n/1048576).toFixed(1)+' МБ':Math.max(1,Math.round(n/1024))+' КБ'}
-function up(files){[...files].reduce((p,f)=>p.then(()=>one(f)),Promise.resolve())}
-function one(f){return new Promise(res=>{const d=document.createElement('div');d.className='it';d.innerHTML='<div class="n"></div><div class="st">0%</div>';d.querySelector('.n').textContent=f.name;
-const w=document.createElement('div');w.innerHTML='<div class="bar"><i></i></div>';q.prepend(w);q.prepend(d);
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+let pending=0,sent=0;
+function up(files){files=[...files];if(!files.length)return;pending+=files.length;files.reduce((p,f)=>p.then(()=>one(f)),Promise.resolve()).then(()=>{if(!pending&&sent){island(ICON.ok+' '+(sent==1?'Отправлено':'Отправлено: '+sent),2000);buzz();sent=0}})}
+function one(f){return new Promise(res=>{const d=document.createElement('div');d.className='it new';
+const img=f.type.startsWith('image/')?URL.createObjectURL(f):null;
+d.innerHTML='<div class="th"'+(img?' style="background-image:url('+img+')"':'')+'>'+(img?'':ICON.file)+'</div><div class="m"><div class="n">'+esc(f.name)+'</div><div class="st">'+fmt(f.size)+'</div></div>'+
+'<svg class="ring" viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15" stroke-dasharray="94.2" stroke-dashoffset="94.2"/><path class="ck" d="M12 18.5l4 4 8-8.5"/></svg>';
+q.prepend(d);const ring=d.querySelector('.ring'),fg=d.querySelector('.fg'),st=d.querySelector('.st');
 const x=new XMLHttpRequest();x.open('POST',base+'up?name='+encodeURIComponent(f.name));
-x.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded*100/e.total);d.querySelector('.st').textContent=p+'%';w.querySelector('i').style.width=p+'%'}};
-x.onload=()=>{const ok=x.status==200;d.querySelector('.st').textContent=ok?'✓ отправлено':'ошибка';d.querySelector('.st').className='st '+(ok?'ok':'err');w.querySelector('i').style.width='100%';res()};
-x.onerror=()=>{d.querySelector('.st').textContent='нет связи';d.querySelector('.st').className='st err';res()};x.send(f)})}
-document.getElementById('ph').onchange=e=>{up(e.target.files);e.target.value=''};
-document.getElementById('fl').onchange=e=>{up(e.target.files);e.target.value=''};
-document.getElementById('sendt').onclick=()=>{const t=document.getElementById('tx');if(!t.value.trim())return;
-fetch(base+'text',{method:'POST',body:t.value}).then(r=>{if(r.ok){t.value='';const b=document.getElementById('sendt');b.textContent='✓ В буфере компьютера';setTimeout(()=>b.textContent='Отправить текст',1600)}})};
-let last='';
-function poll(){fetch(base+'list',{cache:'no-store'}).then(r=>r.json()).then(d=>{const s=JSON.stringify(d);if(s==last)return;last=s;const o=document.getElementById('out');o.innerHTML='';
-if(d.text){const p=document.createElement('pre');p.textContent=d.text;o.appendChild(p)}
-d.files.forEach(f=>{const r=document.createElement('div');r.className='it';r.innerHTML='<div class="n"></div><div class="st"></div><a class="dl">Скачать</a>';
-r.querySelector('.n').textContent=f.name;r.querySelector('.st').textContent=fmt(f.size);r.querySelector('a').href=base+'f/'+f.id;o.appendChild(r)});
-if(!d.text&&!d.files.length)o.innerHTML='<div class="empty">Перетащи файлы на вкладку «Телефон» в Isle — они появятся здесь</div>'}).catch(()=>{})}
-poll();setInterval(poll,3000);
+x.upload.onprogress=e=>{if(e.lengthComputable){const p=e.loaded/e.total;fg.style.strokeDashoffset=94.2*(1-p);st.textContent=fmt(e.loaded)+' из '+fmt(e.total)}};
+const done=ok=>{pending--;ring.classList.add(ok?'ok':'err');st.textContent=ok?fmt(f.size)+' · на компьютере':'не отправилось — нет связи';if(ok)sent++;else{st.style.color='var(--bad)';island('Не отправилось',2200)}res()};
+x.onload=()=>done(x.status==200);x.onerror=()=>done(false);x.send(f)})}
+$('ph').onchange=e=>{up(e.target.files);e.target.value=''};
+$('fl').onchange=e=>{up(e.target.files);e.target.value=''};
+const tx=$('tx'),sb=$('sendt');
+tx.oninput=()=>{tx.style.height='auto';tx.style.height=Math.min(200,tx.scrollHeight+2)+'px';sb.disabled=!tx.value.trim()};
+sb.onclick=()=>{if(!tx.value.trim())return;sb.disabled=true;
+fetch(base+'text',{method:'POST',body:tx.value}).then(r=>{if(!r.ok)throw 0;tx.value='';tx.oninput();sb.classList.add('done');sb.innerHTML=ICON.ok.replace('#4ADE80','#000');buzz();island(ICON.ok+' Текст в буфере ПК');
+setTimeout(()=>{sb.classList.remove('done');sb.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>'},1500)}).catch(()=>{sb.disabled=false;island('Нет связи с ПК',2200)})};
+function copy(t,b){const ok=()=>{b.classList.add('ok');b.innerHTML=ICON.ok.replace('18','15').replace('18','15')+' Скопировано';buzz();setTimeout(()=>{b.classList.remove('ok');b.innerHTML=ICON.cp+' Скопировать'},1500)};
+if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(ok);else{const a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity=0;document.body.appendChild(a);a.select();try{document.execCommand('copy');ok()}catch(e){}a.remove()}}
+let last=null,known=new Set();
+function render(d){const o=$('out');o.innerHTML='';
+if(d.text){const c=document.createElement('div');c.className='txt'+(known.has('t:'+d.text)?'':' it new');c.style.display='block';c.innerHTML='<pre></pre><button class="btn">'+ICON.cp+' Скопировать</button>';c.querySelector('pre').textContent=d.text;
+const b=c.querySelector('button');b.onclick=()=>copy(d.text,b);o.appendChild(c)}
+d.files.forEach(f=>{const r=document.createElement('div');r.className='it'+(last&&!known.has(f.id)?' new':'');
+r.innerHTML='<div class="th"'+(f.img?' style="background-image:url('+base+'f/'+f.id+'?view=1)"':'')+'>'+(f.img?'':ICON.file)+'</div><div class="m"><div class="n"></div><div class="st">'+fmt(f.size)+'</div></div><a class="dl">'+ICON.dl+' Скачать</a>';
+r.querySelector('.n').textContent=f.name;r.querySelector('a').href=base+'f/'+f.id;o.appendChild(r)});
+if(!d.text&&!d.files.length)o.innerHTML='<div class="empty">'+ICON.pc+'Перетащи файлы на вкладку «Телефон» в Isle — они появятся здесь</div>';
+if(last&&(d.files.some(f=>!known.has(f.id))||(d.text&&!known.has('t:'+d.text)))){island('Новое с компьютера',1800);buzz()}
+known=new Set(d.files.map(f=>f.id));if(d.text)known.add('t:'+d.text)}
+function poll(){fetch(base+'list',{cache:'no-store'}).then(r=>r.json()).then(d=>{if(!online){online=true;isl.classList.remove('off');island(ICON.ok+' Снова на связи',1500)}
+const s=JSON.stringify(d);if(s===last)return;render(d);last=s}).catch(()=>{if(online){online=false;isl.classList.add('off');islT.textContent='Нет связи с ПК'}})}
+setTimeout(()=>island(ICON.ok+' Подключено к компьютеру',2000),350);
+poll();setInterval(poll,2500);
 </script></body></html>
 """;
     }

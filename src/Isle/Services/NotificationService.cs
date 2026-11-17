@@ -89,6 +89,22 @@ namespace Isle.Services
                     var body = string.Join(" ", texts.Skip(1));
                     string appId = null;
                     try { appId = n.AppInfo?.AppUserModelId; } catch { }
+                    // «Связь с телефоном» Windows пересылает уведомления телефона по Bluetooth — показываем их как «с телефона»
+                    if (IsPhoneLink(app, appId))
+                    {
+                        PhoneLink.AddNotice(new PhoneNotice { App = app, Title = title, Body = body });
+                        ToastBus.Show(new Toast
+                        {
+                            Kind = ToastKind.Notification,
+                            Title = title,
+                            Subtitle = string.IsNullOrEmpty(body) ? "С телефона" : body,
+                            Icon = Icons.Phone,
+                            LaunchAppId = appId,
+                            Duration = TimeSpan.FromSeconds(5),
+                            ReplaceKey = updated ? "win-notification-" + n.Id : null
+                        });
+                    }
+                    else
                     ToastBus.Show(new Toast
                     {
                         Kind = ToastKind.Notification,
@@ -117,6 +133,13 @@ namespace Isle.Services
             catch (Exception ex) { App.Log("notification poll: " + ex.Message); }
             finally { _polling = false; }
         }
+
+        /// <summary>Уведомление переслала «Связь с телефоном» (Phone Link) — значит, оно пришло на телефон.</summary>
+        public static bool IsPhoneLink(string app, string appId) =>
+            (appId?.Contains("YourPhone", StringComparison.OrdinalIgnoreCase) ?? false)
+            || (appId?.Contains("PhoneExperience", StringComparison.OrdinalIgnoreCase) ?? false)
+            || app.Equals("Связь с телефоном", StringComparison.OrdinalIgnoreCase) || app.Equals("Phone Link", StringComparison.OrdinalIgnoreCase)
+            || app.Equals("Ваш телефон", StringComparison.OrdinalIgnoreCase) || app.Equals("Your Phone", StringComparison.OrdinalIgnoreCase);
 
         private static readonly Dictionary<string, System.Windows.Media.ImageSource> Logos = new();
 
