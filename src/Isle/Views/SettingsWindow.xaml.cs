@@ -175,6 +175,7 @@ namespace Isle.Views
             ChNone.IsChecked = S.Character == "none";
             foreach (var rb in Outfits.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.BuddyOutfit ?? "auto");
             BuildTabsList();
+            foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
             OpacitySlider.Value = Math.Round(S.IslandOpacity * 100);
@@ -424,6 +425,12 @@ namespace Isle.Views
         {
             Services.Journal.Info("welcome", "открыто вручную из Настроек");
             try { WelcomeWindow.ShowOnce(); } catch (System.Exception ex) { App.Log("welcome: " + ex); }
+        }
+
+        private void OnSnowMode(object s, RoutedEventArgs e)
+        {
+            S.WinterSnow = (string)((FrameworkElement)s).Tag;
+            S.Save(); // чёлка подхватит на следующем кадре
         }
 
         private void OnOutfit(object s, RoutedEventArgs e)
