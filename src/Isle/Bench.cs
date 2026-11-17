@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,96 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)v.ActualWidth, (int)v.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3500);
+                w.SuppressAutoCollapse = true;
+                w.Expand("phone");
+                await Task.Delay(1500);
+                var addrs = PhoneLink.Addresses();
+                L("сервер: " + PhoneLink.Running + ", порт " + PhoneLink.Port + ", адреса: " + string.Join("; ", addrs.Select(a => a.ip + " " + a.name)));
+                var ip = addrs.FirstOrDefault().ip ?? "127.0.0.1";
+                var url = PhoneLink.Url(ip);
+                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+                var page = await http.GetAsync(url);
+                L("страничка: " + (int)page.StatusCode + ", " + (await page.Content.ReadAsStringAsync()).Length + " символов");
+                var bad = await http.GetAsync("http://" + ip + ":" + PhoneLink.Port + "/wrongkey/");
+                L("без ключа: " + (int)bad.StatusCode);
+                // фото «с телефона»
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(400, 300, 96, 96, PixelFormats.Pbgra32);
+                var dv = new DrawingVisual(); using (var dc = dv.RenderOpen()) dc.DrawRectangle(new LinearGradientBrush(Colors.Orange, Colors.DeepPink, 45), null, new Rect(0, 0, 400, 300));
+                bmp.Render(dv);
+                var ms = new MemoryStream(); var je = new System.Windows.Media.Imaging.JpegBitmapEncoder(); je.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp)); je.Save(ms);
+                var upr = await http.PostAsync(url + "up?name=" + Uri.EscapeDataString("IMG_2026 море.jpg"), new System.Net.Http.ByteArrayContent(ms.ToArray()));
+                L("загрузка фото: " + (int)upr.StatusCode);
+                var tr = await http.PostAsync(url + "text", new System.Net.Http.StringContent("Привет с телефона! https://example.com"));
+                L("текст: " + (int)tr.StatusCode);
+                await Task.Delay(1500);
+                L("получено: " + PhoneLink.Received.Count + " — " + string.Join(", ", PhoneLink.Received.Select(r => r.Text ?? r.Name)));
+                L("в буфере сверху: " + string.Join(" | ", AppHost.Clipboard.Items.Take(2).Select(i => i.Kind + ": " + i.Preview + " (" + i.Source + ")")));
+                string cbText = null; try { cbText = Clipboard.GetText(); } catch { }
+                L("буфер обмена Windows: " + cbText);
+                // на телефон
+                var tmp = Path.Combine(Path.GetTempPath(), "отчёт для телефона.txt"); File.WriteAllText(tmp, "hello phone");
+                PhoneLink.Offer(new[] { tmp });
+                var list = await http.GetStringAsync(url + "list");
+                L("список для телефона: " + list);
+                var id = System.Text.Json.JsonDocument.Parse(list).RootElement.GetProperty("files")[0].GetProperty("id").GetString();
+                var dl = await http.GetAsync(url + "f/" + id);
+                L("скачивание: " + (int)dl.StatusCode + ", " + await dl.Content.ReadAsStringAsync() + ", имя " + dl.Content.Headers.ContentDisposition);
+                await Task.Delay(800);
+                var pv = (Isle.Views.PhoneView)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "phone" });
+                var qr = (Image)pv.FindName("Qr");
+                var src = (System.Windows.Media.Imaging.BitmapSource)qr.Source;
+                var dev = PresentationSource.FromVisual(w).CompositionTarget.TransformToDevice.M11;
+                L("QR: клеток " + src.PixelWidth + ", размер " + qr.ActualWidth.ToString("0.###") + "×" + qr.ActualHeight.ToString("0.###") + " DIP, масштаб " + dev + " → " + (qr.ActualWidth * dev / src.PixelWidth).ToString("0.###") + " px на клетку");
+                SnapEl(w.Content as FrameworkElement, dir, "phone-0");
+                // телефон открывает страничку → змейка
+                var opened = http.GetAsync(url);
+                for (int i = 1; i <= 6; i++) { await Task.Delay(i == 1 ? 350 : 300); SnapEl(w.Content as FrameworkElement, dir, "phone-snake-" + i); }
+                await opened;
+                await Task.Delay(2500);
+                SnapEl(w.Content as FrameworkElement, dir, "phone-after");
+                // уведомления телефона
+                PhoneLink.AddNotice(new PhoneNotice { App = "Связь с телефоном", Title = "Мама", Body = "Ты сегодня приедешь на ужин?" });
+                await Task.Delay(300);
+                PhoneLink.AddNotice(new PhoneNotice { App = "Связь с телефоном", Title = "Банк", Body = "Поступление 1 500 ₽" });
+                await Task.Delay(500);
+                SnapEl(w.Content as FrameworkElement, dir, "phone-badge");
+                var pn = (RadioButton)pv.FindName("PaneNotices"); pn.IsChecked = true;
+                pv.GetType().GetMethod("OnPane", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(pv, new object[] { pn, null });
+                await Task.Delay(600);
+                SnapEl(w.Content as FrameworkElement, dir, "phone-notices");
+                PhoneLink.Notices.Clear(); pv.GetType().GetMethod("BuildNotices", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(pv, null);
+                await Task.Delay(400);
+                SnapEl(w.Content as FrameworkElement, dir, "phone-notices-empty");
+                // проверка распознавания «Связи с телефоном»
+                L("PhoneLink распознан: " + NotificationService.IsPhoneLink("Связь с телефоном", "Microsoft.YourPhone_8wekyb3d8bbwe!App") + ", Telegram: " + NotificationService.IsPhoneLink("Telegram", "TelegramDesktop"));
+                File.WriteAllText(Path.Combine(dir, "page.html"), await http.GetStringAsync(url));
+                var lj = await http.GetStringAsync(url + "list"); L("list: " + lj);
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
