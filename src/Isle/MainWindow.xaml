@@ -261,6 +261,9 @@
                                 <RadioButton Style="{StaticResource Tab}" Content="Полка" x:Name="TabShelf" Checked="OnTab">
                                     <RadioButton.Tag><h:Icon Kind="Tray" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Телефон" x:Name="TabPhone" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Phone" Width="18" Height="18"/></RadioButton.Tag>
+                                </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Текст" x:Name="TabText" Checked="OnTab">
                                     <RadioButton.Tag><h:Icon Kind="Text" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
@@ -336,6 +339,10 @@
                  где край вытягивается, обводка идёт по его изгибу (иначе на чёрном фоне OLED его не видно) -->
             <h:LiquidEdge x:Name="Edge" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,33,24,0"
                           Width="{Binding ActualWidth, ElementName=Island}"/>
+
+            <!-- снег из-под чёлки (зимой) -->
+            <h:SnowFall x:Name="Snow" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,34,24,0" Height="150"
+                        Width="{Binding ActualWidth, ElementName=Island}" Opacity="{Binding Opacity, ElementName=Island}"/>
         </Grid>
     </Grid>
 </Window>
