@@ -66,7 +66,7 @@ namespace Isle.Views
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
             _hasSteam = SteamDownloadService.SteamRoot() != null;
             // знакомство: что это → как устроено → вкладки → клавиши → ИИ → Клоди; потом личная настройка
-            _pages.AddRange(new Func<FrameworkElement>[] { Intro, HowItWorks, TabsStep, KeysStep, AiStep, BuddyStep });
+            _pages.AddRange(new Func<FrameworkElement>[] { Intro, HowItWorks, TabsStep, PhoneStep, KeysStep, AiStep, BuddyStep });
             _firstSetup = _pages.Count;
             if (_hasSteam) _pages.Add(SteamStep);
             _pages.Add(PrintScreenStep);
@@ -243,7 +243,7 @@ namespace Isle.Views
             (string icon, string text)[] feats =
             {
                 (Icons.Volume, "Музыка и тексты песен"), (Icons.Download, "Загрузки Steam и браузеров"), (Icons.Crop, "Снимки с пометками"),
-                (Icons.Chat, "Чат с ИИ и голос"), (Icons.Copy, "История буфера"), (Icons.Bell, "Таймеры и напоминания"),
+                (Icons.Chat, "Чат с ИИ и голос"), (Icons.Copy, "История буфера"), (Icons.Phone, "Телефон без проводов"),
             };
             int i = 0;
             foreach (var (icon, text) in feats)
@@ -414,18 +414,19 @@ namespace Isle.Views
         // 3) Вкладки панели
         private FrameworkElement TabsStep()
         {
-            var sp = Page("Что внутри панели", "Восемь вкладок сверху панели. Переключай колёсиком мыши или кликом.", buddy: false);
-            var grid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 14, 0, 0) };
+            var sp = Page("Что внутри панели", "Вкладки сверху панели — переключай колёсиком или кликом. Какие показывать и в каком порядке — Настройки → Внешний вид.", buddy: false);
+            var grid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 14, 0, 0) };
             (string icon, string name, string text)[] tabs =
             {
-                (Icons.Home, "Главная", "Плеер, громкость, снимки, пипетка, QR, ярлыки"),
-                (Icons.Clipboard, "Буфер", "История копирования с поиском и закрепом"),
-                (Icons.Tray, "Полка", "Перетащи файл на чёлку — потом вытащи куда надо"),
-                (Icons.Text, "Текст", "ghbdtn → привет, регистр, транслит, JSON"),
+                (Icons.Home, "Главная", "Плеер, громкость, снимки, пипетка, ярлыки"),
+                (Icons.Clipboard, "Буфер", "История по дням, папки, поиск"),
+                (Icons.Tray, "Полка", "Перетащи файл на чёлку — вытащи куда надо"),
+                (Icons.Phone, "Телефон", "Фото и файлы с телефона и обратно"),
+                (Icons.Text, "Текст", "ghbdtn → привет, регистр, транслит"),
                 (Icons.Chat, "Чат", "ИИ открывает программы, ставит таймеры"),
-                (Icons.Note, "Заметка", "Заметки, чек-листы, таймер, напоминания"),
-                (Icons.Sun, "Погода", "Сейчас, по часам, на неделю и предупреждения"),
-                (Icons.Sliders, "Управление", "Сеть, Bluetooth, тема, сон, выключение"),
+                (Icons.Note, "Заметка", "Заметки, чек-листы, напоминания"),
+                (Icons.Sun, "Погода", "Сейчас, по часам и на неделю"),
+                (Icons.Sliders, "Управление", "Сеть, Bluetooth, тема, сон"),
             };
             int i = 0;
             foreach (var (icon, name, text) in tabs)
@@ -480,6 +481,24 @@ namespace Isle.Views
             }
             sp.Children.Add(list);
             sp.Children.Add(new TextBlock { Text = "Правый клик по чёлке — меню с настройками и выходом.", FontSize = 12, Foreground = Muted, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) });
+            sp.Children.Add(NavRow());
+            return sp;
+        }
+
+        // Телефон без проводов и новый вид чёлки
+        private FrameworkElement PhoneStep()
+        {
+            var sp = Page("Телефон и внешний вид", "Ещё пара вещей, которые стоит знать.", buddy: false);
+            var list = new StackPanel { Margin = new Thickness(20, 12, 20, 0) };
+            var rows = new[]
+            {
+                InfoRow(Icons.Phone, "Телефон без приложений", "Вкладка «Телефон»: наведи камеру на QR-код — фото, видео, файлы и текст летят на компьютер и обратно. Нужна общая сеть: Wi-Fi или интернет с телефона."),
+                InfoRow(Icons.Bell, "Уведомления телефона", "Свяжи телефон по Bluetooth во встроенной «Связи с телефоном» Windows — его уведомления будут всплывать в чёлке."),
+                InfoRow(Icons.Monitor, "Вырез, как на MacBook", "Развёрнутые окна и браузер встают ниже чёлки, и она ничего не закрывает. Включается в Настройки → Внешний вид."),
+                InfoRow(Icons.Snow, "Снег зимой", "С 1 декабря по 14 января и в снегопад из-под чёлки падают снежинки. Выключить — Настройки → Внешний вид."),
+            };
+            for (int i = 0; i < rows.Length; i++) { Stagger(rows[i], i, 250, 90); list.Children.Add(rows[i]); }
+            sp.Children.Add(list);
             sp.Children.Add(NavRow());
             return sp;
         }
