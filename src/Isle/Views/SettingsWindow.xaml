@@ -302,6 +302,17 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
+                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Режим выреза, как на MacBook"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Сверху появляется чёрная полоса высотой с чёлку, и развёрнутые окна встают ниже неё — чёлка ничего не закрывает. «В браузере» — только пока впереди браузер."/>
+                                    <WrapPanel x:Name="NotchModes" Margin="0,10,0,0">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="Выключен" Click="OnNotchMode" Tag="off"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="В браузере" Click="OnNotchMode" Tag="browser"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="Всегда" Click="OnNotchMode" Tag="always"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/></Grid.ColumnDefinitions>
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Размер острова"/><TextBlock Style="{StaticResource RowNote}" Text="На 4K-мониторе сделай крупнее"/></StackPanel>
                                 <Slider x:Name="ScaleSlider" Grid.Column="1" Minimum="70" Maximum="200" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnScale"/>

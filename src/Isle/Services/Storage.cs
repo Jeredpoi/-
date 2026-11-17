@@ -141,6 +141,8 @@ namespace Isle.Services
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
         /// <summary>Одежда Клоди: auto — по погоде, иначе имя наряда (Cowboy, Crown, Wizard, Pirate, Chef, Frost, Autumn, Storm, Heat, Winter, Sunny, Summer, None).</summary>
         public string BuddyOutfit { get; set; } = "auto";
+        /// <summary>Режим выреза: «off», «browser» — окна ниже чёлки, пока впереди браузер, «always» — всегда.</summary>
+        public string NotchMode { get; set; } = "off";
         public bool FirstRunDone { get; set; } = false;
         /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
         public bool WelcomeShown { get; set; }
