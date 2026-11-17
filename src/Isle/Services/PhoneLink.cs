@@ -112,6 +112,8 @@ namespace Isle.Services
             _lastRequest = DateTime.MinValue;
             IdleStop.Tick -= OnIdleTick; IdleStop.Tick += OnIdleTick; IdleStop.Start();
             _idleSince = DateTime.Now;
+            // сертификат для https — в фоне; когда будет готов, QR обновится
+            _ = Task.Run(PhoneTls.EnsureAsync).ContinueWith(_ => Application.Current?.Dispatcher.InvokeAsync(() => Changed?.Invoke()));
             Journal.Info("phone", "сервер для телефона запущен, порт " + Port + ", адреса: " + string.Join(", ", Addresses().Select(a => a.ip + " (" + a.name + ")")));
             Changed?.Invoke();
         }
@@ -133,8 +135,19 @@ namespace Isle.Services
             if (DateTime.Now - _idleSince > TimeSpan.FromMinutes(15)) Stop();
         }
 
-        /// <summary>Адрес для QR: http://IP:порт/ключ/</summary>
-        public static string Url(string ip) => "http://" + ip + ":" + Port + "/" + _token + "/";
+        /// <summary>Адрес для QR: https://192-168-1-5.local-ip.sh:порт/ключ/ (если есть сертификат) или http://IP:порт/ключ/</summary>
+        public static string Url(string ip) => (Https ? "https://" + PhoneTls.Host(ip) : "http://" + ip) + ":" + Port + "/" + _token + "/";
+
+        /// <summary>Страничка открывается по https (сертификат local-ip.sh скачан и https не выключен в подсказке).</summary>
+        public static bool Https => PhoneTls.Ready && AppSettings.Current.PhoneHttps;
+
+        /// <summary>Переключить http/https (из подсказки «Не открывается?»).</summary>
+        public static void SetHttps(bool on)
+        {
+            AppSettings.Current.PhoneHttps = on; AppSettings.Current.Save();
+            Journal.Info("phone", "страничка телефона: " + (on ? "https" : "http"));
+            Changed?.Invoke();
+        }
 
         /// <summary>
         /// Адреса компьютера в локальных сетях: Wi-Fi, кабель, точка доступа телефона, USB-модем.
@@ -202,7 +215,19 @@ namespace Isle.Services
                 try
                 {
                     client.ReceiveTimeout = 30000;
-                    var stream = client.GetStream();
+                    Stream stream = client.GetStream();
+                    // первый байт 0x16 — начало TLS: телефон пришёл по https, иначе обычный http
+                    var first = new byte[1];
+                    if (await stream.ReadAsync(first) <= 0) return;
+                    stream = new PrefixStream(first, stream);
+                    if (first[0] == 0x16)
+                    {
+                        if (PhoneTls.Context == null) return;
+                        var ssl = new System.Net.Security.SslStream(stream, false);
+                        using var hs = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                        await ssl.AuthenticateAsServerAsync(new System.Net.Security.SslServerAuthenticationOptions { ServerCertificateContext = PhoneTls.Context }, hs.Token);
+                        stream = ssl;
+                    }
                     var (method, target, headers, leftover) = await ReadHead(stream);
                     if (method == null) return;
                     string path = target, query = "";
@@ -243,7 +268,7 @@ namespace Isle.Services
             return null;
         }
 
-        private static async Task<(string method, string target, Dictionary<string, string> headers, byte[] leftover)> ReadHead(NetworkStream s)
+        private static async Task<(string method, string target, Dictionary<string, string> headers, byte[] leftover)> ReadHead(Stream s)
         {
             var buf = new byte[16384];
             int len = 0;
@@ -270,7 +295,7 @@ namespace Isle.Services
             return -1;
         }
 
-        private static async Task Send(NetworkStream s, int code, string type, byte[] body)
+        private static async Task Send(Stream s, int code, string type, byte[] body)
         {
             var head = "HTTP/1.1 " + code + (code == 200 ? " OK" : " Error") + "\r\nContent-Type: " + type + "\r\nContent-Length: " + body.Length
                 + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
@@ -284,7 +309,7 @@ namespace Isle.Services
         };
 
         /// <summary>view — показать картинку прямо на страничке (превью), иначе — скачать.</summary>
-        private static async Task SendFile(NetworkStream s, OutgoingFile f, bool view = false)
+        private static async Task SendFile(Stream s, OutgoingFile f, bool view = false)
         {
             if (f == null || !File.Exists(f.Path)) { await Send(s, 404, "text/plain", Encoding.UTF8.GetBytes("Файл больше не доступен")); return; }
             var img = ImageType(f.Name);
@@ -299,7 +324,7 @@ namespace Isle.Services
             if (!view) Journal.Info("phone", "телефон скачал файл (" + fs.Length / 1024 + " КБ)");
         }
 
-        private static async Task Receive(NetworkStream s, Dictionary<string, string> h, byte[] leftover, string name)
+        private static async Task Receive(Stream s, Dictionary<string, string> h, byte[] leftover, string name)
         {
             if (!h.TryGetValue("Content-Length", out var cl) || !long.TryParse(cl, out long total) || total < 0) { await Send(s, 411, "text/plain", Array.Empty<byte>()); return; }
             name = SafeName(string.IsNullOrWhiteSpace(name) ? "файл с телефона" : name);
@@ -327,7 +352,7 @@ namespace Isle.Services
             Deliver(new PhoneItem { Name = System.IO.Path.GetFileName(path), Path = path, Size = total });
         }
 
-        private static async Task ReceiveText(NetworkStream s, Dictionary<string, string> h, byte[] leftover)
+        private static async Task ReceiveText(Stream s, Dictionary<string, string> h, byte[] leftover)
         {
             if (!h.TryGetValue("Content-Length", out var cl) || !int.TryParse(cl, out int total) || total < 0 || total > 1_000_000) { await Send(s, 411, "text/plain", Array.Empty<byte>()); return; }
             var buf = new byte[total];
