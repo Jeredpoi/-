@@ -38,6 +38,36 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                var island = (FrameworkElement)w.FindName("Island");
+                string Bot() => "низ чёлки " + Math.Round(island.PointToScreen(new Point(0, island.ActualHeight)).Y) + ", высота " + island.ActualHeight;
+                L("без выреза, курсор далеко: " + Bot());
+                var c = island.PointToScreen(new Point(island.ActualWidth / 2, island.ActualHeight / 2));
+                SetCursorPos((int)c.X, (int)c.Y + 2); await Task.Delay(900);
+                L("без выреза, курсор на чёлке (должна вытянуться): " + Bot());
+                SetCursorPos(10, 600); await Task.Delay(1200);
+                AppSettings.Current.NotchMode = "always"; Helpers.NotchBar.Update(); await Task.Delay(1200);
+                L("вырез: полоса до " + SystemParameters.WorkArea.Top + ", " + Bot());
+                SetCursorPos((int)c.X, (int)c.Y + 2); await Task.Delay(900);
+                L("вырез, курсор на чёлке (не тянется): " + Bot() + ", полоса до " + SystemParameters.WorkArea.Top);
+                SetCursorPos(10, 600); await Task.Delay(800);
+                Helpers.NotchBar.Unregister();
+                var pi = typeof(Isle.Views.PhoneView).GetMethod("PhoneLinkInstalled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                L("«Связь с телефоном» установлена: " + pi.Invoke(null, null));
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
