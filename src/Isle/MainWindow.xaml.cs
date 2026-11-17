@@ -319,6 +319,13 @@ namespace Isle
                 };
                 trim.Start();
                 App.Trace("все модули запущены");
+                // режим выреза: полоса сверху высотой со свёрнутую чёлку (в пикселях экрана)
+                Helpers.NotchBar.Height = () =>
+                {
+                    var dev = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                    return (int)Math.Round(34 * ScaleT.ScaleY * dev.M22);
+                };
+                Helpers.NotchBar.Update();
                 ApplyTabs();
                 // заранее создаём вкладки в простое — первое открытие без рывка
                 _ = Dispatcher.InvokeAsync(() => { foreach (var t in TabOrder) GetView(t); }, DispatcherPriority.ApplicationIdle);
@@ -2656,6 +2663,9 @@ namespace Isle
 
         private DateTime _tipUntil;
 
+        /// <summary>Чёлка над полосой режима выреза.</summary>
+        public void KeepIslandOnTop() => KeepOnTop();
+
         private void KeepOnTop()
         {
             if (_hwnd == IntPtr.Zero || !IsVisible) return;
@@ -2919,6 +2929,7 @@ namespace Isle
         /// <summary>Масштаб острова. Окно растёт вместе с ним — иначе края панели обрезаются.</summary>
         public void ApplyScale()
         {
+            Dispatcher.InvokeAsync(Helpers.NotchBar.Update, DispatcherPriority.Background); // полоса выреза — под новый размер чёлки
             double sc = Math.Clamp(AppSettings.Current.Scale, 0.7, 2.0);
             ScaleT.ScaleX = ScaleT.ScaleY = sc;
             // запас по краям: пружина на миг делает остров чуть больше конечного размера

@@ -174,6 +174,7 @@ namespace Isle.Views
             ChEyes.IsChecked = S.Character == "eyes";
             ChNone.IsChecked = S.Character == "none";
             foreach (var rb in Outfits.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.BuddyOutfit ?? "auto");
+            foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
@@ -425,6 +426,13 @@ namespace Isle.Views
         {
             Services.Journal.Info("welcome", "открыто вручную из Настроек");
             try { WelcomeWindow.ShowOnce(); } catch (System.Exception ex) { App.Log("welcome: " + ex); }
+        }
+
+        private void OnNotchMode(object s, RoutedEventArgs e)
+        {
+            S.NotchMode = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            Isle.Helpers.NotchBar.Update(); // окна сдвигаются сразу
         }
 
         private void OnSnowMode(object s, RoutedEventArgs e)

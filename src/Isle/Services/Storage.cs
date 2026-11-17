@@ -141,6 +141,8 @@ namespace Isle.Services
         public string Character { get; set; } = "pixel"; // eyes | pixel | none
         /// <summary>Одежда Клоди: auto — по погоде, иначе имя наряда (Cowboy, Crown, Wizard, Pirate, Chef, Frost, Autumn, Storm, Heat, Winter, Sunny, Summer, None).</summary>
         public string BuddyOutfit { get; set; } = "auto";
+        /// <summary>Режим выреза: «off», «browser» — окна ниже чёлки, пока впереди браузер, «always» — всегда.</summary>
+        public string NotchMode { get; set; } = "off";
         /// <summary>Порядок вкладок раскрытой чёлки (id). Новые вкладки из обновлений добавляются сами — см. Helpers.IslandTabs.</summary>
         public List<string> TabOrder { get; set; }
         /// <summary>Спрятанные вкладки (Главную спрятать нельзя).</summary>
