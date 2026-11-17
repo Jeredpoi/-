@@ -38,6 +38,36 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                var win = new Isle.Views.WelcomeWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = 100, Top = 50 };
+                win.Show();
+                await Task.Delay(2500);
+                var go = typeof(Isle.Views.WelcomeWindow).GetMethod("Go", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                for (int i = 0; i < 4; i++)
+                {
+                    if (i > 0) { go.Invoke(win, new object[] { i }); await Task.Delay(2200); }
+                    var el = (FrameworkElement)win.Content;
+                    el.UpdateLayout();
+                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)el.ActualWidth, (int)el.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(13, 17, 23)), null, new Rect(0, 0, el.ActualWidth, el.ActualHeight)); dc.DrawRectangle(new VisualBrush(el), null, new Rect(0, 0, el.ActualWidth, el.ActualHeight)); }
+                    rtb.Render(dv);
+                    var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                    using var fs = File.Create(Path.Combine(dir, "welcome-" + i + ".png")); enc.Save(fs);
+                }
+                win.Close();
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
