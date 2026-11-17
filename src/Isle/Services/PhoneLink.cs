@@ -121,7 +121,7 @@ namespace Isle.Services
         public static List<(string ip, string name)> Addresses()
         {
             var list = new List<(string ip, string name, int rank)>();
-            string[] skip = { "vpn", "tap", "tun", "wintun", "wireguard", "xray", "v2ray", "sing", "clash", "hiddify", "happ", "outline", "zerotier", "tailscale", "hyper-v", "virtualbox", "vmware", "loopback", "bluetooth", "teredo", "vethernet", "wsl" };
+            string[] skip = { "vpn", "tap", "tun", "wintun", "wireguard", "xray", "v2ray", "sing", "clash", "hiddify", "happ", "outline", "zerotier", "tailscale", "default switch", "virtualbox", "vmware", "loopback", "bluetooth", "teredo", "vethernet", "wsl" };
             try
             {
                 foreach (var n in NetworkInterface.GetAllNetworkInterfaces())

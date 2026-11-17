@@ -4,29 +4,30 @@
              xmlns:h="clr-namespace:Isle.Helpers">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="290"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- QR-код: телефон сканирует камерой и открывает страничку -->
-        <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="18">
-            <StackPanel>
-                <Border Background="White" CornerRadius="14" Padding="12" HorizontalAlignment="Center">
-                    <Grid Width="196" Height="196">
+        <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="16,14">
+            <StackPanel VerticalAlignment="Center">
+                <Border Background="White" CornerRadius="14" Padding="10" HorizontalAlignment="Center">
+                    <Grid Width="160" Height="160">
                         <Image x:Name="Qr" RenderOptions.BitmapScalingMode="NearestNeighbor" Stretch="Fill"/>
                         <TextBlock x:Name="QrNone" Text="Нет сети" Foreground="#555" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                     </Grid>
                 </Border>
-                <TextBlock Text="Наведи камеру телефона" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,2"/>
-                <TextBlock Text="Откроется страничка — приложение не нужно" Style="{StaticResource MutedText}" FontSize="11" HorizontalAlignment="Center"/>
+                <TextBlock Text="Наведи камеру телефона" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,2"/>
+                <TextBlock Text="Откроется страничка — приложение не нужно" Style="{StaticResource MutedText}" FontSize="11" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
                 <StackPanel x:Name="Status" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
                     <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#6F6F79" VerticalAlignment="Center"/>
                     <TextBlock x:Name="StatusText" FontSize="12" Margin="7,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
                 <WrapPanel x:Name="Networks" HorizontalAlignment="Center" Margin="0,10,0,0"/>
                 <TextBox x:Name="UrlBox" IsReadOnly="True" FontSize="11" Height="30" Padding="10,0" VerticalContentAlignment="Center" Margin="0,10,0,0" Foreground="#A1A1AB"/>
-                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0" TextAlignment="Center"
-                           Text="Телефон и компьютер — в одной сети: общий Wi-Fi или интернет с телефона (точка доступа или USB). Не открывается — разреши Isle в брандмауэре Windows."/>
+                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0" TextAlignment="Center"
+                           Text="Одна сеть: общий Wi-Fi или интернет с телефона"
+                           ToolTip="Работает, когда телефон и компьютер в общем Wi-Fi или когда телефон раздаёт интернет на компьютер (точка доступа или USB) — интернет при этом не нужен. Если страничка не открывается — разреши Isle в брандмауэре Windows (он спросит при первом запуске)."/>
             </StackPanel>
         </Border>
 
@@ -39,7 +40,7 @@
                 <TextBlock DockPanel.Dock="Top" Text="С ТЕЛЕФОНА" Style="{StaticResource MutedText}" FontSize="10" FontWeight="SemiBold" Margin="4,0,0,8"/>
                 <Grid>
                     <TextBlock x:Name="InEmpty" Style="{StaticResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360"
-                               Text="Здесь появится всё, что пришлёшь с телефона: фото, видео, файлы и текст. Они же попадут в «Буфер», файлы — в «Загрузки\Isle с телефона»."/>
+                               Text="Здесь появится всё, что пришлёшь с телефона: фото, видео, файлы и текст. Они же попадут в «Буфер», файлы — в «Загрузки\Isle с телефона».&#x0a;&#x0a;Страничка не открывается? Проверь, что телефон и компьютер в одной сети, и разреши Isle в брандмауэре Windows."/>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="InList"/>
                     </ScrollViewer>
