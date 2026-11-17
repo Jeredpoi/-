@@ -59,7 +59,12 @@ namespace Isle
                 AppSettings.Current.WelcomeShown = true;
                 AppSettings.Current.AutoUpdateCheck = false;
                 await Task.Delay(3500);
+                { var m0 = System.Diagnostics.Process.GetCurrentProcess(); m0.Refresh(); var c0 = m0.TotalProcessorTime; var t0 = DateTime.Now; await Task.Delay(8000); m0.Refresh();
+                  L("до вкладки (чёлка свёрнута, сервер не запущен): ЦП " + ((m0.TotalProcessorTime - c0).TotalMilliseconds / (DateTime.Now - t0).TotalMilliseconds / Environment.ProcessorCount * 100).ToString("0.0") + "%, память " + m0.WorkingSet64 / 1048576 + " МБ / частная " + m0.PrivateMemorySize64 / 1048576 + " МБ"); }
                 w.SuppressAutoCollapse = true;
+                w.Expand("clip"); await Task.Delay(1500);
+                { var m0 = System.Diagnostics.Process.GetCurrentProcess(); m0.Refresh(); var c0 = m0.TotalProcessorTime; var t0 = DateTime.Now; await Task.Delay(8000); m0.Refresh();
+                  L("для сравнения — открыта вкладка «Буфер»: ЦП " + ((m0.TotalProcessorTime - c0).TotalMilliseconds / (DateTime.Now - t0).TotalMilliseconds / Environment.ProcessorCount * 100).ToString("0.0") + "%"); }
                 w.Expand("phone");
                 await Task.Delay(1500);
                 var addrs = PhoneLink.Addresses();
