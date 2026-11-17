@@ -121,6 +121,7 @@ namespace Isle
                 L("PhoneLink распознан: " + NotificationService.IsPhoneLink("Связь с телефоном", "Microsoft.YourPhone_8wekyb3d8bbwe!App") + ", Telegram: " + NotificationService.IsPhoneLink("Telegram", "TelegramDesktop"));
                 File.WriteAllText(Path.Combine(dir, "page.html"), await http.GetStringAsync(url));
                 var lj = await http.GetStringAsync(url + "list"); L("list: " + lj);
+            }
             catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
             Application.Current.Shutdown();
         }
