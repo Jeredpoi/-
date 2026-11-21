@@ -18,7 +18,9 @@ namespace Isle.Helpers
         Autumn, Storm, Frost, Heat,
         // на выбор в Настройках
         Cowboy, Crown, Wizard, Pirate, Chef,
-        Party, Viking, Detective, Ninja, Flowers, Graduate
+        Party, Viking, Detective, Ninja, Flowers, Graduate,
+        // тема «Закат»: гавайская рубашка и тёмные очки
+        Tropic
     }
 
     /// <summary>
@@ -1518,6 +1520,35 @@ namespace Isle.Helpers
             }
             // дождь — жёлтый дождевик с капюшоном (раньше был плоский «зонт» над головой: его обрезал край чёлки, и он смотрелся тучей)
             else if (Outfit == Outfit.Rain && !nightcap) DrawOutfit(dc, ox, oy, px, Outfit.Storm);
+            else if (Outfit == Outfit.Tropic)
+            {
+                // тема «Закат»: пастельно-розовый пиджак с закатанными рукавами, бирюзовая футболка, золотая цепь, очки-авиаторы
+                var jacket = new SolidColorBrush(Color.FromRgb(0xF9, 0xA8, 0xD4));
+                var lapel = new SolidColorBrush(Color.FromRgb(0xDB, 0x27, 0x77));
+                var tee = new SolidColorBrush(Color.FromRgb(0x22, 0xD3, 0xEE));
+                var gold = new SolidColorBrush(Color.FromRgb(0xFA, 0xCC, 0x15));
+                void Q(Brush b, double x, double y, double w, double h) => dc.DrawRectangle(b, null, new Rect(ox + x * px, oy + y * px, w * px + 0.3, h * px + 0.3));
+                Q(tee, 4.6, 4, 3.8, 2.8);                                  // футболка в вырезе пиджака
+                Q(jacket, 2, 4, 2.6, 2.8); Q(jacket, 8.4, 4, 2.6, 2.8);    // полы пиджака
+                Q(jacket, 0.4, 4, 1.8, 1.1); Q(jacket, 10.8, 4, 1.8, 1.1); // закатанные рукава
+                Q(lapel, 4.3, 4, 0.5, 1.6); Q(lapel, 8.2, 4, 0.5, 1.6);   // лацканы
+                Q(lapel, 3.0, 5.6, 0.9, 0.35);                             // нагрудный карман
+                Q(gold, 5.0, 4.0, 0.3, 0.5); Q(gold, 5.3, 4.5, 0.3, 0.35); Q(gold, 7.4, 4.5, 0.3, 0.35); Q(gold, 7.7, 4.0, 0.3, 0.5); // цепь — тонкая V
+                Q(gold, 5.6, 4.8, 1.8, 0.3);
+                Q(gold, 6.3, 5.1, 0.45, 0.45);                             // кулон
+                if (!nightcap)
+                {
+                    glasses = true;
+                    var rim = new SolidColorBrush(Color.FromRgb(0xE8, 0xC5, 0x6B));
+                    var lensG = new LinearGradientBrush(Color.FromRgb(0x1E, 0x0A, 0x3C), Color.FromRgb(0xBE, 0x18, 0x5D), 90); // тёмные сверху, малиновые снизу
+                    // авиаторы: капли чуть шире сверху, тонкая золотая оправа и перемычка
+                    Q(lensG, 2.8, 2.0, 3.3, 1.2); Q(lensG, 3.2, 3.1, 2.5, 0.6);
+                    Q(lensG, 6.9, 2.0, 3.3, 1.2); Q(lensG, 7.3, 3.1, 2.5, 0.6);
+                    Q(rim, 2.8, 1.8, 7.4, 0.25);                            // верхняя дужка через обе линзы
+                    var shine = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+                    Q(shine, 3.3, 2.3, 0.7, 0.3); Q(shine, 7.4, 2.3, 0.7, 0.3);
+                }
+            }
             else if (!nightcap) DrawOutfit(dc, ox, oy, px);
 
             // ---- праздничные шапки (вместо обычной): Новый год — колпак Деда Мороза, Хэллоуин — шляпа ведьмы

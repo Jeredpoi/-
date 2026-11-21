@@ -9,7 +9,7 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <Border CornerRadius="18" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Padding="0">
+        <Border CornerRadius="18" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" Padding="0">
             <Grid ClipToBounds="True">
                 <Border x:Name="HeroBackground" CornerRadius="17" Background="#243246"/>
                 <Canvas x:Name="WeatherFx" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnWeatherFxSizeChanged"/>

@@ -34,6 +34,9 @@
                     Width="210" Height="34" Margin="24,0,24,24" HorizontalAlignment="Center" VerticalAlignment="Top"
                     SnapsToDevicePixels="True">
                 <Grid>
+                    <!-- Тема «Закат»: фон раскрытой панели — небо, солнце и пальмы за матовым стеклом (появляется вместе с панелью) -->
+                    <Border x:Name="ThemeBack" Visibility="Collapsed" IsHitTestVisible="False"
+                            CornerRadius="{Binding CornerRadius, ElementName=Island}" Opacity="{Binding Opacity, ElementName=ExpandedView}"/>
                     <!-- Подсветка всплывашки: получилось — зелёная, ошибка — красная, «внимание» — янтарная
                          (тонкий край и мягкое свечение снизу; вспыхивает и остаётся едва заметной, пока висит плашка) -->
                     <Border x:Name="StatusGlow" IsHitTestVisible="False" Opacity="0" BorderThickness="1.5"
