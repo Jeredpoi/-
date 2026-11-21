@@ -31,7 +31,7 @@ namespace Isle.Services
                 }
                 if (sw.ElapsedMilliseconds >= budgetMs)
                 {
-                    Journal.Debug("clipboard", what + ": буфер занят другой программой, " + tries + " попыток за " + sw.ElapsedMilliseconds + " мс (0x" + hr.ToString("X8") + ")");
+                    if (budgetMs > 0) Journal.Debug("clipboard", what + ": буфер занят другой программой, " + tries + " попыток за " + sw.ElapsedMilliseconds + " мс (0x" + hr.ToString("X8") + ")");
                     return false;
                 }
                 Thread.Sleep(40);
