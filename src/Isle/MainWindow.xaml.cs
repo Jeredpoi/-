@@ -1563,8 +1563,8 @@ namespace Isle
                 var res = Application.Current.Resources;
                 if (sunset)
                 {
-                    res["Card"] = new SolidColorBrush(Color.FromArgb(150, 0x14, 0x0A, 0x22));
-                    res["CardBorder"] = new SolidColorBrush(Color.FromArgb(60, 0xFF, 0xB4, 0xD9));
+                    res["Card"] = Helpers.SunsetTheme.GlassCard();
+                    res["CardBorder"] = Helpers.SunsetTheme.GlassBorder();
                 }
                 else { res.Remove("Card"); res.Remove("CardBorder"); }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;

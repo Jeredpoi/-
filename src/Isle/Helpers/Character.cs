@@ -1522,24 +1522,30 @@ namespace Isle.Helpers
             else if (Outfit == Outfit.Rain && !nightcap) DrawOutfit(dc, ox, oy, px, Outfit.Storm);
             else if (Outfit == Outfit.Tropic)
             {
-                // тема «Закат»: гавайская рубашка в цветочек и тёмные очки с розовым бликом
-                var shirt = new SolidColorBrush(Color.FromRgb(0x14, 0xB8, 0xC4));
-                var flower = new SolidColorBrush(Color.FromRgb(0xFF, 0x4F, 0xA3));
-                var leaf = new SolidColorBrush(Color.FromRgb(0xFA, 0xCC, 0x15));
-                dc.DrawRectangle(shirt, null, new Rect(ox + 2 * px, oy + 4 * px, 9 * px + 0.3, 2.8 * px));
-                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1)), null, new Rect(ox + 5.4 * px, oy + 4 * px, 2.2 * px, 0.6 * px)); // воротник
-                foreach (var (fx, fy, br) in new[] { (2.6, 4.9, flower), (4.4, 6.0, leaf), (8.3, 4.8, flower), (9.6, 6.0, leaf), (6.2, 5.6, flower) })
-                    dc.DrawRectangle(br, null, new Rect(ox + fx * px, oy + fy * px, 0.7 * px, 0.7 * px));
+                // тема «Закат»: пастельно-розовый пиджак с закатанными рукавами, бирюзовая футболка, золотая цепь, очки-авиаторы
+                var jacket = new SolidColorBrush(Color.FromRgb(0xF9, 0xA8, 0xD4));
+                var lapel = new SolidColorBrush(Color.FromRgb(0xDB, 0x27, 0x77));
+                var tee = new SolidColorBrush(Color.FromRgb(0x22, 0xD3, 0xEE));
+                var gold = new SolidColorBrush(Color.FromRgb(0xFA, 0xCC, 0x15));
+                void Q(Brush b, double x, double y, double w, double h) => dc.DrawRectangle(b, null, new Rect(ox + x * px, oy + y * px, w * px + 0.3, h * px + 0.3));
+                Q(tee, 4.6, 4, 3.8, 2.8);                                  // футболка в вырезе пиджака
+                Q(jacket, 2, 4, 2.6, 2.8); Q(jacket, 8.4, 4, 2.6, 2.8);    // полы пиджака
+                Q(jacket, 0.4, 4, 1.8, 1.1); Q(jacket, 10.8, 4, 1.8, 1.1); // закатанные рукава
+                Q(lapel, 4.3, 4, 0.5, 1.6); Q(lapel, 8.2, 4, 0.5, 1.6);   // лацканы
+                Q(lapel, 3.0, 5.6, 0.9, 0.35);                             // нагрудный карман
+                Q(gold, 5.3, 4.2, 0.35, 0.6); Q(gold, 7.35, 4.2, 0.35, 0.6); Q(gold, 5.6, 4.75, 1.8, 0.35); // цепь
+                Q(gold, 6.3, 5.05, 0.4, 0.45);                             // кулон
                 if (!nightcap)
                 {
                     glasses = true;
-                    var lens = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0C));
-                    dc.DrawRectangle(lens, null, new Rect(ox + 3 * px, oy + 2 * px, 3 * px, 1.6 * px));
-                    dc.DrawRectangle(lens, null, new Rect(ox + 7 * px, oy + 2 * px, 3 * px, 1.6 * px));
-                    dc.DrawRectangle(lens, null, new Rect(ox + 6 * px, oy + 2.3 * px, px, 0.5 * px));
-                    var shine = new SolidColorBrush(Color.FromArgb(200, 0xFF, 0x4F, 0xA3));
-                    dc.DrawRectangle(shine, null, new Rect(ox + 3.4 * px, oy + 2.3 * px, 0.8 * px, 0.4 * px));
-                    dc.DrawRectangle(shine, null, new Rect(ox + 7.4 * px, oy + 2.3 * px, 0.8 * px, 0.4 * px));
+                    var rim = new SolidColorBrush(Color.FromRgb(0xE8, 0xC5, 0x6B));
+                    var lensG = new LinearGradientBrush(Color.FromRgb(0xFF, 0x4F, 0xA3), Color.FromRgb(0xFF, 0x9A, 0x4D), 90);
+                    // авиаторы: капли чуть шире сверху, тонкая золотая оправа и перемычка
+                    Q(lensG, 2.8, 2.0, 3.3, 1.2); Q(lensG, 3.2, 3.1, 2.5, 0.6);
+                    Q(lensG, 6.9, 2.0, 3.3, 1.2); Q(lensG, 7.3, 3.1, 2.5, 0.6);
+                    Q(rim, 2.8, 1.8, 7.4, 0.25);                            // верхняя дужка через обе линзы
+                    var shine = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+                    Q(shine, 3.3, 2.3, 0.7, 0.3); Q(shine, 7.4, 2.3, 0.7, 0.3);
                 }
             }
             else if (!nightcap) DrawOutfit(dc, ox, oy, px);
