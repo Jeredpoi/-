@@ -1559,6 +1559,14 @@ namespace Isle
                 Brush barBrush = sunset ? new LinearGradientBrush(Helpers.SunsetTheme.Pink, Helpers.SunsetTheme.Teal, 90) : new SolidColorBrush(c);
                 foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Background = barBrush;
                 ThemeBack.Visibility = sunset ? Visibility.Visible : Visibility.Collapsed;
+                // «матовое стекло»: в «Закате» карточки полупрозрачные — сквозь них просвечивают размытые пальмы и солнце
+                var res = Application.Current.Resources;
+                if (sunset)
+                {
+                    res["Card"] = new SolidColorBrush(Color.FromArgb(150, 0x14, 0x0A, 0x22));
+                    res["CardBorder"] = new SolidColorBrush(Color.FromArgb(60, 0xFF, 0xB4, 0xD9));
+                }
+                else { res.Remove("Card"); res.Remove("CardBorder"); }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;
             }
             catch { }

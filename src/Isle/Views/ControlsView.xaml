@@ -6,8 +6,8 @@
         <!-- плитка: карточка #0E0E10, радиус 18, поля 18; у включённой — светлая обводка -->
         <Style x:Key="Tile" TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource Fg}"/>
-            <Setter Property="Background" Value="{StaticResource Card}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="Background" Value="{DynamicResource Card}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
             <Setter Property="Padding" Value="18"/>
@@ -232,7 +232,7 @@
         </UniformGrid>
 
         <!-- Сети Wi-Fi прямо в чёлке: «Подключить», для новой защищённой сети — поле пароля и «Войти» -->
-        <Border x:Name="WifiPanel" Grid.RowSpan="5" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+        <Border x:Name="WifiPanel" Grid.RowSpan="5" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1"
                 CornerRadius="18" Padding="14,12,14,12" Visibility="Collapsed" RenderTransformOrigin="0.9,0.1">
             <Border.RenderTransform><ScaleTransform x:Name="WifiPanelScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
             <DockPanel>

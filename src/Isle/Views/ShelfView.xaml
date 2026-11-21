@@ -28,8 +28,8 @@
                     </ItemsControl.Template>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border x:Name="tile" Width="128" Height="112" Margin="0,0,8,8" CornerRadius="14" Background="{StaticResource Card}"
-                                    BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Cursor="Hand" Tag="{Binding}"
+                            <Border x:Name="tile" Width="128" Height="112" Margin="0,0,8,8" CornerRadius="14" Background="{DynamicResource Card}"
+                                    BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" Cursor="Hand" Tag="{Binding}"
                                     PreviewMouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove">
                                 <Grid>
                                     <StackPanel VerticalAlignment="Center" Margin="10">

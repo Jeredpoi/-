@@ -48,7 +48,7 @@
                             <Image x:Name="avatar" DockPanel.Dock="Left" Source="{Binding Avatar}" Width="26" Height="24" Stretch="Uniform"
                                    VerticalAlignment="Top" Margin="0,6,8,0" RenderOptions.EdgeMode="Aliased"/>
                             <Border x:Name="bubble" CornerRadius="14" Padding="12,9" MaxWidth="680"
-                                    HorizontalAlignment="Left" Background="{StaticResource Card}">
+                                    HorizontalAlignment="Left" Background="{DynamicResource Card}">
                                 <StackPanel>
                                 <TextBox x:Name="msgText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Background="Transparent"
                                          BorderThickness="0" Padding="0" FontSize="13">
