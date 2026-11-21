@@ -36,6 +36,9 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        [DllImport("user32.dll")] private static extern bool OpenClipboard(IntPtr h);
+        [DllImport("user32.dll")] private static extern bool CloseClipboard();
+
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
@@ -66,6 +69,17 @@ namespace Isle
                 ToastBus.Show(new Toast { Title = "Текст распознан", Subtitle = "СЕКРЕТНЫЙ-КЛЮЧ-123", Private = true });
                 AppSettings.Current.NotchMode = "always"; AppSettings.Current.Save(); Helpers.NotchBar.Update(); await Task.Delay(800);
                 AppSettings.Current.NotchMode = "off"; AppSettings.Current.Save(); Helpers.NotchBar.Update(); await Task.Delay(800);
+                // буфер обмена занят другим потоком 2 с: интерфейс не ждёт, запись проходит позже
+                var held = new System.Threading.ManualResetEventSlim();
+                var th = new System.Threading.Thread(() => { OpenClipboard(IntPtr.Zero); held.Set(); System.Threading.Thread.Sleep(2000); CloseClipboard(); });
+                th.Start(); held.Wait();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                bool? result = null;
+                bool now = ClipboardService.SetText("после занятости", ok => result = ok);
+                Journal.Info("bench", "буфер занят: сразу " + now + ", интерфейс ждал " + sw.ElapsedMilliseconds + " мс");
+                for (int k = 0; k < 60 && result == null; k++) await Task.Delay(100);
+                string got = null; try { got = Clipboard.GetText(); } catch { }
+                Journal.Info("bench", "итог через " + sw.ElapsedMilliseconds + " мс: " + result + ", в буфере «" + got + "»");
                 Journal.Info("bench", "=== конец ===");
                 Journal.Flush();
                 await Task.Delay(500);
