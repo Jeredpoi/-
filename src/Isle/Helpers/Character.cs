@@ -628,10 +628,10 @@ namespace Isle.Helpers
         /// Шапки и наряды сверх погодных: рисуются половинками клеток спрайта — так видно отвороты, швы,
         /// камни короны, звёзды на колпаке. Координаты — в клетках спрайта (голова: x 2..10, y 0..3).
         /// </summary>
-        private void DrawOutfit(DrawingContext dc, double ox, double oy, double px)
+        private void DrawOutfit(DrawingContext dc, double ox, double oy, double px, Outfit? as_ = null)
         {
             void P(Brush b, double x, double y, double w, double h) => dc.DrawRectangle(b, null, new Rect(ox + x * px, oy + y * px, w * px + 0.3, h * px + 0.3));
-            switch (Outfit)
+            switch (as_ ?? Outfit)
             {
                 case Outfit.Party: // праздничный колпак в полоску с помпоном и резинкой
                     for (int i = 0; i < 4; i++) P(i % 2 == 0 ? PartyPink : PartyCyan, 4 + i * 0.6, -0.9 - i * 0.8, 5 - i * 1.2, 0.85);
@@ -1516,13 +1516,8 @@ namespace Isle.Helpers
                 dc.DrawRectangle(capB, null, new Rect(ox + 9 * px, oy - 0.3 * px, 3.5 * px, 0.6 * px)); // козырёк
                 dc.DrawRectangle(Cup, null, new Rect(ox + 6 * px, oy - 2.1 * px, px * 0.6, px * 0.4));
             }
-            else if (Outfit == Outfit.Rain && !nightcap)
-            {
-                var canopy = new SolidColorBrush(Color.FromRgb(0x5B, 0x6C, 0xF0));
-                for (int x = 1; x <= 11; x++) dc.DrawRectangle(canopy, null, new Rect(ox + x * px, oy - 2 * px, px + 0.35, px + 0.35));
-                for (int x = 3; x <= 9; x++) dc.DrawRectangle(canopy, null, new Rect(ox + x * px, oy - 3 * px, px + 0.35, px + 0.35));
-                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x95)), null, new Rect(ox + 6 * px, oy - 1 * px, px * 0.6, px));
-            }
+            // дождь — жёлтый дождевик с капюшоном (раньше был плоский «зонт» над головой: его обрезал край чёлки, и он смотрелся тучей)
+            else if (Outfit == Outfit.Rain && !nightcap) DrawOutfit(dc, ox, oy, px, Outfit.Storm);
             else if (!nightcap) DrawOutfit(dc, ox, oy, px);
 
             // ---- праздничные шапки (вместо обычной): Новый год — колпак Деда Мороза, Хэллоуин — шляпа ведьмы
@@ -1617,6 +1612,18 @@ namespace Isle.Helpers
                 }
             }
             dc.Pop();
+
+            // ---- дождь: тонкие капли падают наискосок вокруг Клоди
+            if ((Outfit == Outfit.Rain || Outfit == Outfit.Storm) && !Snowing)
+            {
+                for (int i = 0; i < 6; i++)
+                {
+                    double ph = (_time * 0.9 + i * 0.37) % 1;
+                    double sx = (i * 0.29 + 0.07) % 1 * ActualWidth + ph * px * 0.8;
+                    var drop = new SolidColorBrush(Color.FromArgb((byte)(170 * Math.Sin(ph * Math.PI)), 0x93, 0xC5, 0xFD));
+                    dc.DrawRectangle(drop, null, new Rect(sx, ph * ActualHeight, px * 0.3, px * 1.1));
+                }
+            }
 
             // ---- снегопад: снежинки падают вокруг Клоди
             if (Snowing)
