@@ -35,7 +35,89 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        [DllImport("user32.dll")] private static extern bool OpenClipboard(IntPtr h);
+        [DllImport("user32.dll")] private static extern bool CloseClipboard();
+
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)v.ActualWidth, (int)v.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 30, 70)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                // 150 записей: 50 снимков 3840×2160 за несколько дней
+                Directory.CreateDirectory(ClipboardService.ImagesDir);
+                var rnd = new Random(1);
+                var sw0 = System.Diagnostics.Stopwatch.StartNew();
+                var big = new System.Windows.Media.Imaging.RenderTargetBitmap(3840, 2160, 96, 96, PixelFormats.Pbgra32);
+                var dv = new DrawingVisual();
+                using (var dc = dv.RenderOpen()) { for (int k = 0; k < 60000; k++) dc.DrawRectangle(new SolidColorBrush(Color.FromRgb((byte)rnd.Next(256), (byte)rnd.Next(256), (byte)rnd.Next(256))), null, new Rect(rnd.Next(3800), rnd.Next(2100), rnd.Next(2, 30), rnd.Next(2, 30))); }
+                big.Render(dv);
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(big));
+                var ms = new MemoryStream(); enc.Save(ms); var bytes = ms.ToArray();
+                var now = DateTime.Now;
+                for (int i = 0; i < 150; i++)
+                {
+                    var t = now.AddHours(-i * 1.5);
+                    if (i % 3 == 0)
+                    {
+                        var name = "b" + i + ".png"; File.WriteAllBytes(Path.Combine(ClipboardService.ImagesDir, name), bytes);
+                        AppHost.Clipboard.Items.Add(new ClipItem { Kind = ClipKind.Image, Text = "Изображение 3840×2160", ImageFile = name, Source = "chrome", Time = t });
+                    }
+                    else AppHost.Clipboard.Items.Add(new ClipItem { Kind = ClipKind.Text, Text = "запись " + i, Source = "notepad", Time = t });
+                }
+                L("подготовка: " + sw0.ElapsedMilliseconds + " мс, записей " + AppHost.Clipboard.Items.Count + ", PNG " + bytes.Length / 1024 + " КБ");
+                w.SuppressAutoCollapse = true;
+                w.Expand("home"); await Task.Delay(1500);
+                for (int round = 1; round <= 2; round++)
+                {
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    w.Expand("clip");
+                    await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                    L("вкладка «Буфер», открытие " + round + ": интерфейс свободен через " + sw.ElapsedMilliseconds + " мс");
+                    await Task.Delay(2500);
+                    SnapEl((FrameworkElement)w.Content, dir, "clip-" + round);
+                    w.Expand("home"); await Task.Delay(1200);
+                }
+                var thumbs = Path.Combine(ClipboardService.ImagesDir, "thumbs");
+                L("миниатюр в кэше: " + (Directory.Exists(thumbs) ? Directory.GetFiles(thumbs).Length : 0));
+                // буфер обмена: обычная запись и чтение
+                var s1 = System.Diagnostics.Stopwatch.StartNew();
+                bool okT = ClipboardService.SetText("проверка 123");
+                L("запись текста: " + okT + " за " + s1.ElapsedMilliseconds + " мс, прочитано «" + Clipboard.GetText() + "»");
+                s1.Restart();
+                var small = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 100, 96, 96, PixelFormats.Pbgra32); small.Render(dv);
+                bool okI = ScreenTools.CopyImage(small);
+                L("запись картинки: " + okI + " за " + s1.ElapsedMilliseconds + " мс, в буфере картинка: " + Clipboard.ContainsImage());
+                // буфер занят другим потоком (как другой программой) на 3 с
+                var held = new System.Threading.ManualResetEventSlim();
+                var th = new System.Threading.Thread(() => { OpenClipboard(IntPtr.Zero); held.Set(); System.Threading.Thread.Sleep(3000); CloseClipboard(); });
+                th.Start(); held.Wait();
+                s1.Restart();
+                bool okBusy = ClipboardService.SetText("занято");
+                L("буфер занят: запись " + okBusy + ", интерфейс ждал " + s1.ElapsedMilliseconds + " мс");
+                th.Join();
+                L("после освобождения: " + ClipboardService.SetText("снова") + ", прочитано «" + Clipboard.GetText() + "»");
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
