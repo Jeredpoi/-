@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -36,6 +37,47 @@ namespace Isle
         }
 
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                Journal.Info("bench", "=== начало проверки журнала ===");
+                // долгая операция интерфейса
+                await Application.Current.Dispatcher.InvokeAsync(() => System.Threading.Thread.Sleep(400));
+                // тяжёлый кадр анимации
+                Action<double> heavy = null; int n = 0;
+                heavy = _ => { if (n++ == 3) System.Threading.Thread.Sleep(80); };
+                Helpers.FrameClock.Tick += heavy; await Task.Delay(800); Helpers.FrameClock.Tick -= heavy;
+                // клики: настоящей мышью по кнопке «Телефон» и по раскладке
+                w.SuppressAutoCollapse = true;
+                w.Expand("home"); await Task.Delay(1500);
+                foreach (var nm in new[] { "TabPhone", "LangBtn" })
+                {
+                    var el = (FrameworkElement)w.FindName(nm);
+                    var p = el.PointToScreen(new Point(el.ActualWidth / 2, el.ActualHeight / 2));
+                    SetCursorPos((int)p.X, (int)p.Y); await Task.Delay(300);
+                    mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                    await Task.Delay(900);
+                }
+                // всплывашка с личным текстом
+                ToastBus.Show(new Toast { Title = "Текст распознан", Subtitle = "СЕКРЕТНЫЙ-КЛЮЧ-123", Private = true });
+                AppSettings.Current.NotchMode = "always"; AppSettings.Current.Save(); Helpers.NotchBar.Update(); await Task.Delay(800);
+                AppSettings.Current.NotchMode = "off"; AppSettings.Current.Save(); Helpers.NotchBar.Update(); await Task.Delay(800);
+                Journal.Info("bench", "=== конец ===");
+                Journal.Flush();
+                await Task.Delay(500);
+                var all = File.ReadAllLines(Journal.PathNow);
+                int i0 = Array.FindLastIndex(all, l => l.Contains("=== начало проверки журнала"));
+                File.WriteAllLines(Path.Combine(dir, "log.txt"), all.Skip(Math.Max(0, i0)).Where(l => !l.Contains("Клоди")));
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
