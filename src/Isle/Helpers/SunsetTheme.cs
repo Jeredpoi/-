@@ -65,7 +65,7 @@ namespace Isle.Helpers
 
             // «матовое стекло»: сильное размытие и тёмная вуаль поверх — чтобы текст и карточки читались
             var host = new DrawingVisual();
-            var blurred = new ContainerVisual { Effect = new BlurEffect { Radius = 46 * s / 2, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
+            var blurred = new ContainerVisual { Effect = new BlurEffect { Radius = 34 * s / 2, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
             blurred.Children.Add(scene);
             var bmp = new RenderTargetBitmap(pw, ph, 96 * s, 96 * s, PixelFormats.Pbgra32);
             var layer = new RenderTargetBitmap(pw, ph, 96, 96, PixelFormats.Pbgra32);
@@ -73,7 +73,7 @@ namespace Isle.Helpers
             using (var dc = host.RenderOpen())
             {
                 dc.DrawImage(layer, new Rect(0, 0, w, h));
-                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 0x0A, 0x05, 0x14)), null, new Rect(0, 0, w, h));
+                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(90, 0x0A, 0x05, 0x14)), null, new Rect(0, 0, w, h));
             }
             bmp.Render(host);
             bmp.Freeze();

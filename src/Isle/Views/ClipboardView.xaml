@@ -131,7 +131,7 @@
                     </ListBox.GroupStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border x:Name="row" Background="{StaticResource Card}" CornerRadius="12" Padding="12,9" Cursor="Hand"
+                            <Border x:Name="row" Background="{DynamicResource Card}" CornerRadius="12" Padding="12,9" Cursor="Hand"
                                     MouseLeftButtonUp="OnItemClick" PreviewMouseLeftButtonDown="OnRowDown" MouseMove="OnRowMove" Tag="{Binding}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>

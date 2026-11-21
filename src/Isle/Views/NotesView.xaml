@@ -43,7 +43,7 @@
                 </StackPanel>
                 <TextBlock x:Name="Saved" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" Text="Сохраняется само"/>
             </DockPanel>
-            <Border Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="12">
+            <Border Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="12">
                 <Grid>
                     <TextBlock x:Name="EditorHint" Text="Пиши сюда что угодно: номер заказа, список дел, кусок кода. Сохраняется само."
                                Foreground="#6F6F79" FontSize="13" Margin="14,10" TextWrapping="Wrap" IsHitTestVisible="False"/>
