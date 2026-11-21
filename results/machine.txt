@@ -1,0 +1,2 @@
+Microsoft Hyper-V Video 1024x768
+AMD EPYC 7763 64-Core Processor                
