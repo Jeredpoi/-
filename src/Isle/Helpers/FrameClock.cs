@@ -62,6 +62,8 @@ namespace Isle.Helpers
             remove { if (value == null) return; _tick -= value; RefreshHandlers(); }
         }
 
+        private static readonly System.Collections.Generic.Dictionary<Action<double>, double> SlowLogged = new();
+
         private static void OnRendering(object sender, EventArgs e)
         {
             // Rendering может прийти несколько раз за один кадр — берём только новые кадры
@@ -81,7 +83,20 @@ namespace Isle.Helpers
 
             foreach (var handler in _handlers)
             {
-                try { handler(dt); FailingSince.Remove(handler); }
+                try
+                {
+                    long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                    handler(dt);
+                    FailingSince.Remove(handler);
+                    // подробный журнал: какая часть анимации «съела» кадр (не чаще раза в 10 с на обработчик)
+                    double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    if (ms > 40 && Services.Journal.Verbose && (!SlowLogged.TryGetValue(handler, out var at) || now - at > 10))
+                    {
+                        SlowLogged[handler] = now;
+                        var m = handler.Method; var tp = m.DeclaringType; while (tp != null && tp.Name.StartsWith("<")) tp = tp.DeclaringType;
+                        Services.Journal.Debug("frame", "кадр анимации: " + (tp?.Name ?? "?") + "." + m.Name.Replace("<", "").Replace(">", "") + " занял " + Math.Round(ms) + " мс");
+                    }
+                }
                 catch (Exception ex)
                 {
                     // Одна случайная ошибка не должна навсегда выключать анимацию (через этот кадр работает

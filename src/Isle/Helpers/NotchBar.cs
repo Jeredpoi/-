@@ -65,6 +65,12 @@ namespace Isle.Helpers
             }
             if (mode == "browser") ZoomWatch.Start(); else ZoomWatch.Stop();
             bool want = mode == "always" || (mode == "browser" && BrowserInFront());
+            if (want != _registered && mode != "off")
+            {
+                var fg = Win32.GetForegroundWindow();
+                Journal.Debug("notch", "режим " + mode + ": впереди " + Win32.ForegroundProcessName() + (fg != IntPtr.Zero && Win32.IsZoomed(fg) ? " (развёрнуто)" : " (в окне)")
+                    + " → полоса " + (want ? "нужна" : "не нужна"));
+            }
             if (want) Register(); else Unregister();
         }
 
