@@ -35,7 +35,51 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)v.ActualWidth, (int)v.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(13, 17, 23)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                AppSettings.Current.Theme = "sunset"; AppSettings.Current.Save(); w.ApplyAppearance();
+                w.SuppressAutoCollapse = true;
+                foreach (var tab in new[] { "home", "weather", "clip" })
+                {
+                    w.Expand(tab); w.SelectTab(tab); await Task.Delay(2200);
+                    SnapEl((FrameworkElement)w.Content, dir, "sunset-" + tab);
+                }
+                w.Collapse(); await Task.Delay(1200);
+                var buddy = new Isle.Helpers.Character { Mood = Isle.Helpers.Mood.Idle, FollowCursor = false, Outfit = Isle.Helpers.Outfit.Tropic };
+                var stage = new Border { Width = 260, Height = 200, Background = new SolidColorBrush(Color.FromRgb(13, 17, 23)), Child = new Viewbox { Child = buddy, Margin = new Thickness(60, 40, 60, 30) } };
+                var win = new Window { Content = stage, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false, Left = -4000, Top = -4000 };
+                win.Show(); await Task.Delay(700); SnapEl(stage, dir, "tropic"); win.Close();
+                var sw = new Isle.Views.SettingsWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -4000, Top = -4000, ShowActivated = false };
+                sw.Show(); await Task.Delay(1000);
+                if (sw.FindName("NavLook") is RadioButton nav) { nav.IsChecked = true; nav.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); }
+                await Task.Delay(700);
+                if (sw.FindName("Themes") is FrameworkElement th) th.BringIntoView();
+                await Task.Delay(500);
+                SnapEl((FrameworkElement)sw.Content, dir, "settings");
+                sw.Close();
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
