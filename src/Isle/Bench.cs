@@ -38,6 +38,38 @@ namespace Isle
         public static async Task RunAsync(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(2500);
+                int f = 0;
+                foreach (var (outfit, mood) in new[] { (Isle.Helpers.Outfit.Rain, Isle.Helpers.Mood.Idle), (Isle.Helpers.Outfit.Rain, Isle.Helpers.Mood.Music), (Isle.Helpers.Outfit.None, Isle.Helpers.Mood.Idle) })
+                {
+                    var buddy = new Isle.Helpers.Character { Mood = mood, FollowCursor = false, Outfit = outfit };
+                    var stage = new Border { Width = 260, Height = 200, Background = new SolidColorBrush(Color.FromRgb(13, 17, 23)),
+                        Child = new Viewbox { Child = buddy, Margin = new Thickness(60, 40, 60, 30) } };
+                    var win = new Window { Content = stage, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false, Left = -4000, Top = -4000 };
+                    win.Show();
+                    for (int k = 0; k < 3; k++)
+                    {
+                        await Task.Delay(350);
+                        stage.UpdateLayout();
+                        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(260, 200, 96, 96, PixelFormats.Pbgra32); bmp.Render(stage);
+                        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                        using var fs = File.Create(Path.Combine(dir, "buddy-" + (f++) + ".png")); enc.Save(fs);
+                    }
+                    win.Close();
+                }
+                // в настоящей чёлке
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
             try
             {
