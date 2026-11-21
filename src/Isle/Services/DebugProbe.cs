@@ -45,6 +45,9 @@ namespace Isle.Services
             };
             _watchdog.Start();
 
+            WatchSlowOperations();
+            WatchClicks();
+
             // сводка раз в 30 с
             using (var p = Process.GetCurrentProcess()) { _lastCpu = p.TotalProcessorTime; _lastCpuAt = Clock.Elapsed.TotalSeconds; }
             Helpers.FrameClock.TakeStats();
@@ -74,6 +77,102 @@ namespace Isle.Services
                 finally { _inHandler = false; }
             };
         }
+
+        // ---------- что именно делал поток интерфейса, когда «был занят» ----------
+
+        private static readonly System.Collections.Generic.Stack<(DispatcherOperation op, double at)> Ops = new();
+        private static System.Reflection.FieldInfo _methodField;
+
+        /// <summary>Каждая операция потока интерфейса дольше 150 мс — в журнал с именем метода (чтобы подвисания было видно поимённо).</summary>
+        private static void WatchSlowOperations()
+        {
+            try
+            {
+                _methodField = typeof(DispatcherOperation).GetField("_method", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var hooks = Application.Current.Dispatcher.Hooks;
+                hooks.OperationStarted += (_, e) => Ops.Push((e.Operation, Clock.Elapsed.TotalMilliseconds));
+                void Done(DispatcherHookEventArgs e)
+                {
+                    if (Ops.Count == 0) return;
+                    var (op, at) = Ops.Pop();
+                    double ms = Clock.Elapsed.TotalMilliseconds - at;
+                    if (ms > 150 && Journal.Verbose) Journal.Debug("ui", "долгая операция " + Math.Round(ms) + " мс: " + Describe(op) + Context());
+                }
+                hooks.OperationCompleted += (_, e) => Done(e);
+                hooks.OperationAborted += (_, e) => Done(e);
+            }
+            catch (Exception ex) { Journal.Debug("debug", "не удалось следить за операциями интерфейса: " + ex.Message); }
+        }
+
+        private static string Describe(DispatcherOperation op)
+        {
+            try
+            {
+                if (_methodField?.GetValue(op) is Delegate d)
+                {
+                    var m = d.Method;
+                    var type = m.DeclaringType;
+                    // лямбда: тип вида <>c__DisplayClass — показываем того, кто её объявил
+                    while (type != null && type.Name.StartsWith("<")) type = type.DeclaringType;
+                    return (type?.Name ?? "?") + "." + m.Name.Replace("<", "").Replace(">", "") + " [" + op.Priority + "]";
+                }
+            }
+            catch { }
+            return "? [" + op.Priority + "]";
+        }
+
+        // ---------- клики ----------
+
+        /// <summary>Каждый клик по кнопке, переключателю, пункту меню: что нажали и где. Текст записей буфера и сообщений не пишем.</summary>
+        private static void WatchClicks()
+        {
+            void Log(object sender, string what)
+            {
+                if (!Journal.Verbose || sender is not FrameworkElement el) return;
+                try { Journal.Debug("click", what + " «" + Label(el) + "»" + Where(el)); } catch { }
+            }
+            EventManager.RegisterClassHandler(typeof(System.Windows.Controls.Primitives.ButtonBase), System.Windows.Controls.Primitives.ButtonBase.ClickEvent,
+                new RoutedEventHandler((s, _) => Log(s, s is System.Windows.Controls.Primitives.ToggleButton t ? (t.IsChecked == true ? "вкл" : "выкл") : "клик")), true);
+            EventManager.RegisterClassHandler(typeof(System.Windows.Controls.MenuItem), System.Windows.Controls.MenuItem.ClickEvent,
+                new RoutedEventHandler((s, _) => Log(s, "меню")), true);
+        }
+
+        private static string Label(FrameworkElement el)
+        {
+            // кнопка внутри записи (буфер, телефон, уведомление) — без её текста: там может быть личное
+            var dc = el.DataContext;
+            bool personal = dc is ClipItem || dc is PhoneItem || dc is PhoneNotice;
+            string text = personal ? null : FirstText(el);
+            string tip = el.ToolTip as string;
+            string name = !string.IsNullOrEmpty(el.Name) ? el.Name : null;
+            var parts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrWhiteSpace(text)) parts.Add(Trim(text, 40));
+            if (!string.IsNullOrWhiteSpace(tip)) parts.Add(Trim(tip, 50));
+            if (name != null) parts.Add("#" + name);
+            if (el is System.Windows.Controls.MenuItem mi && mi.Header is string h) parts.Insert(0, Trim(h, 40));
+            if (personal) parts.Add("в записи " + dc.GetType().Name);
+            return parts.Count > 0 ? string.Join(" · ", parts) : el.GetType().Name;
+        }
+
+        private static string FirstText(DependencyObject d, int depth = 0)
+        {
+            if (d is System.Windows.Controls.TextBox) return null; // поля ввода — никогда
+            if (d is System.Windows.Controls.TextBlock tb && !string.IsNullOrWhiteSpace(tb.Text)) return tb.Text;
+            if (d is System.Windows.Controls.ContentControl cc && cc.Content is string str) return str;
+            if (depth > 6) return null;
+            int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(d);
+            for (int i = 0; i < n; i++) if (FirstText(System.Windows.Media.VisualTreeHelper.GetChild(d, i), depth + 1) is string t) return t;
+            return null;
+        }
+
+        private static string Where(DependencyObject d)
+        {
+            for (var p = d; p != null; p = System.Windows.Media.VisualTreeHelper.GetParent(p) ?? LogicalTreeHelper.GetParent(p))
+                if (p is System.Windows.Controls.UserControl || p is Window) return " (" + p.GetType().Name + ")";
+            return "";
+        }
+
+        private static string Trim(string s, int max) { s = s.Replace("\n", " ").Trim(); return s.Length > max ? s[..max] + "…" : s; }
 
         private static string Context()
         {

@@ -38,6 +38,8 @@ namespace Isle.Services
         public Action OnClick { get; set; }
         /// <summary>Уведомление другого приложения: его AppUserModelId — по клику открываем это приложение.</summary>
         public string LaunchAppId { get; set; }
+        /// <summary>Подпись — личное (текст из буфера, распознанный, надиктованный, с телефона): в журнал не пишем.</summary>
+        public bool Private { get; set; }
         /// <summary>Анимированный значок погоды вместо иконки (вид: sun, rain, thunder, snow… — см. WeatherGlyph).</summary>
         public string WeatherKind { get; set; }
         public double? Progress { get; set; }
@@ -58,7 +60,7 @@ namespace Isle.Services
         public static void Show(Toast t)
         {
             Journal.Info("toast", t.Kind + (t.Warning ? "/внимание" : "") + (t.On.HasValue ? "/" + (t.On.Value ? "вкл" : "выкл") : "") + " " + Journal.Short(t.Title, 80)
-                + (string.IsNullOrEmpty(t.Subtitle) ? "" : " · " + Journal.Short(t.Subtitle, 120)) + (t.ReplaceKey != null ? " key=" + t.ReplaceKey : "")
+                + (string.IsNullOrEmpty(t.Subtitle) ? "" : " · " + (t.Private || t.Kind == ToastKind.Notification ? "(" + t.Subtitle.Length + " симв. — не пишем)" : Journal.Short(t.Subtitle, 120))) + (t.ReplaceKey != null ? " key=" + t.ReplaceKey : "")
                 + (t.Progress.HasValue ? " " + (t.Progress.Value * 100).ToString("0") + "%" : "")
                 + (AppSettings.Current.DoNotDisturb && !t.Important ? " — скрыто («Не беспокоить»)" : ""));
             if (AppSettings.Current.DoNotDisturb && !t.Important) return;

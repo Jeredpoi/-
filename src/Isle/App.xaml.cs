@@ -21,6 +21,8 @@ namespace Isle
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // кодировки вроде SJIS/GB2312 (их перебирает библиотека QR-кода) — иначе по три исключения на каждый QR
+            try { System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance); } catch { }
             int bi = Array.IndexOf(e.Args, "--bench");
             if (bi >= 0 && bi + 1 < e.Args.Length) _benchDir = Path.GetFullPath(e.Args[bi + 1]);
             _single = new Mutex(true, MutexName, out bool first);

@@ -204,8 +204,17 @@ namespace Isle.Services
         {
             // Пока браузер открыт, он держит History под эксклюзивной блокировкой — обычное чтение падает
             // с «database is locked». Тогда читаем в режиме immutable: SQLite не берёт блокировок и просто читает файл.
-            return TryReadProfile(profile, false, out rows) || TryReadProfile(profile, true, out rows);
+            // Раньше обычное чтение пробовали каждые 2 с: при открытом браузере это ошибка + до секунды ожидания блокировки
+            // (тысячи «database is locked» в журнале в день). Запоминаем, что файл занят, и 5 минут сразу читаем как immutable.
+            if (!LockedUntil.TryGetValue(profile.HistoryPath, out var until) || DateTime.Now >= until)
+            {
+                if (TryReadProfile(profile, false, out rows)) { LockedUntil.Remove(profile.HistoryPath); return true; }
+                LockedUntil[profile.HistoryPath] = DateTime.Now.AddMinutes(5);
+            }
+            return TryReadProfile(profile, true, out rows);
         }
+
+        private static readonly Dictionary<string, DateTime> LockedUntil = new(StringComparer.OrdinalIgnoreCase);
 
         private static bool TryReadProfile(Profile profile, bool immutable, out List<Row> rows)
         {

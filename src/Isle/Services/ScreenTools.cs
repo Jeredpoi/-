@@ -82,13 +82,13 @@ namespace Isle.Services
         }
 
         /// <summary>Положить картинку в буфер обмена (5 попыток — буфер бывает занят другой программой).</summary>
-        public static bool CopyImage(BitmapSource bmp)
+        public static bool CopyImage(BitmapSource bmp) => CopyImage(bmp, null);
+
+        /// <summary>Картинку в буфер: сразу или, если он занят, чуть позже в фоне (done — итог).</summary>
+        public static bool CopyImage(BitmapSource bmp, Action<bool> done)
         {
-            for (int i = 0; i < 5; i++)
-            {
-                try { Clipboard.SetImage(bmp); return true; }
-                catch { System.Threading.Thread.Sleep(50); }
-            }
+            try { if (ClipboardWrite.Image(bmp, done)) return true; else { Journal.Info("capture", "буфер обмена занят — картинку допишу, как освободится"); return false; } }
+            catch (Exception ex) { Journal.Debug("clipboard", "картинка не записана: " + ex.Message); }
             Journal.Warn("capture", "буфер обмена занят другой программой — картинку положить не удалось");
             return false;
         }

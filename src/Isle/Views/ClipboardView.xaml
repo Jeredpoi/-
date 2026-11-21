@@ -90,7 +90,10 @@
                         <TextBlock x:Name="EmptyBtnText" FontSize="12"/>
                     </Button>
                 </StackPanel>
-                <ListBox x:Name="List">
+                <!-- с разделителями по дням WPF по умолчанию создаёт ВСЕ записи сразу (и декодирует все картинки) — вкладка замирала на секунды;
+                     включаем «ленивую» отрисовку и для групп -->
+                <ListBox x:Name="List" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
                     <!-- разделители по дням: по центру дата, по бокам тонкие линии -->
                     <ListBox.GroupStyle>
                         <GroupStyle>
