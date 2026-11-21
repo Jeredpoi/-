@@ -63,10 +63,12 @@ namespace Isle.Helpers
         /// <summary>Стеклянная карточка: светлый налёт сверху (блик), почти прозрачная к низу.</summary>
         public static Brush GlassCard()
         {
+            // тёмное матовое стекло: сверху светлый блик, ниже — плотная полупрозрачная тёмно-лиловая заливка,
+            // чтобы текст читался поверх ветвей пальм, а фон всё равно просвечивал
             var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
-            g.GradientStops.Add(new GradientStop(Color.FromArgb(70, 0xFF, 0xFF, 0xFF), 0));
-            g.GradientStops.Add(new GradientStop(Color.FromArgb(34, 0xFF, 0xE6, 0xF4), 0.18));
-            g.GradientStops.Add(new GradientStop(Color.FromArgb(60, 0x1A, 0x08, 0x2A), 1));
+            g.GradientStops.Add(new GradientStop(Color.FromArgb(150, 0x4A, 0x36, 0x66), 0));
+            g.GradientStops.Add(new GradientStop(Color.FromArgb(165, 0x1E, 0x12, 0x30), 0.14));
+            g.GradientStops.Add(new GradientStop(Color.FromArgb(185, 0x12, 0x09, 0x1E), 1));
             g.Freeze();
             return g;
         }
