@@ -94,11 +94,20 @@ namespace Isle
             catch { return bmp; }
         }
 
+        private static bool _shotLate;
+
         private static void Done(BitmapSource bmp)
         {
             ClipboardService.ShotTaken();
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            bool copied = ScreenTools.CopyImage(bmp);
+            bool copied = ScreenTools.CopyImage(bmp, ok =>
+            {
+                // буфер был занят и освободился позже — сообщаем итог отдельно
+                if (_shotLate) ToastBus.Show(new Toast { Kind = ok ? ToastKind.Success : ToastKind.Error, Title = ok ? "Снимок скопирован" : "Снимок не скопировался",
+                    Subtitle = ok ? "Буфер обмена освободился" : "Буфер так и не освободился — снимок в Изображения\\Isle", Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(2.5) });
+                _shotLate = false;
+            });
+            _shotLate = !copied;
             long copyMs = sw.ElapsedMilliseconds;
             string path = null;
             if (AppSettings.Current.SaveScreenshots)
@@ -118,7 +127,7 @@ namespace Isle
             ToastBus.Show(new Toast
             {
                 Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Снимок скопирован" : "Буфер обмена занят",
-                Subtitle = path != null ? "Сохранён в Изображения\\Isle" : copied ? "В буфере обмена" : "Снимок не скопировался — попробуй ещё раз",
+                Subtitle = !copied ? "Скопирую, как освободится" + (path != null ? " · сохранён в Изображения\\Isle" : "") : path != null ? "Сохранён в Изображения\\Isle" : "В буфере обмена",
                 // в уведомлении — маленькая копия, а для «редактировать» снимок читается из файла: полноразмерный
                 // 4K-снимок (десятки мегабайт) больше не висит в памяти, пока не придёт следующее уведомление
                 Image = Thumb(bmp), Icon = Icons.Crop, Important = true, Duration = TimeSpan.FromSeconds(4.5),
@@ -142,11 +151,17 @@ namespace Isle
                 });
                 return;
             }
-            bool copied = ClipboardService.SetText(text);
+            bool late = false;
+            bool copied = ClipboardService.SetText(text, ok =>
+            {
+                if (late) ToastBus.Show(new Toast { Kind = ok ? ToastKind.Success : ToastKind.Error, Title = ok ? "Текст скопирован" : "Текст не скопировался",
+                    Subtitle = ok ? "Буфер обмена освободился" : "Буфер так и не освободился — попробуй ещё раз", Icon = Icons.Scan, Important = true, Duration = TimeSpan.FromSeconds(2.5) });
+            });
+            late = !copied;
             ToastBus.Show(new Toast
             {
-                Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Текст распознан" : "Текст распознан, но буфер занят", Private = true,
-                Subtitle = (copied ? "Скопировано · " : "Не скопировалось — попробуй ещё раз · ") + text.Length + " симв. · " + text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Scan, Accent = Green, Important = true,
+                Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Текст распознан" : "Текст распознан, буфер занят", Private = true,
+                Subtitle = (copied ? "Скопировано · " : "Скопирую, как освободится · ") + text.Length + " симв. · " + text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Scan, Accent = Green, Important = true,
                 Duration = TimeSpan.FromSeconds(3.5)
             });
         }

@@ -761,9 +761,12 @@ namespace Isle.Services
             try { File.Delete(Path.Combine(ImagesDir, "thumbs", Path.GetFileNameWithoutExtension(item.ImagePath) + ".jpg")); } catch { }
         }
 
-        public static bool SetText(string text)
+        public static bool SetText(string text) => SetText(text, null);
+
+        /// <summary>Записать текст: сразу или, если буфер занят другой программой, чуть позже в фоне (done — итог).</summary>
+        public static bool SetText(string text, Action<bool> done)
         {
-            try { return ClipboardWrite.Text(text); }
+            try { return ClipboardWrite.Text(text, done); }
             catch (Exception ex) { Journal.Debug("clipboard", "текст не записан: " + ex.Message); return false; }
         }
 
