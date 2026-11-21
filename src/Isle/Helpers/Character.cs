@@ -1533,13 +1533,14 @@ namespace Isle.Helpers
                 Q(jacket, 0.4, 4, 1.8, 1.1); Q(jacket, 10.8, 4, 1.8, 1.1); // закатанные рукава
                 Q(lapel, 4.3, 4, 0.5, 1.6); Q(lapel, 8.2, 4, 0.5, 1.6);   // лацканы
                 Q(lapel, 3.0, 5.6, 0.9, 0.35);                             // нагрудный карман
-                Q(gold, 5.3, 4.2, 0.35, 0.6); Q(gold, 7.35, 4.2, 0.35, 0.6); Q(gold, 5.6, 4.75, 1.8, 0.35); // цепь
-                Q(gold, 6.3, 5.05, 0.4, 0.45);                             // кулон
+                Q(gold, 5.0, 4.0, 0.3, 0.5); Q(gold, 5.3, 4.5, 0.3, 0.35); Q(gold, 7.4, 4.5, 0.3, 0.35); Q(gold, 7.7, 4.0, 0.3, 0.5); // цепь — тонкая V
+                Q(gold, 5.6, 4.8, 1.8, 0.3);
+                Q(gold, 6.3, 5.1, 0.45, 0.45);                             // кулон
                 if (!nightcap)
                 {
                     glasses = true;
                     var rim = new SolidColorBrush(Color.FromRgb(0xE8, 0xC5, 0x6B));
-                    var lensG = new LinearGradientBrush(Color.FromRgb(0xFF, 0x4F, 0xA3), Color.FromRgb(0xFF, 0x9A, 0x4D), 90);
+                    var lensG = new LinearGradientBrush(Color.FromRgb(0x1E, 0x0A, 0x3C), Color.FromRgb(0xBE, 0x18, 0x5D), 90); // тёмные сверху, малиновые снизу
                     // авиаторы: капли чуть шире сверху, тонкая золотая оправа и перемычка
                     Q(lensG, 2.8, 2.0, 3.3, 1.2); Q(lensG, 3.2, 3.1, 2.5, 0.6);
                     Q(lensG, 6.9, 2.0, 3.3, 1.2); Q(lensG, 7.3, 3.1, 2.5, 0.6);
