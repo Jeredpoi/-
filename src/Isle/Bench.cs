@@ -65,7 +65,7 @@ namespace Isle
                 var sw0 = System.Diagnostics.Stopwatch.StartNew();
                 var big = new System.Windows.Media.Imaging.RenderTargetBitmap(3840, 2160, 96, 96, PixelFormats.Pbgra32);
                 var dv = new DrawingVisual();
-                using (var dc = dv.RenderOpen()) { for (int k = 0; k < 400; k++) dc.DrawRectangle(new SolidColorBrush(Color.FromRgb((byte)rnd.Next(256), (byte)rnd.Next(256), (byte)rnd.Next(256))), null, new Rect(rnd.Next(3800), rnd.Next(2100), rnd.Next(40, 600), rnd.Next(40, 400))); }
+                using (var dc = dv.RenderOpen()) { for (int k = 0; k < 60000; k++) dc.DrawRectangle(new SolidColorBrush(Color.FromRgb((byte)rnd.Next(256), (byte)rnd.Next(256), (byte)rnd.Next(256))), null, new Rect(rnd.Next(3800), rnd.Next(2100), rnd.Next(2, 30), rnd.Next(2, 30))); }
                 big.Render(dv);
                 var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(big));
                 var ms = new MemoryStream(); enc.Save(ms); var bytes = ms.ToArray();
