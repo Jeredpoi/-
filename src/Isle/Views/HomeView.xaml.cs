@@ -79,7 +79,7 @@ namespace Isle.Views
             ToastBus.Show(new Toast
             {
                 Kind = ToastKind.Success, Title = copyOnly ? "Скопировано" : "Вставлено",
-                Subtitle = item.IsImage ? item.Text : item.Preview, Image = item.IsImage ? item.Thumb : null,
+                Subtitle = item.IsImage ? item.Text : item.Preview, Private = true, Image = item.IsImage ? item.ThumbNow() : null,
                 Icon = Icons.Copy, Duration = TimeSpan.FromSeconds(1.6)
             });
         }

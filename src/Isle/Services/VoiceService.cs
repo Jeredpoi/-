@@ -140,7 +140,7 @@ namespace Isle.Services
             if (onText != null)
             {
                 // текст нужен программе (чат, голосовая команда) — буфер не трогаем
-                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Распознано", Subtitle = text, Icon = Icons.Check, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(1.2) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Распознано", Subtitle = text, Private = true, Icon = Icons.Check, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(1.2) });
                 onText(text);
                 return;
             }
@@ -152,7 +152,7 @@ namespace Isle.Services
             }
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = "Текст в буфере · " + text.Length + " симв.", Subtitle = text,
+                Kind = ToastKind.Success, Title = "Текст в буфере · " + text.Length + " симв.", Subtitle = text, Private = true,
                 Icon = Icons.Check, ReplaceKey = "voice", Important = true, Duration = TimeSpan.FromSeconds(4)
             });
         }

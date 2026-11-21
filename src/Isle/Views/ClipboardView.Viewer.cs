@@ -49,12 +49,12 @@ namespace Isle.Views
             Viewer.UpdateLayout();
 
             // размер картинки: из миниатюры (пропорции те же), потом уточним по полной
-            var src = item.Thumb as BitmapSource;
+            var src = item.ThumbNow() as BitmapSource;
             _viewPx = src != null ? new Size(src.PixelWidth, src.PixelHeight) : new Size(16, 9);
             if (item.IsImage && item.Text.StartsWith("Изображение ") && item.Text.Split(' ', '×') is var parts && parts.Length >= 3
                 && int.TryParse(parts[1], out int pw) && int.TryParse(parts[2], out int ph))
                 _viewPx = new Size(pw, ph);
-            ViewerImage.Source = item.Thumb;
+            ViewerImage.Source = item.ThumbNow();
             ResetZoom();
 
             _viewFrom = ThumbRect(thumb);

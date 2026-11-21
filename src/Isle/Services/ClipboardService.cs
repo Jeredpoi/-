@@ -105,27 +105,84 @@ namespace Isle.Services
         [JsonIgnore] public bool HasAction => ActionIcon != null;
 
         private ImageSource _thumb;
+        private bool _thumbLoading;
+
+        /// <summary>
+        /// Миниатюра для списка. Грузится в фоне: декодировать 4K-PNG — десятки миллисекунд, и раньше вкладка «Буфер»
+        /// замирала на секунды, пока по очереди открывала все картинки. Готовая маленькая копия кэшируется на диске.
+        /// </summary>
         [JsonIgnore]
         public ImageSource Thumb
         {
             get
             {
-                string path = IsImage ? ImagePath : Visual == "thumb" ? Files.FirstOrDefault(File.Exists) : null;
-                if (_thumb != null || path == null || !File.Exists(path)) return _thumb;
-                try
+                if (_thumb != null || _thumbLoading) return _thumb;
+                string path = ThumbSourcePath();
+                if (path == null) return null;
+                _thumbLoading = true;
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    var b = new BitmapImage();
-                    b.BeginInit();
-                    b.CacheOption = BitmapCacheOption.OnLoad;
-                    b.DecodePixelHeight = 80;
-                    b.UriSource = new Uri(path);
-                    b.EndInit();
-                    b.Freeze();
-                    _thumb = b;
-                }
-                catch { }
-                return _thumb;
+                    var t = LoadThumb(path);
+                    dispatcher?.InvokeAsync(() => { _thumb = t; _thumbLoading = false; Changed(nameof(Thumb)); });
+                });
+                return null;
             }
+        }
+
+        /// <summary>Миниатюра сразу (для просмотра и всплывашки, где ждать нельзя).</summary>
+        public ImageSource ThumbNow()
+        {
+            if (_thumb != null) return _thumb;
+            var path = ThumbSourcePath();
+            return path == null ? null : _thumb = LoadThumb(path);
+        }
+
+        private string ThumbSourcePath()
+        {
+            string path = IsImage ? ImagePath : Visual == "thumb" ? Files?.FirstOrDefault(File.Exists) : null;
+            return path != null && File.Exists(path) ? path : null;
+        }
+
+        private static readonly string ThumbDir = Path.Combine(ClipboardService.ImagesDir, "thumbs");
+
+        private static ImageSource LoadThumb(string path)
+        {
+            try
+            {
+                // маленькая копия рядом: для картинок из истории — по имени файла, для чужих файлов — не кэшируем
+                string cache = path.StartsWith(ClipboardService.ImagesDir, StringComparison.OrdinalIgnoreCase)
+                    ? Path.Combine(ThumbDir, Path.GetFileNameWithoutExtension(path) + ".jpg") : null;
+                if (cache != null && File.Exists(cache) && File.GetLastWriteTimeUtc(cache) >= File.GetLastWriteTimeUtc(path))
+                    return Decode(cache, 0);
+                var b = Decode(path, 80);
+                if (cache != null && b is BitmapSource bs)
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(ThumbDir);
+                        var enc = new JpegBitmapEncoder { QualityLevel = 88 };
+                        enc.Frames.Add(BitmapFrame.Create(bs));
+                        using var fs = File.Create(cache);
+                        enc.Save(fs);
+                    }
+                    catch { }
+                }
+                return b;
+            }
+            catch { return null; }
+        }
+
+        private static ImageSource Decode(string path, int height)
+        {
+            var b = new BitmapImage();
+            b.BeginInit();
+            b.CacheOption = BitmapCacheOption.OnLoad;
+            if (height > 0) b.DecodePixelHeight = height;
+            b.UriSource = new Uri(path);
+            b.EndInit();
+            b.Freeze();
+            return b;
         }
 
         [JsonIgnore] public string Preview
@@ -308,6 +365,11 @@ namespace Isle.Services
                 int n = 0;
                 foreach (var f in Directory.EnumerateFiles(ImagesDir, "*.png"))
                     if (!used.Contains(Path.GetFileName(f)) && DateTime.Now - File.GetCreationTime(f) > TimeSpan.FromMinutes(5)) { try { File.Delete(f); n++; } catch { } }
+                // маленькие копии для списка — тоже только для живых записей
+                var thumbs = Path.Combine(ImagesDir, "thumbs");
+                if (Directory.Exists(thumbs))
+                    foreach (var f in Directory.EnumerateFiles(thumbs, "*.jpg"))
+                        if (!used.Contains(Path.GetFileNameWithoutExtension(f) + ".png")) { try { File.Delete(f); } catch { } }
                 if (n > 0) Journal.Info("clipboard", "удалены лишние картинки: " + n);
             }
             catch { }
@@ -663,7 +725,7 @@ namespace Isle.Services
         public void Remove(ClipItem item, bool save = true)
         {
             Items.Remove(item);
-            if (item.IsImage) { try { File.Delete(item.ImagePath); } catch { } }
+            if (item.IsImage) DeleteImageFiles(item);
             if (save) Save();
         }
 
@@ -690,17 +752,19 @@ namespace Isle.Services
         public void Purge(List<(int index, ClipItem item)> removed)
         {
             foreach (var (_, it) in removed)
-                if (it.IsImage && !Items.Contains(it)) { try { File.Delete(it.ImagePath); } catch { } }
+                if (it.IsImage && !Items.Contains(it)) DeleteImageFiles(it);
+        }
+
+        private static void DeleteImageFiles(ClipItem item)
+        {
+            try { File.Delete(item.ImagePath); } catch { }
+            try { File.Delete(Path.Combine(ImagesDir, "thumbs", Path.GetFileNameWithoutExtension(item.ImagePath) + ".jpg")); } catch { }
         }
 
         public static bool SetText(string text)
         {
-            for (int i = 0; i < 5; i++)
-            {
-                try { Clipboard.SetText(text); return true; }
-                catch { System.Threading.Thread.Sleep(50); }
-            }
-            return false;
+            try { return ClipboardWrite.Text(text); }
+            catch (Exception ex) { Journal.Debug("clipboard", "текст не записан: " + ex.Message); return false; }
         }
 
         private static bool SetItem(ClipItem item)
@@ -719,11 +783,7 @@ namespace Isle.Services
                     var dobj = new DataObject();
                     dobj.SetFileDropList(sc);
                     dobj.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes(1))); // копировать, а не перемещать
-                    for (int i = 0; i < 5; i++)
-                    {
-                        try { Clipboard.SetDataObject(dobj, true); return true; }
-                        catch { Thread.Sleep(50); }
-                    }
+                    if (ClipboardWrite.Set(dobj, "файлы")) return true;
                 }
                 catch { }
                 return false;

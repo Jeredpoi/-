@@ -55,7 +55,7 @@ namespace Isle.Views
                 ClipboardService.IgnoreUntil = DateTime.Now.AddMilliseconds(400); // не дублировать: сами положим в историю
                 ClipboardService.SetText(it.Text);
                 AppHost.Clipboard.AddExternal(new ClipItem { Text = it.Text, Source = "Телефон", Kind = ClipboardService.Classify(it.Text, "") });
-                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Текст с телефона — в буфере", Subtitle = it.Text.Length > 60 ? it.Text[..60] + "…" : it.Text, Icon = Icons.Phone, Important = true, Duration = TimeSpan.FromSeconds(3) });
+                ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Текст с телефона — в буфере", Private = true, Subtitle = it.Text.Length > 60 ? it.Text[..60] + "…" : it.Text, Icon = Icons.Phone, Important = true, Duration = TimeSpan.FromSeconds(3) });
                 return;
             }
             AppHost.Clipboard.AddExternal(new ClipItem { Kind = ClipKind.Files, Files = new() { it.Path }, Text = it.Path, Source = "Телефон" });

@@ -142,11 +142,11 @@ namespace Isle
                 });
                 return;
             }
-            ClipboardService.SetText(text);
+            bool copied = ClipboardService.SetText(text);
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Success, Title = "Текст распознан",
-                Subtitle = "Скопировано · " + text.Length + " симв. · " + text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Scan, Accent = Green, Important = true,
+                Kind = copied ? ToastKind.Success : ToastKind.Info, Title = copied ? "Текст распознан" : "Текст распознан, но буфер занят", Private = true,
+                Subtitle = (copied ? "Скопировано · " : "Не скопировалось — попробуй ещё раз · ") + text.Length + " симв. · " + text.Replace("\r", " ").Replace("\n", " "), Icon = Icons.Scan, Accent = Green, Important = true,
                 Duration = TimeSpan.FromSeconds(3.5)
             });
         }
@@ -165,7 +165,7 @@ namespace Isle
             ToastBus.Show(new Toast
             {
                 Kind = ToastKind.Success, Title = url ? "Ссылка из QR скопирована" : "QR прочитан и скопирован",
-                Subtitle = text, Icon = Icons.Qr, Accent = Green, Important = true, Duration = TimeSpan.FromSeconds(4)
+                Subtitle = text, Private = true, Icon = Icons.Qr, Accent = Green, Important = true, Duration = TimeSpan.FromSeconds(4)
             });
         }
 
