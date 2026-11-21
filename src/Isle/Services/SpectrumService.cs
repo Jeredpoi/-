@@ -91,7 +91,7 @@ namespace Isle.Services
         public bool Running => _cap != null;
 
         private string _deviceId;
-        private DateTime _startedAt, _lastSound, _lastCheck;
+        private DateTime _startedAt, _lastSound, _lastCheck, _lastReport;
         private int _restarts;
 
         private static string DefaultDeviceId()
@@ -109,6 +109,15 @@ namespace Isle.Services
         {
             if (_cap == null || DateTime.Now - _lastCheck < TimeSpan.FromSeconds(1)) return;
             _lastCheck = DateTime.Now;
+            // раз в 10 с — как живёт эквалайзер: если полоски «залипнут», по журналу будет видно почему
+            if (DateTime.Now - _lastReport > TimeSpan.FromSeconds(10))
+            {
+                _lastReport = DateTime.Now;
+                float avg, max;
+                lock (_lock) { avg = 0; max = 0; foreach (var v in _bands) { avg += v; max = Math.Max(max, v); } avg /= BandCount; }
+                Journal.Debug("spectrum", "полоски: средняя " + avg.ToString("0.00") + ", макс " + max.ToString("0.00") + ", опорная громкость " + _peakDb.ToString("0") + " дБ, тишина "
+                    + (DateTime.Now - _lastSound).TotalSeconds.ToString("0") + " с, перезапусков " + _restarts);
+            }
             var id = DefaultDeviceId();
             bool switched = id != null && _deviceId != null && id != _deviceId;
             bool deaf = DateTime.Now - _startedAt > TimeSpan.FromSeconds(4) && DateTime.Now - _lastSound > TimeSpan.FromSeconds(4);
