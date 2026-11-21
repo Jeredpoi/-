@@ -177,6 +177,7 @@ namespace Isle.Views
             foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
+            foreach (var rb in Themes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.Theme ?? "dark");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
             OpacitySlider.Value = Math.Round(S.IslandOpacity * 100);
@@ -433,6 +434,14 @@ namespace Isle.Views
             S.NotchMode = (string)((FrameworkElement)s).Tag;
             S.Save();
             Isle.Helpers.NotchBar.Update(); // окна сдвигаются сразу
+        }
+
+        private void OnTheme(object s, RoutedEventArgs e)
+        {
+            S.Theme = (string)((FrameworkElement)s).Tag;
+            S.Save();
+            AppHost.Window.ApplyAppearance(); // фон, акцент и полоски — сразу; Клоди переоденется на следующем кадре
+            UpdatePreview();
         }
 
         private void OnSnowMode(object s, RoutedEventArgs e)

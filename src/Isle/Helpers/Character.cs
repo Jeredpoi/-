@@ -18,7 +18,9 @@ namespace Isle.Helpers
         Autumn, Storm, Frost, Heat,
         // на выбор в Настройках
         Cowboy, Crown, Wizard, Pirate, Chef,
-        Party, Viking, Detective, Ninja, Flowers, Graduate
+        Party, Viking, Detective, Ninja, Flowers, Graduate,
+        // тема «Закат»: гавайская рубашка и тёмные очки
+        Tropic
     }
 
     /// <summary>
@@ -1518,6 +1520,28 @@ namespace Isle.Helpers
             }
             // дождь — жёлтый дождевик с капюшоном (раньше был плоский «зонт» над головой: его обрезал край чёлки, и он смотрелся тучей)
             else if (Outfit == Outfit.Rain && !nightcap) DrawOutfit(dc, ox, oy, px, Outfit.Storm);
+            else if (Outfit == Outfit.Tropic)
+            {
+                // тема «Закат»: гавайская рубашка в цветочек и тёмные очки с розовым бликом
+                var shirt = new SolidColorBrush(Color.FromRgb(0x14, 0xB8, 0xC4));
+                var flower = new SolidColorBrush(Color.FromRgb(0xFF, 0x4F, 0xA3));
+                var leaf = new SolidColorBrush(Color.FromRgb(0xFA, 0xCC, 0x15));
+                dc.DrawRectangle(shirt, null, new Rect(ox + 2 * px, oy + 4 * px, 9 * px + 0.3, 2.8 * px));
+                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1)), null, new Rect(ox + 5.4 * px, oy + 4 * px, 2.2 * px, 0.6 * px)); // воротник
+                foreach (var (fx, fy, br) in new[] { (2.6, 4.9, flower), (4.4, 6.0, leaf), (8.3, 4.8, flower), (9.6, 6.0, leaf), (6.2, 5.6, flower) })
+                    dc.DrawRectangle(br, null, new Rect(ox + fx * px, oy + fy * px, 0.7 * px, 0.7 * px));
+                if (!nightcap)
+                {
+                    glasses = true;
+                    var lens = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0C));
+                    dc.DrawRectangle(lens, null, new Rect(ox + 3 * px, oy + 2 * px, 3 * px, 1.6 * px));
+                    dc.DrawRectangle(lens, null, new Rect(ox + 7 * px, oy + 2 * px, 3 * px, 1.6 * px));
+                    dc.DrawRectangle(lens, null, new Rect(ox + 6 * px, oy + 2.3 * px, px, 0.5 * px));
+                    var shine = new SolidColorBrush(Color.FromArgb(200, 0xFF, 0x4F, 0xA3));
+                    dc.DrawRectangle(shine, null, new Rect(ox + 3.4 * px, oy + 2.3 * px, 0.8 * px, 0.4 * px));
+                    dc.DrawRectangle(shine, null, new Rect(ox + 7.4 * px, oy + 2.3 * px, 0.8 * px, 0.4 * px));
+                }
+            }
             else if (!nightcap) DrawOutfit(dc, ox, oy, px);
 
             // ---- праздничные шапки (вместо обычной): Новый год — колпак Деда Мороза, Хэллоуин — шляпа ведьмы

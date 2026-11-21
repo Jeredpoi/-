@@ -1552,9 +1552,14 @@ namespace Isle
             var s = AppSettings.Current;
             try
             {
-                var c = (Color)ColorConverter.ConvertFromString(s.AccentHex);
+                bool sunset = Helpers.SunsetTheme.On;
+                var c = sunset ? Helpers.SunsetTheme.Pink : (Color)ColorConverter.ConvertFromString(s.AccentHex);
                 Application.Current.Resources["Accent"] = new SolidColorBrush(c); // все {DynamicResource Accent} обновятся сразу
-                foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Background = new SolidColorBrush(c);
+                // в «Закате» полоски эквалайзера переливаются снизу вверх: бирюза → розовый
+                Brush barBrush = sunset ? new LinearGradientBrush(Helpers.SunsetTheme.Pink, Helpers.SunsetTheme.Teal, 90) : new SolidColorBrush(c);
+                foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Background = barBrush;
+                ThemeBack.Visibility = sunset ? Visibility.Visible : Visibility.Collapsed;
+                ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;
             }
             catch { }
             byte a = (byte)Math.Round(255 * Math.Clamp(s.IslandOpacity, 0.5, 1.0));
@@ -1603,6 +1608,14 @@ namespace Isle
             var chosen = AppSettings.Current.BuddyOutfit;
             if (!string.IsNullOrEmpty(chosen) && chosen != "auto" && Enum.TryParse<Helpers.Outfit>(chosen, out var o)) return o;
             var w = AppHost.Weather;
+            var byWeather = WeatherOutfit(w);
+            // тема «Закат»: в обычную погоду — гавайская рубашка и очки (дождевик, шапки и шарфы по погоде остаются)
+            if (Helpers.SunsetTheme.On && byWeather is Helpers.Outfit.None or Helpers.Outfit.Sunny or Helpers.Outfit.Summer) return Helpers.Outfit.Tropic;
+            return byWeather;
+        }
+
+        private static Helpers.Outfit WeatherOutfit(WeatherNow w)
+        {
             if (w == null) return Helpers.Outfit.None;
             if (w.Code >= 95) return Helpers.Outfit.Storm;                                 // гроза — жёлтый дождевик
             bool rain = w.Code >= 51 && w.Code <= 67 || w.Code >= 80 && w.Code <= 82;

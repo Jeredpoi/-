@@ -153,6 +153,8 @@ namespace Isle.Services
         public bool PhoneHttps { get; set; } = true;
         /// <summary>Снег из-под чёлки: «auto» — с 1 декабря по 14 января и когда за окном снег, «on» — всегда, «off» — никогда.</summary>
         public string WinterSnow { get; set; } = "auto";
+        /// <summary>Тема: «dark» — чёрная, «sunset» — закат (неон, размытые пальмы за матовым стеклом).</summary>
+        public string Theme { get; set; } = "dark";
         public bool FirstRunDone { get; set; } = false;
         /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
         public bool WelcomeShown { get; set; }

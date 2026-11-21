@@ -310,6 +310,16 @@
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
+                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Тема"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="«Закат» — неоновый вечер у океана: размытые пальмы и солнце за матовым стеклом в панели, розовый акцент, у Клоди гавайская рубашка."/>
+                                    <WrapPanel x:Name="Themes" Margin="0,10,0,0">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="theme" Content="Тёмная" Click="OnTheme" Tag="dark"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="theme" Content="Закат" Click="OnTheme" Tag="sunset"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource Sep}"/>
+                            <Grid Style="{StaticResource Row}">
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Снег из-под чёлки"/>
                                     <TextBlock Style="{StaticResource RowNote}" Text="«Зимой» — с 1 декабря по 14 января и когда за окном идёт снег."/>
                                     <WrapPanel x:Name="SnowModes" Margin="0,10,0,0">
