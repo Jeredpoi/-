@@ -55,6 +55,7 @@ namespace Isle
                 AppSettings.Current.AutoUpdateCheck = false;
                 await Task.Delay(3000);
                 AppSettings.Current.Theme = "sunset"; AppSettings.Current.Save(); w.ApplyAppearance();
+                { var bg = Isle.Helpers.SunsetTheme.Background(900, 470); var e = new System.Windows.Media.Imaging.PngBitmapEncoder(); e.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bg)); using var f = File.Create(Path.Combine(dir, "background.png")); e.Save(f); }
                 w.SuppressAutoCollapse = true;
                 foreach (var tab in new[] { "home", "weather", "clip" })
                 {
