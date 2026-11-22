@@ -40,6 +40,7 @@ namespace Isle.Views
             {
                 TickPosition();
                 if (++_appVolTicks % 10 != 0) return;
+                PollSpotify();
                 SyncAppVolume();
                 // раз в секунду: пауза затянулась — пора спрятать плеер (событий от плеера в это время нет)
                 bool idleNow = _pausedSince.HasValue && DateTime.Now - _pausedSince.Value > PlayerIdleTimeout;
@@ -491,29 +492,99 @@ namespace Isle.Views
 
         private void OnPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
 
+        // ---------- повтор и перемешивание: у Spotify — через привязку (Web API), у остальных — через Windows ----------
+        private SpotifyPlayer _sp;
+        private DateTime _spAt;
+        private static bool IsSpotify => (AppHost.Media.Current?.SourceApp ?? "").Contains("spotify", StringComparison.OrdinalIgnoreCase)
+            || (AppHost.Media.Current?.SourceAppId ?? "").Contains("spotify", StringComparison.OrdinalIgnoreCase);
+        private static bool UseSpotifyApi => IsSpotify && SpotifyService.Connected;
+
         private async void OnRepeat(object s, RoutedEventArgs e)
         {
+            if (UseSpotifyApi)
+            {
+                var cur = (_sp ?? await SpotifyService.PlayerAsync())?.Repeat ?? "off";
+                var next = await SpotifyService.CycleRepeatAsync(cur);
+                if (next != null) { _sp ??= new SpotifyPlayer(); _sp.Repeat = next; }
+                else SpotifyFail();
+                UpdateRepeat();
+                return;
+            }
             if (!await AppHost.Media.ToggleRepeatAsync())
             {
-                var app = AppHost.Media.Current?.SourceApp ?? "";
                 ToastBus.Show(new Toast
                 {
                     Kind = ToastKind.Info, Title = "Повтор переключается только в самом плеере", Icon = Icons.Repeat, Important = true, Duration = TimeSpan.FromSeconds(3.5),
-                    Subtitle = app.Contains("spotify", StringComparison.OrdinalIgnoreCase) ? "Spotify не даёт включать его снаружи — в Spotify: Ctrl+R" : "Этот плеер не даёт включать повтор снаружи",
+                    Subtitle = IsSpotify ? "Привяжи Spotify: Настройки → Музыка → Spotify" : "Этот плеер не даёт включать повтор снаружи",
                 });
             }
             await System.Threading.Tasks.Task.Delay(300);
             UpdateRepeat();
         }
 
+        private async void OnShuffle(object s, RoutedEventArgs e)
+        {
+            if (UseSpotifyApi)
+            {
+                var cur = (_sp ?? await SpotifyService.PlayerAsync())?.Shuffle ?? false;
+                var res = await SpotifyService.SetShuffleAsync(!cur);
+                if (res != null) { _sp ??= new SpotifyPlayer(); _sp.Shuffle = res.Value; }
+                else SpotifyFail();
+                UpdateRepeat();
+                return;
+            }
+            if (!await AppHost.Media.ToggleShuffleAsync())
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Info, Title = "Перемешивание — только в самом плеере", Icon = Icons.Shuffle, Important = true, Duration = TimeSpan.FromSeconds(3.5),
+                    Subtitle = IsSpotify ? "Привяжи Spotify: Настройки → Музыка → Spotify" : "Этот плеер не даёт переключать его снаружи",
+                });
+            await System.Threading.Tasks.Task.Delay(300);
+            UpdateRepeat();
+        }
+
+        private static void SpotifyFail() => ToastBus.Show(new Toast
+        {
+            Kind = ToastKind.Error, Title = "Spotify не ответил", Subtitle = "Нужен Premium и активное устройство — попробуй ещё раз", Icon = Icons.Repeat, Important = true, Duration = TimeSpan.FromSeconds(3),
+        });
+
+        /// <summary>Раз в 5 с, пока открыт плеер со Spotify и он привязан, — подтянуть повтор и перемешивание.</summary>
+        private async void PollSpotify()
+        {
+            if (!UseSpotifyApi || !IsVisible || DateTime.Now - _spAt < TimeSpan.FromSeconds(5)) return;
+            _spAt = DateTime.Now;
+            var p = await SpotifyService.PlayerAsync();
+            if (p != null) { _sp = p; UpdateRepeat(); }
+        }
+
         private void UpdateRepeat()
         {
-            var (supported, on) = AppHost.Media.Repeat;
-            RepeatIcon.Foreground = on ? (System.Windows.Media.Brush)FindResource("Accent") : (System.Windows.Media.Brush)FindResource("Muted");
-            RepeatOne.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            var accent = (System.Windows.Media.Brush)FindResource("Accent");
+            var muted = (System.Windows.Media.Brush)FindResource("Muted");
+            bool supported, on, one, shuffleSupported, shuffleOn;
+            if (UseSpotifyApi)
+            {
+                supported = shuffleSupported = true;
+                on = _sp != null && _sp.Repeat != "off"; one = _sp?.Repeat == "track";
+                shuffleOn = _sp?.Shuffle ?? false;
+            }
+            else
+            {
+                (supported, on) = AppHost.Media.Repeat; one = on;
+                (shuffleSupported, shuffleOn) = AppHost.Media.Shuffle;
+                // Spotify без привязки: кнопки видны, по нажатию — подсказка, как привязать
+                if (IsSpotify) supported = shuffleSupported = true;
+            }
+            RepeatIcon.Foreground = on ? accent : muted;
+            RepeatOne.Visibility = one ? Visibility.Visible : Visibility.Collapsed;
             RepeatBtn.Opacity = supported ? 1 : 0.55;
-            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи" : on ? "Повтор трека включён — нажми, чтобы выключить" : "Повторять трек";
+            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи"
+                : !on ? "Повтор выключен" : one ? "Повтор трека" : "Повтор плейлиста";
+            ShuffleIcon.Foreground = shuffleOn ? accent : muted;
+            ShuffleBtn.Opacity = shuffleSupported ? 1 : 0.55;
+            ShuffleBtn.ToolTip = shuffleOn ? "Перемешивание включено" : "Перемешивать";
         }
+
         private void OnNext(object s, RoutedEventArgs e) => AppHost.Media.Next();
         private void OnPlay(object s, RoutedEventArgs e) => AppHost.Media.PlayPause();
         private void OnSeek(object s, MouseButtonEventArgs e) => AppHost.Media.Seek(TimeSpan.FromSeconds(Progress.Value));

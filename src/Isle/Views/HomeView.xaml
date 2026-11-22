@@ -138,7 +138,9 @@
                         <Button Style="{StaticResource Ghost}" Width="40" Height="40" Click="OnNext" ToolTip="Следующий">
                             <h:Icon Kind="Next" Width="17" Height="17"/>
                         </Button>
-                        <Border Width="40" Margin="10,0,0,0"/>
+                        <Button x:Name="ShuffleBtn" Style="{StaticResource Ghost}" Width="40" Height="40" Margin="10,0,0,0" Click="OnShuffle" ToolTip="Перемешивать">
+                            <h:Icon x:Name="ShuffleIcon" Kind="Shuffle" Width="16" Height="16" Foreground="{StaticResource Muted}"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
 

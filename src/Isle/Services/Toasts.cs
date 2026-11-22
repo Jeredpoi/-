@@ -96,6 +96,7 @@ namespace Isle.Services
         public const string Moon = "M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z";
         public const string Wave = "M4 10v4M8 7v10M12 4.5v15M16 8v8M20 10.5v3";
         public const string Prev = "M18 6v12l-8.5-6zM6 6v12";
+        public const string Shuffle = "M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5";
         public const string Repeat = "M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4";
         public const string Next = "M6 6v12l8.5-6zM18 6v12";
         public const string Play = "M8 5.5v13l10-6.5z";

@@ -155,6 +155,10 @@ namespace Isle.Services
         public string WinterSnow { get; set; } = "auto";
         /// <summary>Тема: «dark» — чёрная, «sunset» — закат (неон, размытые пальмы за матовым стеклом).</summary>
         public string Theme { get; set; } = "dark";
+        /// <summary>Client ID своего приложения Spotify (не секрет: вход идёт по PKCE без секрета приложения).</summary>
+        public string SpotifyClientId { get; set; } = "";
+        /// <summary>Ключ обновления Spotify, зашифрованный Windows (DPAPI); в журнал не пишется.</summary>
+        public string SpotifyTokenProtected { get; set; } = "";
         public bool FirstRunDone { get; set; } = false;
         /// <summary>Приветствие первого запуска уже показано (или закрыто).</summary>
         public bool WelcomeShown { get; set; }

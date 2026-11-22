@@ -286,6 +286,27 @@ namespace Isle.Services
             }
         }
 
+        /// <summary>Перемешивание у текущего плеера: (умеет ли плеер переключать его снаружи, включено ли).</summary>
+        public (bool supported, bool on) Shuffle
+        {
+            get
+            {
+                try { var pb = _session?.GetPlaybackInfo(); return pb == null ? (false, false) : (pb.Controls.IsShuffleEnabled, pb.IsShuffleActive == true); }
+                catch { return (false, false); }
+            }
+        }
+
+        public async System.Threading.Tasks.Task<bool> ToggleShuffleAsync()
+        {
+            try
+            {
+                var (supported, on) = Shuffle;
+                if (_session == null || !supported) return false;
+                return await _session.TryChangeShuffleActiveAsync(!on);
+            }
+            catch { return false; }
+        }
+
         /// <summary>Повтор трека: выкл → повтор трека → выкл. false — плеер не даёт переключать повтор снаружи.</summary>
         public async System.Threading.Tasks.Task<bool> ToggleRepeatAsync()
         {

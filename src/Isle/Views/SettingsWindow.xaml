@@ -379,6 +379,29 @@
                 <!-- ============ МУЗЫКА ============ -->
                 <StackPanel x:Name="SecMusic" Visibility="Collapsed">
                     <TextBlock Style="{StaticResource H1}" Text="Музыка"/>
+                    <!-- Spotify: привязка аккаунта для повтора и перемешивания -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel Margin="0,14">
+                            <DockPanel>
+                                <Button x:Name="SpotifyLogin" DockPanel.Dock="Right" Style="{StaticResource Primary}" Padding="14,7" Click="OnSpotifyLogin" Content="Войти в Spotify"/>
+                                <Button x:Name="SpotifyLogout" DockPanel.Dock="Right" Style="{StaticResource SFlat}" Padding="12,7" Margin="0,0,8,0" Click="OnSpotifyLogout" Content="Отвязать" Visibility="Collapsed"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Spotify"/>
+                                    <TextBlock x:Name="SpotifyStatus" Style="{StaticResource RowNote}" Text="Не привязан — повтор и перемешивание у Spotify переключаются только в нём самом"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource RowNote}" TextWrapping="Wrap" Margin="0,12,0,6" LineHeight="18"
+                                       Text="Нужен Spotify Premium. Один раз создай своё приложение Spotify (2 минуты):&#x0a;1. Открой developer.spotify.com → Dashboard → Create app.&#x0a;2. Любое название; в «Redirect URIs» вставь адрес ниже; отметь «Web API» и сохрани.&#x0a;3. В Settings → User Management добавь свой e-mail от Spotify.&#x0a;4. Скопируй Client ID сюда и нажми «Войти в Spotify»."/>
+                            <WrapPanel Margin="0,4,0,0">
+                                <Button Style="{StaticResource SFlat}" Padding="12,6" Margin="0,0,8,8" Click="OnSpotifyDashboard" Content="Открыть developer.spotify.com"/>
+                                <Button Style="{StaticResource SFlat}" Padding="12,6" Margin="0,0,8,8" Click="OnSpotifyCopyUri">
+                                    <TextBlock><Run Text="Скопировать адрес: "/><Run x:Name="SpotifyUri" FontFamily="Cascadia Mono, Consolas"/></TextBlock>
+                                </Button>
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource RowTitle}" Text="Client ID" Margin="0,8,0,6" FontSize="12"/>
+                            <TextBox x:Name="SpotifyClientId" Tag="например 3f2a…c91e" LostFocus="OnSpotifyClientId"/>
+                        </StackPanel>
+                    </Border>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <StackPanel Margin="0,14">

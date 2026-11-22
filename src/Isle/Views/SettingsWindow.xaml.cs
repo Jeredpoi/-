@@ -178,6 +178,7 @@ namespace Isle.Views
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
             foreach (var rb in Themes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.Theme ?? "dark");
+            UpdateSpotify();
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
             OpacitySlider.Value = Math.Round(S.IslandOpacity * 100);
@@ -434,6 +435,51 @@ namespace Isle.Views
             S.NotchMode = (string)((FrameworkElement)s).Tag;
             S.Save();
             Isle.Helpers.NotchBar.Update(); // окна сдвигаются сразу
+        }
+
+        // ---------- Spotify ----------
+        private void UpdateSpotify()
+        {
+            SpotifyUri.Text = SpotifyService.RedirectUri;
+            if (!SpotifyClientId.IsKeyboardFocusWithin) SpotifyClientId.Text = S.SpotifyClientId ?? "";
+            bool on = SpotifyService.Connected;
+            SpotifyStatus.Text = on ? "Привязан — повтор и перемешивание Spotify работают из чёлки" : "Не привязан — повтор и перемешивание у Spotify переключаются только в нём самом";
+            SpotifyStatus.Foreground = on ? new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80)) : (Brush)FindResource("Muted");
+            SpotifyLogin.Content = on ? "Войти заново" : "Войти в Spotify";
+            SpotifyLogout.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnSpotifyClientId(object s, RoutedEventArgs e)
+        {
+            var id = SpotifyClientId.Text.Trim();
+            if (id == (S.SpotifyClientId ?? "")) return;
+            S.SpotifyClientId = id; S.Save();
+            UpdateSpotify();
+        }
+
+        private async void OnSpotifyLogin(object s, RoutedEventArgs e)
+        {
+            OnSpotifyClientId(s, e);
+            SpotifyLogin.IsEnabled = false;
+            SpotifyStatus.Text = "Жду вход в браузере…";
+            var err = await SpotifyService.LoginAsync();
+            SpotifyLogin.IsEnabled = true;
+            UpdateSpotify();
+            if (err != null) { SpotifyStatus.Text = err; SpotifyStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xF8, 0x71, 0x71)); }
+            else ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Spotify привязан", Subtitle = "Повтор и перемешивание — у плеера на «Главной»", Icon = Icons.Check, Important = true, Duration = TimeSpan.FromSeconds(3) });
+        }
+
+        private void OnSpotifyLogout(object s, RoutedEventArgs e) { SpotifyService.Logout(); UpdateSpotify(); }
+
+        private void OnSpotifyDashboard(object s, RoutedEventArgs e)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://developer.spotify.com/dashboard") { UseShellExecute = true }); } catch { }
+        }
+
+        private void OnSpotifyCopyUri(object s, RoutedEventArgs e)
+        {
+            ClipboardService.SetText(SpotifyService.RedirectUri);
+            ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Адрес скопирован", Subtitle = "Вставь его в «Redirect URIs» приложения Spotify", Icon = Icons.Copy, Important = true, Duration = TimeSpan.FromSeconds(2.5) });
         }
 
         private void OnTheme(object s, RoutedEventArgs e)
