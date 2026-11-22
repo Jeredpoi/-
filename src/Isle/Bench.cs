@@ -35,7 +35,77 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr h, uint cmd);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Max(1, v.ActualWidth), (int)Math.Max(1, v.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(13, 17, 23)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                L("журнал этого запуска: " + File.Exists(Journal.PathNow) + ", прошлый: " + File.Exists(Path.Combine(Storage.Dir, "isle.prev.log")));
+                AppSettings.Current.Theme = "sunset"; AppSettings.Current.Save(); w.ApplyAppearance();
+                w.SuppressAutoCollapse = true;
+                foreach (var tab in new[] { "home", "clip", "phone" })
+                {
+                    w.Expand(tab); w.SelectTab(tab); await Task.Delay(2000);
+                    SnapEl((FrameworkElement)w.Content, dir, "sunset-" + tab);
+                }
+                // выпадающий список звуковых выходов: открыть, увести курсор на чёлку, подождать — список должен остаться сверху
+                w.Expand("home"); w.SelectTab("home"); await Task.Delay(1500);
+                var home = (FrameworkElement)typeof(MainWindow).GetMethod("GetView", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).Invoke(w, new object[] { "home" });
+                var cb = (ComboBox)home.FindName("Devices");
+                L("список выходов: " + (cb != null) + ", пунктов " + cb?.Items.Count);
+                if (cb != null)
+                {
+                    if (cb.Items.Count == 0) cb.Items.Add("Динамики (тест)");
+                    cb.IsDropDownOpen = true; await Task.Delay(600);
+                    var island = (FrameworkElement)w.FindName("Island");
+                    var c = island.PointToScreen(new Point(60, 200));
+                    SetCursorPos((int)c.X, (int)c.Y);
+                    await Task.Delay(3500);
+                    IntPtr popup = IntPtr.Zero;
+                    foreach (PresentationSource ps in PresentationSource.CurrentSources)
+                        if (ps is System.Windows.Interop.HwndSource hs && hs.RootVisual?.GetType().Name == "PopupRoot" && IsWindowVisible(hs.Handle)) popup = hs.Handle;
+                    var main = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                    bool above = false;
+                    for (var h = GetWindow(main, 3); h != IntPtr.Zero; h = GetWindow(h, 3)) if (h == popup) { above = true; break; }
+                    L("через 3,5 с с курсором на чёлке: список открыт " + cb.IsDropDownOpen + ", окно списка " + (popup != IntPtr.Zero) + ", поверх чёлки " + above);
+                    cb.IsDropDownOpen = false;
+                }
+                // караоке: строка, подсвеченная на 0 / 50 / 100 %
+                var tb = new TextBlock { FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(16) };
+                var stage = new Border { Background = Brushes.Black, Child = tb, Width = 520 };
+                var win = new Window { Content = stage, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false, Left = -4000, Top = -4000 };
+                win.Show();
+                var on = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1)); var off = new SolidColorBrush(Color.FromArgb(0x70, 0xEC, 0xEC, 0xF1));
+                Isle.Helpers.KaraokeText.Set(tb, "Мы дошли до предела этой ночью", off);
+                foreach (var p in new[] { 0.0, 0.5, 1.0 }) { Isle.Helpers.KaraokeText.Update(tb, p, on, off); await Task.Delay(200); SnapEl(stage, dir, "karaoke-" + (int)(p * 100)); }
+                win.Close();
+                var lines = new System.Collections.Generic.List<LyricLine> { new LyricLine { At = TimeSpan.FromSeconds(10), Text = "раз два три четыре" }, new LyricLine { At = TimeSpan.FromSeconds(14), Text = "дальше" } };
+                foreach (var sec in new[] { 9.0, 10.0, 11.0, 12.5, 14.0 }) { var (i, pr) = Isle.Helpers.KaraokeText.Position(lines, TimeSpan.FromSeconds(sec)); L("позиция " + sec + " с → строка " + i + ", пропето " + pr.ToString("0.00")); }
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
