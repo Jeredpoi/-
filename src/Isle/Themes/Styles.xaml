@@ -7,6 +7,13 @@
     <SolidColorBrush x:Key="CardHover" Color="#18181B"/>
     <SolidColorBrush x:Key="CardBorder" Color="#1C1C20"/>
     <SolidColorBrush x:Key="Track" Color="#26262B"/>
+    <!-- плашки под иконками, «колодцы» (зоны перетаскивания) и подложка вкладок без своих карточек:
+         в «Закате» подменяются на стекло (MainWindow.ApplyAppearance) -->
+    <SolidColorBrush x:Key="Plate" Color="#1C1C21"/>
+    <SolidColorBrush x:Key="Well" Color="#050506"/>
+    <SolidColorBrush x:Key="Pane" Color="Transparent"/>
+    <SolidColorBrush x:Key="PaneBorder" Color="Transparent"/>
+    <Thickness x:Key="PanePad">0</Thickness>
     <!-- цвета чипов, сегментов и выбора: в теме «Закат» подменяются (MainWindow.ApplyAppearance) -->
     <SolidColorBrush x:Key="ChipBg" Color="#141417"/>
     <SolidColorBrush x:Key="ChipHover" Color="#1B1B1F"/>
@@ -28,7 +35,7 @@
     </Style>
 
     <Style x:Key="MutedText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-        <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
         <Setter Property="FontSize" Value="12"/>
     </Style>
 
@@ -215,7 +222,7 @@
 
     <!-- Вкладки -->
     <Style x:Key="Tab" TargetType="RadioButton">
-        <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -247,7 +254,7 @@
     </Style>
 
     <Style x:Key="Chip" TargetType="ToggleButton">
-        <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -608,7 +615,7 @@
                             <Setter TargetName="itemBorder" Property="Background" Value="#1E1E23"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -453,7 +453,7 @@ namespace Isle.Views
             e.Handled = true;
         }
 
-        private void OnDragLeave(object s, DragEventArgs e) => Drop.BorderBrush = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x33));
+        private void OnDragLeave(object s, DragEventArgs e) => Drop.SetResourceReference(Border.BorderBrushProperty, "CardBorder");
 
         private void OnDrop(object s, DragEventArgs e)
         {

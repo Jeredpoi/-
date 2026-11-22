@@ -34,7 +34,7 @@ namespace Isle.Views
 
             foreach (var m in new[] { 5, 10, 15, 25, 45 })
             {
-                var b = new Button { Content = m + " м", Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 4, 0), Height = 28, Padding = new Thickness(0), ToolTip = "Запустить таймер на " + m + " мин" };
+                var b = new Button { Content = m + " мин", Style = (Style)FindResource("Flat"), Margin = new Thickness(0, 0, 4, 0), Height = 28, Padding = new Thickness(0), ToolTip = "Запустить таймер на " + m + " мин" };
                 // пресет сразу запускает таймер — раньше он только выставлял время и молча останавливал идущий
                 b.Click += (_, __) => AppHost.Timer.StartNew(TimeSpan.FromMinutes(m));
                 Presets.Children.Add(b);

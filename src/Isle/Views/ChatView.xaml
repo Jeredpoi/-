@@ -20,7 +20,7 @@
                     <TextBlock Text="История" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 </StackPanel>
             </Button>
-            <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Сообщение для ИИ…" AcceptsReturn="True" TextWrapping="Wrap"
+            <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Напиши сообщение" AcceptsReturn="True" TextWrapping="Wrap"
                      MaxHeight="90" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey"/>
             <Button x:Name="MicBtn" Grid.Column="3" Style="{StaticResource Flat}" Height="40" Width="40" Padding="0" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать голосом">
                 <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
@@ -29,13 +29,14 @@
                 <h:Icon Kind="Send" Width="15" Height="15" Foreground="#08080A"/>
             </Button>
         </Grid>
+        <Border Background="{DynamicResource Pane}" BorderBrush="{DynamicResource PaneBorder}" BorderThickness="1" CornerRadius="16" Padding="{DynamicResource PanePad}">
         <Grid>
             <StackPanel x:Name="Welcome" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <!-- Клоди встречает в чате: следит за курсором, думает вместе с ИИ, радуется ответу -->
                 <h:Character x:Name="ChatBuddy" Width="78" Height="54" HorizontalAlignment="Center"/>
                 <TextBlock Text="Спроси что угодно" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,4"/>
                 <TextBlock x:Name="ModelLine" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="RecentTitle" Text="НЕДАВНИЕ РАЗГОВОРЫ" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,16,0,6"/>
+                <TextBlock x:Name="RecentTitle" Text="НЕДАВНИЕ РАЗГОВОРЫ" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,16,0,6"/>
                 <StackPanel x:Name="RecentChats"/>
                 <StackPanel x:Name="Suggestions" Margin="0,14,0,0"/>
             </StackPanel>
@@ -85,5 +86,6 @@
                 </ItemsControl>
             </ScrollViewer>
         </Grid>
+        </Border>
     </DockPanel>
 </UserControl>

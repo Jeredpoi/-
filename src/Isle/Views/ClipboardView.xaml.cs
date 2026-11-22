@@ -148,11 +148,11 @@ namespace Isle.Views
             var row = new Border
             {
                 Child = g, Padding = new Thickness(10, 7, 10, 7), CornerRadius = new CornerRadius(9), Cursor = Cursors.Hand, Margin = new Thickness(0, 0, 0, 2),
-                Background = sel ? new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x21)) : Brushes.Transparent,
+                Background = sel ? (Brush)FindResource("SelBg") : Brushes.Transparent,
             };
             if (!sel)
             {
-                row.MouseEnter += (_, __) => row.Background = new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x18));
+                row.MouseEnter += (_, __) => row.Background = (Brush)FindResource("ChipHover");
                 row.MouseLeave += (_, __) => row.Background = Brushes.Transparent;
             }
             row.MouseLeftButtonUp += (_, __) => SelectFolder(key);
@@ -160,7 +160,7 @@ namespace Isle.Views
             row.AllowDrop = true;
             row.DragEnter += (_, e) => { if (IsOurDrag(e)) { row.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x33)); e.Effects = DragDropEffects.Copy; } e.Handled = true; };
             row.DragOver += (_, e) => { e.Effects = IsOurDrag(e) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
-            row.DragLeave += (_, __) => row.Background = sel ? new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x21)) : Brushes.Transparent;
+            row.DragLeave += (_, __) => row.Background = sel ? (Brush)FindResource("SelBg") : Brushes.Transparent;
             row.Drop += (_, e) => { e.Handled = true; if (IsOurDrag(e) && _dragItem != null) DropInto(_dragItem, key); };
             var apps = key != AllKey && key != PinnedKey ? Svc.AppsOf(key) : Array.Empty<string>();
             if (apps.Count > 0) row.ToolTip = "Снимки из " + string.Join(", ", apps.Select(CachedTitle)) + " попадают сюда";

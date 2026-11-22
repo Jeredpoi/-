@@ -6,18 +6,37 @@
         Background="#0A0A0C" Foreground="{StaticResource Fg}" FontFamily="{StaticResource UiFont}"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="pack://application:,,,/Isle;component/app.ico">
     <Window.Resources>
+        <!-- цвета окна: в теме «Закат» подменяются (SettingsWindow.ApplyTheme) — фото пальм под тёмной вуалью и стекло -->
+        <SolidColorBrush x:Key="SBg" Color="#0A0A0C"/>
+        <SolidColorBrush x:Key="SSide" Color="#060607"/>
+        <SolidColorBrush x:Key="SCard" Color="#111114"/>
+        <SolidColorBrush x:Key="SCardBorder" Color="#1E1E23"/>
+        <SolidColorBrush x:Key="SField" Color="#18181B"/>
+        <SolidColorBrush x:Key="SFieldBorder" Color="#26262B"/>
+        <SolidColorBrush x:Key="SBtn" Color="#1F1F24"/>
+        <SolidColorBrush x:Key="SBtnBorder" Color="#2A2A30"/>
+        <SolidColorBrush x:Key="SSeg" Color="#1A1A1E"/>
+        <SolidColorBrush x:Key="SSegHover" Color="#232328"/>
+        <SolidColorBrush x:Key="SNavHover" Color="#141417"/>
+        <SolidColorBrush x:Key="SNavSel" Color="#1C1C20"/>
+        <SolidColorBrush x:Key="SSep" Color="#1C1C20"/>
+        <SolidColorBrush x:Key="SNote" Color="#8B8B95"/>
         <!-- В настройках поля и кнопки светлее карточек, а выбранный вариант — белый: всё читается с первого взгляда -->
         <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Setter Property="Background" Value="#18181B"/>
-            <Setter Property="BorderBrush" Value="#26262B"/>
-            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Background" Value="{DynamicResource SField}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SFieldBorder}"/>
+            <!-- одна высота у всех однострочных полей и кнопок рядом с ними; по центру — иначе отступ удваивался -->
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
-            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="Background" Value="{DynamicResource SField}"/>
+            <Setter Property="Height" Value="36"/>
         </Style>
         <Style x:Key="SFlat" TargetType="Button" BasedOn="{StaticResource Flat}">
-            <Setter Property="Background" Value="#1F1F24"/>
-            <Setter Property="BorderBrush" Value="#2A2A30"/>
+            <Setter Property="Background" Value="{DynamicResource SBtn}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SBtnBorder}"/>
             <Setter Property="Padding" Value="14,8"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
@@ -32,12 +51,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="b" Background="#1A1A1E" BorderBrush="#2A2A30" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                        <Border x:Name="b" Background="{DynamicResource SSeg}" BorderBrush="{DynamicResource SBtnBorder}" BorderThickness="1" CornerRadius="10" Padding="12,7">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#232328"/>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource SSegHover}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="b" Property="Background" Value="{DynamicResource Accent}"/>
@@ -67,10 +86,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#141417"/>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource SNavHover}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#1C1C20"/>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource SNavSel}"/>
                                 <Setter Property="Foreground" Value="#FFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -79,8 +98,8 @@
             </Setter>
         </Style>
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="#111114"/>
-            <Setter Property="BorderBrush" Value="#1E1E23"/>
+            <Setter Property="Background" Value="{DynamicResource SCard}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SCardBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="18,6"/>
@@ -97,13 +116,13 @@
         </Style>
         <Style x:Key="RowNote" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#8B8B95"/>
+            <Setter Property="Foreground" Value="{DynamicResource SNote}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="0,3,0,0"/>
         </Style>
         <Style x:Key="Sep" TargetType="Border">
             <Setter Property="Height" Value="1"/>
-            <Setter Property="Background" Value="#1C1C20"/>
+            <Setter Property="Background" Value="{DynamicResource SSep}"/>
             <Setter Property="Margin" Value="-18,0"/>
         </Style>
         <Style x:Key="Row" TargetType="Grid">
@@ -111,14 +130,14 @@
         </Style>
     </Window.Resources>
 
-    <Grid Background="#0A0A0C">
+    <Grid x:Name="Root" Background="{DynamicResource SBg}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="230"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- Меню разделов -->
-        <DockPanel Background="#060607" >
+        <DockPanel Background="{DynamicResource SSide}" >
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
                 <Border Width="44" Height="22" CornerRadius="11" Background="Black" BorderBrush="#3A3A42" BorderThickness="1">
                     <h:Character Width="30" Height="18"/>
@@ -145,7 +164,7 @@
                 <RadioButton Style="{StaticResource Nav}" Content="Погода" Tag="{h:IconFor Sun}" x:Name="NavWeather" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Всплывашки и модули" Tag="{h:IconFor Bell}" x:Name="NavModules" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Клавиши" Tag="{h:IconFor Keyboard}" x:Name="NavKeys" Checked="OnNav"/>
-                <Border Height="1" Background="#1C1C20" Margin="10,10,10,10"/>
+                <Border Height="1" Background="{DynamicResource SSep}" Margin="10,10,10,10"/>
                 <RadioButton Style="{StaticResource Nav}" Tag="{h:IconFor Restart}" x:Name="NavUpdates" Checked="OnNav">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Обновления"/>
@@ -155,7 +174,7 @@
             </StackPanel>
         </DockPanel>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" x:Name="Scroll" Background="#0A0A0C">
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Visible" x:Name="Scroll" Background="Transparent">
             <Grid Margin="32,26,32,26">
 
                 <!-- ============ ОБЩЕЕ ============ -->

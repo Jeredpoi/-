@@ -23,9 +23,9 @@
             <DockPanel x:Name="RecentPanel" Visibility="Collapsed">
                 <DockPanel DockPanel.Dock="Top" Margin="2,0,0,8">
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="2" Click="OnOpenClipboard" ToolTip="Вся история">
-                        <h:Icon Kind="Next" Width="11" Height="11" Foreground="{StaticResource Muted}"/>
+                        <h:Icon Kind="Next" Width="11" Height="11" Foreground="{DynamicResource Muted}"/>
                     </Button>
-                    <TextBlock Text="НЕДАВНО СКОПИРОВАНО" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <TextBlock Text="НЕДАВНО СКОПИРОВАНО" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <TextBlock x:Name="RecentEmpty" DockPanel.Dock="Top" Style="{StaticResource MutedText}" Text="Включи музыку или скопируй что-нибудь — появится здесь" Margin="2,20,0,0"/>
                 <ItemsControl x:Name="Recent">
@@ -39,8 +39,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid Width="40" Height="28">
-                                        <Border x:Name="t" Width="28" Height="28" CornerRadius="7" Background="#1C1C20" HorizontalAlignment="Left">
-                                            <TextBlock Text="T" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Border x:Name="t" Width="28" Height="28" CornerRadius="7" Background="{DynamicResource Plate}" HorizontalAlignment="Left">
+                                            <TextBlock Text="T" FontSize="11" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <Border x:Name="i" CornerRadius="6" ClipToBounds="True" Visibility="Collapsed">
                                             <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
@@ -100,14 +100,14 @@
                         <Border x:Name="CoverBox" Width="84" Height="84" CornerRadius="14" Background="#26262B" ClipToBounds="True" HorizontalAlignment="Center">
                             <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.5"/></Border.Effect>
                             <Grid>
-                                <h:Icon Kind="Wave" Width="26" Height="26" Foreground="{StaticResource Muted}"/>
+                                <h:Icon Kind="Wave" Width="26" Height="26" Foreground="{DynamicResource Muted}"/>
                                 <Image x:Name="Cover" Stretch="UniformToFill"/>
                             </Grid>
                         </Border>
                         <StackPanel x:Name="TitleStack" Margin="0,10,0,0">
                         <TextBlock x:Name="Title" Text="Включи музыку в любом плеере" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="330"/>
                         <TextBlock x:Name="Artist" Text="Spotify, браузер, Яндекс Музыка…" FontSize="12" Foreground="#B9B9C3" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="330"/>
-                        <TextBlock x:Name="Source" Text="" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="Source" Text="" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,3,0,0"/>
                         </StackPanel>
                     </StackPanel>
                     <Slider x:Name="Progress" Grid.Row="1" Style="{StaticResource Thin}" Margin="0,8,0,0" Minimum="0" Maximum="1" PreviewMouseLeftButtonUp="OnSeek"/>
@@ -123,7 +123,7 @@
                         <!-- повтор трека (слева от «предыдущего»); справа — пустое место той же ширины, чтобы пауза осталась по центру -->
                         <Button x:Name="RepeatBtn" Style="{StaticResource Ghost}" Width="40" Height="40" Margin="0,0,10,0" Click="OnRepeat" ToolTip="Повторять трек">
                             <Grid>
-                                <h:Icon x:Name="RepeatIcon" Kind="Repeat" Width="16" Height="16" Foreground="{StaticResource Muted}"/>
+                                <h:Icon x:Name="RepeatIcon" Kind="Repeat" Width="16" Height="16" Foreground="{DynamicResource Muted}"/>
                                 <TextBlock x:Name="RepeatOne" Text="1" FontSize="8" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
                             </Grid>
                         </Button>
@@ -150,7 +150,7 @@
                                 <StackPanel.RenderTransform><TranslateTransform x:Name="LyricsShift"/></StackPanel.RenderTransform>
                             </StackPanel>
                         </Canvas>
-                        <TextBlock x:Name="LyrStatus" FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LyrStatus" FontSize="13" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         <TextBlock x:Name="LyrSource" Text="LRCLIB" FontSize="9" Foreground="#4A4A52" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                     </Grid>
                 </Border>
@@ -179,28 +179,28 @@
         <!-- Инструменты -->
         <UniformGrid Grid.Column="2" Grid.RowSpan="3" Columns="2" Rows="4">
             <Button Style="{StaticResource Flat}" Margin="0,0,4,4" Padding="10,6" HorizontalContentAlignment="Left" Click="OnRegion">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Crop" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Область" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Crop" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Область" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,0,0,4" HorizontalContentAlignment="Left" Click="OnFull">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Monitor" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Весь экран" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Monitor" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Весь экран" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="0,4,4,4" HorizontalContentAlignment="Left" Click="OnOcr">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Scan" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Текст с экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Scan" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Текст с экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,4,0,4" HorizontalContentAlignment="Left" Click="OnQr">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Qr" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="QR-код" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Qr" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="QR-код" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="0,4,4,4" HorizontalContentAlignment="Left" Click="OnPipette">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Pipette" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Пипетка" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Pipette" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Пипетка" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,4,0,4" HorizontalContentAlignment="Left" Click="OnClean">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Eraser" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Чистый текст" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Eraser" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Чистый текст" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="0,4,4,0" HorizontalContentAlignment="Left" Click="OnRecord">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Record" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Запись экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Record" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Запись экрана" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
             <Button Style="{StaticResource Flat}" Margin="4,4,0,0" HorizontalContentAlignment="Left" Click="OnCommandBtn">
-                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="#1C1C21"><h:Icon Kind="Terminal" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Команда" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource IconChip}" Background="{DynamicResource Plate}"><h:Icon Kind="Terminal" Width="15" Height="15" StrokeWidth="2" Foreground="White"/></Border><TextBlock Text="Команда" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel>
             </Button>
         </UniformGrid>
 
@@ -212,11 +212,11 @@
                         <StackPanel Orientation="Horizontal">
                             <h:Icon Kind="Mic" Width="15" Height="15"/>
                             <TextBlock Text="Голос" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                            <TextBlock Text="Ctrl+Alt+D" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource Muted}"/>
+                            <TextBlock Text="Ctrl+Alt+D" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="{DynamicResource Muted}"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="LauncherAddBtn" DockPanel.Dock="Left" Style="{StaticResource Flat}" Width="38" Height="38" Padding="0" Margin="0,0,10,0" Click="OnLauncherAdd" ToolTip="Добавить ярлык с рабочего стола">
-                        <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
+                        <h:Icon Kind="Plus" Width="14" Height="14" Foreground="{DynamicResource Muted}"/>
                     </Button>
                     <Grid>
                         <TextBlock x:Name="LauncherHint" Text="Нажми + или перетащи сюда ярлыки программ, папки и файлы · правый клик по значку — убрать" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
@@ -239,7 +239,7 @@
             <Grid x:Name="CommandBox" Visibility="Collapsed">
                 <TextBox x:Name="Command" Tag="Команда: приложение, сайт, 2+2*3, «таймер 10», «напомни … через 20 минут», &gt;cmd, ?поиск — Enter · Esc — назад"
                          KeyDown="OnCommandKey" Height="56" Padding="38,0,10,0" VerticalContentAlignment="Center" LostKeyboardFocus="OnCommandLostFocus"/>
-                <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
+                <h:Icon Kind="Terminal" Width="15" Height="15" HorizontalAlignment="Left" Margin="14,0,0,0" Foreground="{DynamicResource Muted}" IsHitTestVisible="False"/>
                 <TextBlock x:Name="CommandResult" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" IsHitTestVisible="False"/>
             </Grid>
         </Grid>

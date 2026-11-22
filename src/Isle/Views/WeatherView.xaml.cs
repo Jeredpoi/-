@@ -52,10 +52,10 @@ namespace Isle.Views
             }
             City.Text = w.City;
             GlyphAnim.Kind = Helpers.WeatherGlyph.KindFor(w.Code, w.IsDay, w.Temp, w.Wind); // живой значок: солнце, облака, дождь, гроза…
-            Temp.Text = Math.Round(w.Temp) + "°";
+            Temp.Text = WeatherService.Deg(w.Temp) + "°";
             Desc.Text = w.Description;
             Snow.Text = w.AlertForecast; // ближайшее явление: гроза, дождь, снег, туман, ветер, мороз, жара
-            Feels.Text = "Сегодня " + Math.Round(w.TodayMin) + "°…" + Math.Round(w.TodayMax) + "°";
+            Feels.Text = "Сегодня " + WeatherService.Deg(w.TodayMin) + "°…" + WeatherService.Deg(w.TodayMax) + "°";
             Wind.Text = w.Wind.ToString("0.#", CultureInfo.CurrentCulture) + " м/с " + w.WindFrom;
             Hum.Text = w.Humidity + "%";
             Prec.Text = w.Precip.ToString("0.#", CultureInfo.CurrentCulture) + " мм";
@@ -78,11 +78,11 @@ namespace Isle.Views
         private void Animate(WeatherNow w)
         {
             var c = CultureInfo.CurrentCulture;
-            CountUp(Temp, w.Temp, 0, v => Math.Round(v) + "°", 1200);
+            CountUp(Temp, w.Temp, 0, v => WeatherService.Deg(v) + "°", 1200);
             CountUp(Wind, w.Wind, 0, v => v.ToString("0.#", c) + " м/с " + w.WindFrom, 1050);
             CountUp(Hum, w.Humidity, 0, v => Math.Round(v) + "%", 1050);
             CountUp(Prec, w.Precip, 0, v => v.ToString("0.#", c) + " мм", 1050);
-            CountUp(Feels, w.TodayMax, 0, v => "Сегодня " + Math.Round(w.TodayMin) + "°…" + Math.Round(v) + "°", 1050);
+            CountUp(Feels, w.TodayMax, 0, v => "Сегодня " + WeatherService.Deg(w.TodayMin) + "°…" + WeatherService.Deg(v) + "°", 1050);
 
             var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
             if (GlyphAnim.RenderTransform is not ScaleTransform gs)
@@ -176,6 +176,8 @@ namespace Isle.Views
 
             WeatherFx.Children.Clear();
             var (top, bottom) = Palette(weather.Code, weather.IsDay);
+            // в «Закате» — сумеречный лилово-розовый, чтобы карточка не спорила с фиолетовым небом темы
+            if (Isle.Helpers.SunsetTheme.On) { top = Color.FromRgb(0x3A, 0x1F, 0x5C); bottom = Color.FromRgb(0x7A, 0x2E, 0x6E); }
             HeroBackground.Background = new LinearGradientBrush(top, bottom, 90);
 
             bool snow = IsSnow(weather.Code);

@@ -1281,7 +1281,7 @@ namespace Isle
             Win32.ForceForeground(new WindowInteropHelper(_settings).Handle);
         }
 
-        private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
+        private void OnSettingsClick(object sender, RoutedEventArgs e) { SettingsBtn.IsChecked = false; OpenSettings(); } // кнопка, а не переключатель
 
         // ===================== Голосовая команда ИИ (Ctrl+Alt+A) =====================
 
@@ -1611,11 +1611,19 @@ namespace Isle
                     res["ChipHover"] = new SolidColorBrush(Color.FromArgb(150, 0x45, 0x1E, 0x5E));
                     res["SelBg"] = new SolidColorBrush(Color.FromArgb(120, 0xFF, 0x4F, 0xA3));
                     res["SelBorder"] = new SolidColorBrush(Helpers.SunsetTheme.Pink);
+                    // плашки иконок — светлое стекло, «колодцы» и подложка вкладок без карточек — то же стекло, что у карточек
+                    res["Plate"] = new SolidColorBrush(Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF));
+                    res["Well"] = Helpers.SunsetTheme.GlassCard();
+                    res["Pane"] = Helpers.SunsetTheme.GlassCard();
+                    res["PaneBorder"] = Helpers.SunsetTheme.GlassBorder();
+                    res["PanePad"] = new Thickness(12);
+                    // подписи светлее: на фото серый #8B8B95 тонет
+                    res["Muted"] = new SolidColorBrush(Color.FromRgb(0xC4, 0xB8, 0xD8));
                     TabIndicator.Background = new LinearGradientBrush(Color.FromArgb(170, 0xFF, 0x4F, 0xA3), Color.FromArgb(170, 0x9B, 0x3C, 0xFF), 0);
                 }
                 else
                 {
-                    foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder" }) res.Remove(k);
+                    foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder", "Plate", "Well", "Pane", "PaneBorder", "PanePad", "Muted" }) res.Remove(k);
                     TabIndicator.Background = new SolidColorBrush(Color.FromRgb(0x24, 0x24, 0x2B));
                 }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;
@@ -3082,7 +3090,7 @@ namespace Isle
         private void UpdateWeatherMini()
         {
             var w = AppHost.Weather;
-            WeatherMini.Text = w == null ? "" : w.Glyph + " " + Math.Round(w.Temp) + "°";
+            WeatherMini.Text = w == null ? "" : w.Glyph + " " + WeatherService.Deg(w.Temp) + "°";
             if (State == IslandState.Collapsed) ShowCollapsedContent(true);
         }
 

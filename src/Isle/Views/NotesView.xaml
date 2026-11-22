@@ -101,7 +101,7 @@
                     <ListBox x:Name="RemList">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="r" Background="#141417" CornerRadius="10" Padding="10,6">
+                                <Border x:Name="r" Background="{DynamicResource Plate}" CornerRadius="10" Padding="10,6">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
