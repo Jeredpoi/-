@@ -216,9 +216,10 @@ namespace Isle.Helpers
         public double Energy { get; set; }
         private DateTime _nextDance = DateTime.Now.AddSeconds(6); // первым всегда классический танец
         private double _danceStart;
-        public const int DanceCount = 21;
+        public const int DanceCount = 30;
         private static readonly string[] DanceNames = { "прыжки", "покачивание", "присед", "робот", "хедбэнг", "кружится", "диско", "лунная походка", "брейк-данс",
-            "волна", "хлопки", "твист", "флосс", "чарльстон", "макарена", "джампинг-джек", "наездник", "шаффл", "тектоник", "сальто", "дэб" };
+            "волна", "хлопки", "твист", "флосс", "чарльстон", "макарена", "джампинг-джек", "наездник", "шаффл", "тектоник", "сальто", "дэб",
+            "колесо", "пого", "разбрызгиватель", "цыплёнок", "воздушная гитара", "диджей", "вог", "пропеллер", "прыжок с поворотом" };
 
         /// <summary>Сальто, цикл ~2,2 с: присед → прыжок с полным оборотом → приземление. Угол, подъём (минус — выше), фаза.</summary>
         private (double angle, double down, double phase) Flip()
@@ -232,6 +233,34 @@ namespace Isle.Helpers
                 return (ease * 360, 1.2 * (1 - k) - Math.Sin(k * Math.PI) * 4.5, ph);                                 // в воздухе — оборот
             }
             { double k = (ph - 0.75) / 0.25; return (0, Math.Sin(k * Math.PI) * 0.8, ph); }                         // приземлился, пружинит
+        }
+
+        /// <summary>
+        /// Колесо, цикл ~2,5 с: присел → переворот боком через руки с перекатом в сторону → встал.
+        /// Каждый следующий круг — в обратную сторону, чтобы не уезжал за край.
+        /// </summary>
+        private (double angle, double dx, double down, double phase) Cartwheel()
+        {
+            double t = (_dtime - _danceStart) * 0.4;
+            double ph = t % 1;
+            double dir = ((int)t % 2 == 0) ? 1 : -1;
+            if (ph < 0.15) { double k = ph / 0.15; return (0, -dir * 1.8, Math.Sin(k * Math.PI / 2) * 0.8, ph); }
+            if (ph < 0.85)
+            {
+                double k = (ph - 0.15) / 0.7;
+                double ease = k < 0.5 ? 2 * k * k : 1 - Math.Pow(-2 * k + 2, 2) / 2;
+                return (dir * ease * 360, dir * (-1.8 + ease * 3.6), 0.8 * (1 - k) - Math.Sin(k * Math.PI) * 1.6, ph);
+            }
+            { double k = (ph - 0.85) / 0.15; return (0, dir * 1.8, Math.Sin(k * Math.PI) * 0.5, ph); }
+        }
+
+        /// <summary>Прыжок с поворотом: присел, прыгнул и в воздухе повернулся кругом. Фаза полёта 0..1 или -1 на земле.</summary>
+        private double SpinJump(out double dy)
+        {
+            double ph = (_dtime * 1.4) % 1;
+            if (ph < 0.3) { dy = Math.Sin(ph / 0.3 * Math.PI / 2) * 0.9; return -1; }
+            if (ph < 0.8) { double k = (ph - 0.3) / 0.5; dy = 0.9 * (1 - k) - Math.Sin(k * Math.PI) * 2.8; return k; }
+            { double k = (ph - 0.8) / 0.2; dy = Math.Sin(k * Math.PI) * 0.6; return -1; }
         }
 
         /// <summary>Макарена: 8 поз подряд (руки вперёд, за голову, на бёдра…), на последней — покачивание бёдрами.</summary>
@@ -279,11 +308,11 @@ namespace Isle.Helpers
         public static int PickDance(double bpm, double energy, int current, Random rnd)
         {
             int[] pool;
-            if (bpm <= 0) pool = new[] { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };
-            else if (bpm < 95) pool = new[] { 1, 1, 7, 7, 5, 0, 6, 9, 9, 14, 20 };
-            else if (bpm < 122) pool = new[] { 0, 0, 6, 6, 3, 3, 1, 5, 7, 9, 10, 12, 13, 14, 16, 20 };
-            else if (bpm < 150 && energy < 0.55) pool = new[] { 0, 0, 2, 2, 6, 3, 4, 8, 10, 11, 11, 12, 12, 13, 15, 16, 17, 18 };
-            else pool = new[] { 4, 4, 2, 2, 8, 8, 0, 11, 11, 10, 15, 17, 18, 19 };
+            if (bpm <= 0) pool = new[] { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
+            else if (bpm < 95) pool = new[] { 1, 1, 7, 7, 5, 0, 6, 9, 9, 14, 20, 25, 27, 23 };
+            else if (bpm < 122) pool = new[] { 0, 0, 6, 6, 3, 3, 1, 5, 7, 9, 10, 12, 13, 14, 16, 20, 21, 23, 24, 26, 27, 28 };
+            else if (bpm < 150 && energy < 0.55) pool = new[] { 0, 0, 2, 2, 6, 3, 4, 8, 10, 11, 11, 12, 12, 13, 15, 16, 17, 18, 21, 22, 24, 26, 28, 29 };
+            else pool = new[] { 4, 4, 2, 2, 8, 8, 0, 11, 11, 10, 15, 17, 18, 19, 22, 22, 25, 26, 29 };
             int d = current;
             for (int i = 0; i < 8 && d == current; i++) d = pool[rnd.Next(pool.Length)];
             return d;
@@ -329,6 +358,21 @@ namespace Isle.Helpers
                     return ph < 0.25 ? 1 : ph < 0.75 ? -1 : -2;
                 }
                 case 20: return (_dtime * 1.1) % 1 >= 0.6 ? (left ? -3 : -1) : (Math.Sin(_dtime * 6 + side) > 0 ? -1 : 0); // дэб: поза на долю
+                case 21: { var ph = Cartwheel().phase; return ph >= 0.15 && ph < 0.85 ? -3 : -1; }               // колесо: руки вверх, через них переворот
+                case 22: return 1;                                                                                  // пого: руки по швам, прыгает солдатиком
+                case 23:                                                                                            // разбрызгиватель: одна рука за головой, другая «брызгает» рывками
+                    return left ? -3 : ((int)(_dtime * 6) % 2 == 0 ? -1 : -0.4);
+                case 24: return Math.Sin(_dtime * 10) > 0 ? -1 : 0.5;                                               // цыплёнок: машет «крылышками» обеими сразу
+                case 25: return left ? -1 : (Math.Sin(_dtime * 14) > 0 ? 0.6 : -0.4);                                // воздушная гитара: левая держит гриф, правая бьёт по струнам
+                case 26: return left ? -0.5 : ((_dtime * 2.2) % 1 < 0.3 ? -3 : -2);                                 // диджей: правая качает кулаком в бит
+                case 27:                                                                                            // вог: руки рамкой у лица, поза на каждую долю
+                {
+                    int p = (int)(_dtime * 2) % 4;
+                    double[] l = { -3, -2, -1, -3 }, r = { -2, -3, -3, -1 };
+                    return left ? l[p] : r[p];
+                }
+                case 28: { double[] seq = { -3, -1, 1, -1 }; return seq[((int)(_dtime * 8) + (left ? 0 : 2)) % 4]; } // пропеллер: руки крутятся по кругу
+                case 29: return SpinJump(out _) >= 0 ? -3 : 0.5;                                                     // прыжок с поворотом: в воздухе руки вверх
                 default: return Math.Sin(_dtime * 10 + side) > 0 ? -1 : 0;
             }
         }
@@ -558,7 +602,7 @@ namespace Isle.Helpers
                 _dance = PickDance(Bpm, Energy, _dance, _rnd); // по темпу и «плотности» музыки
                 _danceStart = _dtime;
                 // брейк-данс — ровно два полных круга (падение → вращение → фриз), чтобы не обрывался посреди
-                _nextDance = DateTime.Now.AddSeconds(_dance == 8 ? 2 / 0.17 : _dance == 19 ? 3 / 0.45 : 7 + _rnd.NextDouble() * 5);
+                _nextDance = DateTime.Now.AddSeconds(_dance == 8 ? 2 / 0.17 : _dance == 19 ? 3 / 0.45 : _dance == 21 ? 2 / 0.4 : 7 + _rnd.NextDouble() * 5);
             }
             if (mood == Mood.Music && (_dance == 4)) { _lookY += (0.8 - _lookY) * FrameClock.Lerp(0.3); } // хедбэнг — смотрит в пол
         }
@@ -1285,6 +1329,65 @@ namespace Isle.Helpers
                             if ((_dtime * 1.1) % 1 >= 0.6) { tilt = -14; dy = -_bob * 0.4 * px; }
                             else { dy = -(Math.Abs(Math.Sin(_dtime * 6)) * 0.6 + _bob * 0.6) * px; tilt = Math.Sin(_dtime * 3) * 5; step = Math.Sin(_dtime * 6) > 0; }
                             break;
+                        case 21: // колесо: угол — в отрисовке, здесь сдвиг вбок
+                        {
+                            var cw = Cartwheel();
+                            dx = cw.dx * px;
+                            step = cw.phase >= 0.15 && cw.phase < 0.85;
+                            break;
+                        }
+                        case 22: // пого: высокие прыжки на месте, ноги вместе
+                        {
+                            double ph = (_dtime * 2.6) % 1;
+                            dy = -(Math.Sin(ph * Math.PI) * 2.4 + _bob * 0.8) * px;
+                            tilt = Math.Sin(_dtime * 1.3) * 3;
+                            break;
+                        }
+                        case 23: // разбрызгиватель: поворачивается рывками в одну сторону, потом быстро обратно
+                        {
+                            int st = (int)(_dtime * 6) % 8;
+                            tilt = st < 6 ? -8 + st * 3.2 : 8 - (st - 5) * 8;
+                            dy = -_bob * 0.6 * px;
+                            step = st % 2 == 0;
+                            break;
+                        }
+                        case 24: // цыплёнок: присел и клюёт головой в бит
+                            dy = (0.5 + Math.Abs(Math.Sin(_dtime * 5)) * 0.3 - _bob * 0.5) * px;
+                            tilt = Math.Sin(_dtime * 10) * 4;
+                            step = Math.Sin(_dtime * 5) > 0;
+                            break;
+                        case 25: // воздушная гитара: откинулся назад, качается под соло
+                            tilt = -9 + Math.Sin(_dtime * 3) * 4;
+                            dy = (0.3 - _bob * 0.7) * px;
+                            dx = Math.Sin(_dtime * 1.5) * 0.5 * px;
+                            break;
+                        case 26: // диджей: подпрыгивает на месте в бит, чуть покачиваясь
+                            dy = -(Math.Abs(Math.Sin(_dtime * 2.2 * Math.PI)) * 0.6 + _bob) * px;
+                            tilt = Math.Sin(_dtime * 2.2) * 3;
+                            step = Math.Sin(_dtime * 2.2 * Math.PI) > 0;
+                            break;
+                        case 27: // вог: резкие позы с наклоном
+                        {
+                            int p = (int)(_dtime * 2) % 4;
+                            double[] tl = { -10, 10, 0, -6 }, xs = { -1, 1, 0, 0.5 };
+                            tilt = tl[p];
+                            dx = xs[p] * px;
+                            dy = -_bob * 0.4 * px;
+                            step = p % 2 == 1;
+                            break;
+                        }
+                        case 28: // пропеллер: руки крутятся, сам покачивается и подпрыгивает
+                            dy = -(Math.Abs(Math.Sin(_dtime * 4)) * 0.5 + _bob * 0.8) * px;
+                            tilt = Math.Sin(_dtime * 2) * 5;
+                            step = Math.Sin(_dtime * 4) > 0;
+                            break;
+                        case 29: // прыжок с поворотом: высота — из SpinJump, поворот — сжатием по горизонтали в отрисовке
+                        {
+                            bool air = SpinJump(out double jy) >= 0;
+                            dy = jy * px;
+                            step = air;
+                            break;
+                        }
                         default: // прыжки (как раньше)
                             dy = -(Math.Abs(Math.Sin(_dtime * 7.5)) * 1.1 + _bob * 1.4) * px;
                             tilt = Math.Sin(_dtime * 3.75) * 9;
@@ -1349,6 +1452,7 @@ namespace Isle.Helpers
 
             // «кружится»: сжимаем по горизонтали — будто поворачивается боком
             double spin = mood == Mood.Music && _dance == 5 ? Math.Cos(_dtime * 2.6) : 1;
+            if (mood == Mood.Music && _dance == 29) { double air = SpinJump(out _); if (air >= 0) spin = Math.Cos(air * 2 * Math.PI); }
             if (_poke > 0 && _pokeKind == PokeSpin) spin *= Math.Cos(Math.Min(1, pu / 0.8) * Math.PI * 2); // полный оборот
             if (Math.Abs(spin) < 0.18) spin = spin < 0 ? -0.18 : 0.18;
             var tf = new TransformGroup();
@@ -1361,6 +1465,13 @@ namespace Isle.Helpers
                 var (ang, down, _) = Breakdance();
                 oy += down * px;
                 tf.Children.Add(new RotateTransform(-ang, ox + 6.5 * px, oy + 4.5 * px));
+            }
+            else if (mood == Mood.Music && _dance == 21 && _cheer <= 0)
+            {
+                // колесо: переворот боком вокруг центра тела, перекатываясь в сторону
+                var cw = Cartwheel();
+                oy += cw.down * px;
+                tf.Children.Add(new RotateTransform(cw.angle, ox + 6.5 * px, oy + 4.5 * px));
             }
             else if (mood == Mood.Music && _dance == 19 && _cheer <= 0)
             {
