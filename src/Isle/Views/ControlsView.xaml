@@ -86,7 +86,7 @@
                 <Button x:Name="NetBtn" Style="{StaticResource Tile}" Margin="0" Click="OnNetwork" ToolTip="Параметры сети">
                 <DockPanel>
                     <Grid DockPanel.Dock="Top">
-                        <Border x:Name="NetDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                        <Border x:Name="NetDot" Width="48" Height="48" CornerRadius="14" Background="{DynamicResource Plate}" HorizontalAlignment="Left">
                             <h:Icon Kind="Wifi" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="NetBadge" Style="{StaticResource Badge}" Margin="0,0,30,0">
@@ -110,7 +110,7 @@
             <Button x:Name="BtTile" Style="{StaticResource Tile}" Margin="5,0" Click="OnBluetooth" ToolTip="Включить / выключить Bluetooth">
                 <DockPanel>
                     <Grid DockPanel.Dock="Top">
-                        <Border x:Name="BtDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                        <Border x:Name="BtDot" Width="48" Height="48" CornerRadius="14" Background="{DynamicResource Plate}" HorizontalAlignment="Left">
                             <h:Icon x:Name="BtIcon" Kind="Bluetooth" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="BtBadge" Style="{StaticResource Badge}" Margin="0">
@@ -126,7 +126,7 @@
             <Button x:Name="ThemeTile" Style="{StaticResource Tile}" Margin="5,0" Click="OnTheme" ToolTip="Тёмная / светлая тема Windows">
                 <DockPanel>
                     <Grid DockPanel.Dock="Top">
-                        <Border x:Name="ThemeDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                        <Border x:Name="ThemeDot" Width="48" Height="48" CornerRadius="14" Background="{DynamicResource Plate}" HorizontalAlignment="Left">
                             <h:Icon x:Name="ThemeIcon" Kind="Contrast" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="ThemeBadge" Style="{StaticResource Badge}" Margin="0">
@@ -142,7 +142,7 @@
             <Button x:Name="TaskTile" Style="{StaticResource Tile}" Margin="5,0,0,0" Click="OnTaskMgr" ToolTip="Диспетчер задач">
                 <DockPanel>
                     <Grid DockPanel.Dock="Top">
-                        <Border x:Name="TaskDot" Width="48" Height="48" CornerRadius="14" Background="#000000" HorizontalAlignment="Left">
+                        <Border x:Name="TaskDot" Width="48" Height="48" CornerRadius="14" Background="{DynamicResource Plate}" HorizontalAlignment="Left">
                             <h:Icon Kind="Wave" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="TaskBadge" Style="{StaticResource Badge}" Margin="0">
@@ -245,7 +245,7 @@
                     </Button>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
                         <TextBlock Text="Wi-Fi" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Fg}"/>
-                        <TextBlock x:Name="WifiHint" FontSize="12" Foreground="{StaticResource Muted}" Margin="10,2,0,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="WifiHint" FontSize="12" Foreground="{DynamicResource Muted}" Margin="10,2,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Button x:Name="WifiRescanBtn" Grid.Column="2" Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnWifiRescan" ToolTip="Обновить список">
                         <h:Icon x:Name="WifiRescanIcon" Kind="Restart" Width="14" Height="14" RenderTransformOrigin="0.5,0.5">

@@ -26,8 +26,8 @@ namespace Isle.Services
         public double Min { get; set; }
         public double Max { get; set; }
         public double Precip { get; set; }
-        public string MinText => Math.Round(Min) + "°";
-        public string MaxText => Math.Round(Max) + "°";
+        public string MinText => WeatherService.Deg(Min) + "°";
+        public string MaxText => WeatherService.Deg(Max) + "°";
         public string PrecipText => Precip >= 0.1 ? Precip.ToString("0.#", CultureInfo.CurrentCulture) + " мм" : "";
         // для полоски диапазона
         public double BarLeft { get; set; }
@@ -79,6 +79,9 @@ namespace Isle.Services
     /// <summary>Прогноз MET Norway Locationforecast с ограничением частоты запросов по их правилам.</summary>
     public static class WeatherService
     {
+        /// <summary>Градусы без «-0»: округляем до целого, минус — типографский.</summary>
+        public static string Deg(double v) { int r = (int)Math.Round(v); return r < 0 ? "−" + (-r) : r.ToString(); }
+
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
         private static readonly SemaphoreSlim ForecastLock = new(1, 1);
         private static readonly Dictionary<string, ForecastCache> Forecasts = new(StringComparer.Ordinal);
@@ -200,7 +203,7 @@ namespace Isle.Services
                 weather.Hours.Add(new HourWeather
                 {
                     Time = weather.Hours.Count == 0 ? "Сейчас" : point.At.ToString("HH:mm"),
-                    Temp = Math.Round(point.Temp) + "°", Icon = Glyph(point.Code, point.IsDay), At = point.At,
+                    Temp = WeatherService.Deg(point.Temp) + "°", Icon = Glyph(point.Code, point.IsDay), At = point.At,
                     Snowfall = IsSnow(point.Code) ? point.Precip : 0, PrecipitationProbability = point.Probability
                 });
             }
@@ -243,8 +246,8 @@ namespace Isle.Services
             if (code is 61 or 80) return ("rain", code == 80 ? "Ливень" : "Дождь", "🌧");
             if (code == 45) return ("fog", "Туман", "🌫");
             if (wind >= 12) return ("wind", "Сильный ветер " + Math.Round(wind) + " м/с", "💨");
-            if (temp <= -15) return ("frost", "Сильный мороз " + Math.Round(temp) + "°", "🥶");
-            if (temp >= 30) return ("heat", "Жара " + Math.Round(temp) + "°", "🥵");
+            if (temp <= -15) return ("frost", "Сильный мороз " + WeatherService.Deg(temp) + "°", "🥶");
+            if (temp >= 30) return ("heat", "Жара " + WeatherService.Deg(temp) + "°", "🥵");
             return null;
         }
 

@@ -24,6 +24,7 @@ namespace Isle.Views
         public SettingsWindow()
         {
             InitializeComponent();
+            ApplyTheme();
             SourceInitialized += (_, __) => DarkTitleBar();
             // после сворачивания/перекрытия перерисовываем окно целиком, без «застрявших» кусков
             Activated += (_, __) => InvalidateVisual();
@@ -436,11 +437,54 @@ namespace Isle.Views
             Isle.Helpers.NotchBar.Update(); // окна сдвигаются сразу
         }
 
+        /// <summary>
+        /// Тема окна настроек. «Закат»: фото пальм под плотной лиловой вуалью, меню и карточки — матовое стекло.
+        /// Тёмная: убираем подмены — остаются цвета из ресурсов окна.
+        /// </summary>
+        private void ApplyTheme()
+        {
+            var keys = new[] { "SBg", "SSide", "SCard", "SCardBorder", "SField", "SFieldBorder", "SBtn", "SBtnBorder", "SSeg", "SSegHover", "SNavHover", "SNavSel", "SSep", "SNote" };
+            if (!_darkRes.ContainsKey("SBg")) foreach (var k in keys) _darkRes[k] = Resources[k];
+            if (!Helpers.SunsetTheme.On)
+            {
+                foreach (var k in keys) Resources[k] = _darkRes[k];
+                return;
+            }
+            static SolidColorBrush A(byte a, byte r, byte g, byte b) { var x = new SolidColorBrush(Color.FromArgb(a, r, g, b)); x.Freeze(); return x; }
+            Brush back;
+            try
+            {
+                var photo = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/sunset-palms.jpg"));
+                var dg = new DrawingGroup();
+                dg.Children.Add(new ImageDrawing(photo, new Rect(0, 0, 1, (double)photo.PixelHeight / photo.PixelWidth)));
+                dg.Children.Add(new GeometryDrawing(A(0xD0, 0x14, 0x0C, 0x22), null, new RectangleGeometry(new Rect(0, 0, 1, (double)photo.PixelHeight / photo.PixelWidth))));
+                back = new DrawingBrush(dg) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
+                back.Freeze();
+            }
+            catch { back = A(0xFF, 0x14, 0x0C, 0x22); }
+            Resources["SBg"] = back;
+            Resources["SSide"] = A(0x99, 0x1E, 0x12, 0x33);
+            Resources["SCard"] = A(0x8C, 0x24, 0x16, 0x3A);
+            Resources["SCardBorder"] = A(0x2E, 0xFF, 0xFF, 0xFF);
+            Resources["SField"] = A(0x80, 0x12, 0x09, 0x1E);
+            Resources["SFieldBorder"] = A(0x33, 0xFF, 0xFF, 0xFF);
+            Resources["SBtn"] = A(0x24, 0xFF, 0xFF, 0xFF);
+            Resources["SBtnBorder"] = A(0x2E, 0xFF, 0xFF, 0xFF);
+            Resources["SSeg"] = A(0x1A, 0xFF, 0xFF, 0xFF);
+            Resources["SSegHover"] = A(0x2E, 0xFF, 0xFF, 0xFF);
+            Resources["SNavHover"] = A(0x1A, 0xFF, 0xFF, 0xFF);
+            Resources["SNavSel"] = A(0x40, 0xFF, 0x4F, 0xA3);
+            Resources["SSep"] = A(0x1F, 0xFF, 0xFF, 0xFF);
+            Resources["SNote"] = A(0xFF, 0xC4, 0xB8, 0xD8);
+        }
+        private readonly System.Collections.Generic.Dictionary<string, object> _darkRes = new();
+
         private void OnTheme(object s, RoutedEventArgs e)
         {
             S.Theme = (string)((FrameworkElement)s).Tag;
             S.Save();
             AppHost.Window.ApplyAppearance(); // фон, акцент и полоски — сразу; Клоди переоденется на следующем кадре
+            ApplyTheme();
             UpdatePreview();
         }
 

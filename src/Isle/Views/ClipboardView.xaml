@@ -6,6 +6,7 @@
     <UserControl.Resources>
         <v:DayTitleConverter x:Key="DayTitle"/>
     </UserControl.Resources>
+    <Border Background="{DynamicResource Pane}" BorderBrush="{DynamicResource PaneBorder}" BorderThickness="1" CornerRadius="16" Padding="{DynamicResource PanePad}">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="168"/>
@@ -18,8 +19,8 @@
             <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
                 <Button x:Name="NewFolderBtn" Style="{StaticResource Ghost}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OnNewFolder" Padding="10,7">
                     <StackPanel Orientation="Horizontal">
-                        <h:Icon Kind="Plus" Width="13" Height="13" Foreground="{StaticResource Muted}"/>
-                        <TextBlock Text="Новая папка" FontSize="12" Foreground="{StaticResource Muted}" Margin="8,0,0,0"/>
+                        <h:Icon Kind="Plus" Width="13" Height="13" Foreground="{DynamicResource Muted}"/>
+                        <TextBlock Text="Новая папка" FontSize="12" Foreground="{DynamicResource Muted}" Margin="8,0,0,0"/>
                     </StackPanel>
                 </Button>
                 <TextBox x:Name="FolderName" Visibility="Collapsed" Height="32" Padding="10,0" VerticalContentAlignment="Center" FontSize="12"
@@ -38,7 +39,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="Search" Tag="Поиск по истории" Height="34" Padding="34,0,10,0" VerticalContentAlignment="Center"
                          TextChanged="OnSearch" PreviewKeyDown="OnSearchKey"/>
-                <h:Icon Kind="Search" Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
+                <h:Icon Kind="Search" Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="{DynamicResource Muted}" IsHitTestVisible="False"/>
                 <!-- «Очистить» спрятана в меню: случайно не нажмёшь, и есть «Отменить» -->
                 <Button x:Name="MoreBtn" Grid.Column="1" Style="{StaticResource Ghost}" Margin="6,0,0,0" Width="34" Height="34" Click="OnMore" ToolTip="Ещё">
                     <h:Icon Kind="More" Width="16" Height="16" StrokeWidth="2.6"/>
@@ -65,7 +66,7 @@
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="8,2" Click="OnEditApps">
                         <TextBlock Text="Изменить" FontSize="11"/>
                     </Button>
-                    <h:Icon Kind="Crop" Width="13" Height="13" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <h:Icon Kind="Crop" Width="13" Height="13" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                     <TextBlock x:Name="AppsText" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
                 </DockPanel>
             </Border>
@@ -140,14 +141,14 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid VerticalAlignment="Top">
-                                        <Border x:Name="textIcon" Width="28" Height="28" CornerRadius="8" Background="#1C1C20">
-                                            <TextBlock Text="{Binding Letter}" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Border x:Name="textIcon" Width="28" Height="28" CornerRadius="8" Background="{DynamicResource Plate}">
+                                            <TextBlock Text="{Binding Letter}" FontSize="12" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
-                                        <Border x:Name="kindIcon" Width="28" Height="28" CornerRadius="8" Background="#1C1C20" Visibility="Collapsed">
-                                            <h:Icon Kind="{Binding IconKind}" Width="15" Height="15" Foreground="{StaticResource Muted}"/>
+                                        <Border x:Name="kindIcon" Width="28" Height="28" CornerRadius="8" Background="{DynamicResource Plate}" Visibility="Collapsed">
+                                            <h:Icon Kind="{Binding IconKind}" Width="15" Height="15" Foreground="{DynamicResource Muted}"/>
                                         </Border>
                                         <Border x:Name="swatch" Width="28" Height="28" CornerRadius="8" Background="{Binding Swatch}" BorderBrush="#3A3A42" BorderThickness="1" Visibility="Collapsed"/>
-                                        <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="#1C1C20" ClipToBounds="True" Visibility="Collapsed"
+                                        <Border x:Name="imgIcon" Width="56" Height="36" CornerRadius="8" Background="{DynamicResource Plate}" ClipToBounds="True" Visibility="Collapsed"
                                                 Cursor="Hand" ToolTip="Посмотреть" MouseLeftButtonUp="OnThumbClick" Tag="{Binding}">
                                             <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
                                         </Border>
@@ -234,4 +235,5 @@
             </Border>
         </Grid>
     </Grid>
+    </Border>
 </UserControl>

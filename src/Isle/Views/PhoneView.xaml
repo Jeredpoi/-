@@ -30,7 +30,7 @@
                         <Border x:Name="QrCard" Background="Black">
                             <Grid>
                                 <Image x:Name="Qr" RenderOptions.BitmapScalingMode="NearestNeighbor" Stretch="Fill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="QrNone" Text="Нет сети" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <TextBlock x:Name="QrNone" Text="Нет сети" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
                         <!-- ждёт телефон: оранжевая рамка «дышит» — разгорается и гаснет -->
@@ -52,7 +52,7 @@
                     </Grid>
                     <TextBlock x:Name="QrTitle" Text="Наведи камеру телефона" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,3"/>
                     <TextBlock x:Name="QrSub" Text="Откроется страничка — без приложений" Style="{StaticResource MutedText}" FontSize="11" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
-                    <Border x:Name="StatusPill" HorizontalAlignment="Center" Margin="0,12,0,0" CornerRadius="11" Padding="10,4" Background="#16161A">
+                    <Border x:Name="StatusPill" HorizontalAlignment="Center" Margin="0,12,0,0" CornerRadius="11" Padding="10,4" Background="{DynamicResource Plate}">
                         <StackPanel Orientation="Horizontal">
                             <Grid Width="8" Height="8" VerticalAlignment="Center">
                                 <Ellipse x:Name="StatusPulse" Fill="#4ADE80" Opacity="0" RenderTransformOrigin="0.5,0.5">
@@ -113,11 +113,12 @@
                 </RadioButton>
             </StackPanel>
 
+            <Border Grid.Row="1" Margin="0,6,0,0" Background="{DynamicResource Pane}" BorderBrush="{DynamicResource PaneBorder}" BorderThickness="1" CornerRadius="16"/>
             <!-- что пришло с телефона -->
-            <Grid x:Name="FilesPane" Grid.Row="1">
+            <Grid x:Name="FilesPane" Grid.Row="1" Margin="{DynamicResource PanePad}">
                 <StackPanel x:Name="InEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="340">
-                    <Border Width="46" Height="46" CornerRadius="14" Background="#141417" HorizontalAlignment="Center">
-                        <h:Icon Kind="Phone" Width="20" Height="20" Foreground="{StaticResource Muted}"/>
+                    <Border Width="46" Height="46" CornerRadius="14" Background="{DynamicResource Plate}" HorizontalAlignment="Center">
+                        <h:Icon Kind="Phone" Width="20" Height="20" Foreground="{DynamicResource Muted}"/>
                     </Border>
                     <TextBlock Text="Пришли что-нибудь с телефона" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4"/>
                     <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextAlignment="Center" TextWrapping="Wrap"
@@ -129,10 +130,10 @@
             </Grid>
 
             <!-- уведомления телефона: их пересылает «Связь с телефоном» Windows по Bluetooth -->
-            <Grid x:Name="NoticesPane" Grid.Row="1" Visibility="Collapsed">
+            <Grid x:Name="NoticesPane" Grid.Row="1" Visibility="Collapsed" Margin="{DynamicResource PanePad}">
                 <StackPanel x:Name="NoticesEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360">
-                    <Border Width="46" Height="46" CornerRadius="14" Background="#141417" HorizontalAlignment="Center">
-                        <h:Icon Kind="Bluetooth" Width="20" Height="20" Foreground="{StaticResource Muted}"/>
+                    <Border Width="46" Height="46" CornerRadius="14" Background="{DynamicResource Plate}" HorizontalAlignment="Center">
+                        <h:Icon Kind="Bluetooth" Width="20" Height="20" Foreground="{DynamicResource Muted}"/>
                     </Border>
                     <TextBlock Text="Уведомления телефона в чёлке" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4"/>
                     <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextAlignment="Center" TextWrapping="Wrap"
@@ -148,7 +149,7 @@
             </Grid>
 
             <!-- на телефон: перетащи файлы сюда -->
-            <Border x:Name="Drop" Grid.Row="2" Margin="0,10,0,0" CornerRadius="14" BorderThickness="1.5" BorderBrush="#2A2A33" Background="#0A0A0C" Padding="14,10"
+            <Border x:Name="Drop" Grid.Row="2" Margin="0,10,0,0" CornerRadius="14" BorderThickness="1" BorderBrush="{DynamicResource CardBorder}" Background="{DynamicResource Card}" Padding="14,10"
                     AllowDrop="True" Drop="OnDrop" DragEnter="OnDragEnter" DragLeave="OnDragLeave">
                 <StackPanel>
                     <DockPanel>
@@ -160,8 +161,8 @@
                                 <StackPanel Orientation="Horizontal"><h:Icon Kind="Clipboard" Width="13" Height="13"/><TextBlock Text="Буфер" FontSize="12" Margin="6,0,0,0"/></StackPanel>
                             </Button>
                         </StackPanel>
-                        <Border Width="32" Height="32" CornerRadius="10" Background="#141417" DockPanel.Dock="Left" Margin="0,0,10,0" VerticalAlignment="Center">
-                            <h:Icon Kind="Send" Width="14" Height="14" Foreground="{StaticResource Muted}"/>
+                        <Border Width="32" Height="32" CornerRadius="10" Background="{DynamicResource Plate}" DockPanel.Dock="Left" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <h:Icon Kind="Send" Width="14" Height="14" Foreground="{DynamicResource Muted}"/>
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="На телефон" FontSize="13" FontWeight="SemiBold"/>

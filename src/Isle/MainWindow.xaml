@@ -77,7 +77,7 @@
                             <!-- середина: название / строка песни / полоса времени (зависит от вида пилюли) -->
                             <StackPanel x:Name="MiniCenter" Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="MiniTitle" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="MiniSub" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
+                                <TextBlock x:Name="MiniSub" FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
                                 <Grid x:Name="MiniBar" Height="3" Margin="0,5,0,0" Visibility="Collapsed">
                                     <Border CornerRadius="1.5" Background="#2A2A30"/>
                                     <Border x:Name="MiniBarFill" CornerRadius="1.5" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
@@ -212,7 +212,7 @@
                                 <Grid Grid.Row="1" Margin="0,2,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock x:Name="ToastSub" FontSize="13" Foreground="#8B8B95" TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"/>
-                                    <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="{StaticResource Muted}" Margin="10,0,0,0"/>
+                                    <TextBlock x:Name="ToastEta" Grid.Column="1" FontSize="11" Foreground="{DynamicResource Muted}" Margin="10,0,0,0"/>
                                 </Grid>
                                 <!-- волна голоса во время диктовки (Ctrl+Alt+D / Ctrl+Alt+A / микрофон в чате) -->
                                 <h:VoiceWave x:Name="VoiceWave" Grid.Row="2" Height="34" Margin="0,6,0,0" Visibility="Collapsed"/>
@@ -298,9 +298,9 @@
                                 </Button>
                                 <!-- Раскладка: показывает текущую, клик — переключить -->
                                 <Button x:Name="LangBtn" Style="{StaticResource Ghost}" Padding="0" Margin="0,0,6,0" Click="OnLangClick" ToolTip="Раскладка клавиатуры · клик — переключить">
-                                    <Border Background="#141417" CornerRadius="13" Height="26" Padding="9,0">
+                                    <Border Background="{DynamicResource ChipBg}" CornerRadius="13" Height="26" Padding="9,0">
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <h:Icon Kind="Keyboard" Width="13" Height="13" Foreground="#A1A1AB"/>
+                                            <h:Icon Kind="Keyboard" Width="13" Height="13" Foreground="{DynamicResource Muted}"/>
                                             <TextBlock x:Name="LangChip" Text="EN" Margin="5,0,0,0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Border>
@@ -311,9 +311,10 @@
                                 <ToggleButton x:Name="PinChip" Style="{StaticResource Chip}" Margin="6,0,0,0" Click="OnPin" ToolTip="Закрепить: остров не сворачивается">
                                     <h:Icon Kind="Pin" Width="13" Height="13"/>
                                 </ToggleButton>
-                                <Button x:Name="SettingsBtn" Style="{StaticResource Ghost}" Margin="6,0,0,0" Width="32" Height="32" Click="OnSettingsClick" ToolTip="Настройки">
-                                    <h:Icon Kind="Gear" Width="16" Height="16"/>
-                                </Button>
+                                <!-- такая же круглая плашка, как у «Не беспокоить» и «Закрепить» -->
+                                <ToggleButton x:Name="SettingsBtn" Style="{StaticResource Chip}" Margin="6,0,0,0" Click="OnSettingsClick" ToolTip="Настройки">
+                                    <h:Icon Kind="Gear" Width="13" Height="13"/>
+                                </ToggleButton>
                             </StackPanel>
                         </DockPanel>
 
@@ -335,19 +336,19 @@
                                 </Border>
                                 <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock x:Name="VpnCardTitle" Text="VPN подключён" FontSize="13" FontWeight="SemiBold" Foreground="#4ADE80"/>
-                                    <TextBlock x:Name="VpnCardName" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="VpnCardName" FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </StackPanel>
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-                                <TextBlock Text="Страна" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,14,4"/>
+                                <TextBlock Text="Страна" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,14,4"/>
                                 <TextBlock x:Name="VpnCardCountry" Grid.Column="1" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
-                                <TextBlock Grid.Row="1" Text="Адрес" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,14,0"/>
+                                <TextBlock Grid.Row="1" Text="Адрес" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,14,0"/>
                                 <TextBlock x:Name="VpnCardIp" Grid.Row="1" Grid.Column="1" FontSize="12" FontWeight="SemiBold" FontFamily="Cascadia Mono, Consolas"/>
                             </Grid>
                             <Border Height="1" Background="#222226" Margin="0,12,0,10"/>
-                            <TextBlock FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" LineHeight="16"
+                            <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" LineHeight="16"
                                        Text="Клик — открыть VPN-клиент&#x0a;Shift+клик — закрыть клиент (выключить VPN)&#x0a;Правый клик — проверить заново"/>
                         </StackPanel>
                     </Border>

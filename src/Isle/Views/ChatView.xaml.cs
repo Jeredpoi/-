@@ -95,7 +95,7 @@ namespace Isle.Views
             var s = AppSettings.Current;
             var preset = AiService.Preset(s.AiPreset);
             ModelLine.Text = (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama")
-                ? "Нужен API-ключ: шестерёнка → ИИ (бесплатно — Groq)"
+                ? "Подключи ИИ: шестерёнка справа вверху → «ИИ» (Groq — бесплатно)"
                 : (preset?.Title ?? "ИИ") + " · " + s.AiModel + " · помнит весь разговор · Shift+Enter — новая строка";
         }
 
