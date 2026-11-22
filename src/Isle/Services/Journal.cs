@@ -10,7 +10,7 @@ namespace Isle.Services
     /// Подробный журнал работы: %AppData%\Isle\isle.log. Пишет всё — что показалось в чёлке, куда она
     /// развернулась, какие хоткеи сработали, что ответили погода/ИИ/голос/обновления, какие настройки поменялись,
     /// что делали снимки экрана, загрузки, буфер обмена и т. д. По нему можно восстановить, что было перед багом.
-    /// Запись — в фоне пачками (не тормозит интерфейс). Файл > 8 МБ — уходит в isle.old.log, начинается новый.
+    /// Запись — в фоне пачками (не тормозит интерфейс). Каждый запуск — новый файл (прошлый — isle.prev.log); если за один запуск файл вырос больше лимита — уходит в isle.old.log.
     /// </summary>
     public static class Journal
     {
@@ -40,6 +40,26 @@ namespace Isle.Services
                   .Append(" [").Append(area).Append("] t").Append(Environment.CurrentManagedThreadId).Append("  ")
                   .Append((text ?? "").Replace("\r", "").Replace("\n", "\n        "));
                 Queue.Enqueue(sb.ToString());
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Новый запуск — новый журнал: прошлый уходит в isle.prev.log (хранится только он один), старые копии удаляются.
+        /// Вызывает только основной экземпляр Isle (второй запуск сразу выходит и журнал не трогает).
+        /// </summary>
+        public static void NewSession()
+        {
+            try
+            {
+                lock (FileLock)
+                {
+                    Directory.CreateDirectory(Storage.Dir);
+                    var path = PathNow;
+                    if (File.Exists(path)) File.Move(path, Path.Combine(Storage.Dir, "isle.prev.log"), true);
+                    var old = Path.Combine(Storage.Dir, "isle.old.log");
+                    if (File.Exists(old)) File.Delete(old);
+                }
             }
             catch { }
         }

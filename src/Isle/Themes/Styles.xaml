@@ -7,6 +7,11 @@
     <SolidColorBrush x:Key="CardHover" Color="#18181B"/>
     <SolidColorBrush x:Key="CardBorder" Color="#1C1C20"/>
     <SolidColorBrush x:Key="Track" Color="#26262B"/>
+    <!-- цвета чипов, сегментов и выбора: в теме «Закат» подменяются (MainWindow.ApplyAppearance) -->
+    <SolidColorBrush x:Key="ChipBg" Color="#141417"/>
+    <SolidColorBrush x:Key="ChipHover" Color="#1B1B1F"/>
+    <SolidColorBrush x:Key="SelBg" Color="#26262B"/>
+    <SolidColorBrush x:Key="SelBorder" Color="#8B8B95"/>
     <SolidColorBrush x:Key="Fg" Color="#ECECF1"/>
     <SolidColorBrush x:Key="Muted" Color="#8B8B95"/>
     <!-- Монохром: единственный акцент — белый -->
@@ -253,15 +258,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="b" Background="#141417" CornerRadius="13" Height="{TemplateBinding Height}" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="b" Background="{DynamicResource ChipBg}" CornerRadius="13" Height="{TemplateBinding Height}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#1B1B1F"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource ChipHover}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#26262B"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource SelBg}"/>
                             <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -451,13 +456,13 @@
                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
-                                    <Border x:Name="bd" Background="#141417" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="10">
+                                    <Border x:Name="bd" Background="{DynamicResource ChipBg}" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="10">
                                         <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" Data="M0 0L4 4L8 0"
                                               Stroke="#8B8B95" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bd" Property="Background" Value="#1B1B1F"/>
+                                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource ChipHover}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -491,16 +496,16 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="b" Background="#141417" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                    <Border x:Name="b" Background="{DynamicResource ChipBg}" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="10" Padding="12,7">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#1B1B1F"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource ChipHover}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#26262B"/>
-                            <Setter TargetName="b" Property="BorderBrush" Value="#8B8B95"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource SelBg}"/>
+                            <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource SelBorder}"/>
                             <Setter Property="Foreground" Value="#FFFFFF"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
