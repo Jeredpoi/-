@@ -270,6 +270,38 @@ namespace Isle.Services
         public async void PlayPause() { try { if (_session != null) await _session.TryTogglePlayPauseAsync(); } catch { } }
         public async void Play() { try { if (_session != null) await _session.TryPlayAsync(); } catch { } }
         public async void Pause() { try { if (_session != null) await _session.TryPauseAsync(); } catch { } }
+        /// <summary>Повтор у текущего плеера: (умеет ли плеер его переключать снаружи, включён ли).</summary>
+        public (bool supported, bool on) Repeat
+        {
+            get
+            {
+                try
+                {
+                    var pb = _session?.GetPlaybackInfo();
+                    if (pb == null) return (false, false);
+                    var mode = pb.AutoRepeatMode;
+                    return (pb.Controls.IsRepeatEnabled, mode == Windows.Media.MediaPlaybackAutoRepeatMode.Track || mode == Windows.Media.MediaPlaybackAutoRepeatMode.List);
+                }
+                catch { return (false, false); }
+            }
+        }
+
+        /// <summary>Повтор трека: выкл → повтор трека → выкл. false — плеер не даёт переключать повтор снаружи.</summary>
+        public async System.Threading.Tasks.Task<bool> ToggleRepeatAsync()
+        {
+            try
+            {
+                if (_session == null) return false;
+                var (supported, on) = Repeat;
+                if (!supported) return false;
+                var next = on ? Windows.Media.MediaPlaybackAutoRepeatMode.None : Windows.Media.MediaPlaybackAutoRepeatMode.Track;
+                bool ok = await _session.TryChangeAutoRepeatModeAsync(next);
+                Journal.Info("media", "повтор: " + (on ? "выкл" : "трек") + (ok ? "" : " — плеер отказал"));
+                return ok;
+            }
+            catch (Exception ex) { Journal.Debug("media", "повтор не переключился: " + ex.Message); return false; }
+        }
+
         public async void Next() { try { if (_session != null) await _session.TrySkipNextAsync(); } catch { } }
         public async void Previous() { try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { } }
 

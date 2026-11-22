@@ -89,6 +89,7 @@ namespace Isle
         {
             try
             {
+                Journal.NewSession(); // журнал — только этого запуска, прошлый лежит рядом в isle.prev.log
                 Journal.Info("session", "==================== запуск Isle " + typeof(App).Assembly.GetName().Version + " ====================");
                 Journal.Info("session", "ОС " + Environment.OSVersion + ", .NET " + Environment.Version + ", 64-бит " + Environment.Is64BitProcess
                     + ", ядер " + Environment.ProcessorCount + ", культура " + System.Globalization.CultureInfo.CurrentCulture.Name

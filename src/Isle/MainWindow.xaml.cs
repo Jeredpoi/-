@@ -117,6 +117,7 @@ namespace Isle
                 VoiceWave.Push(lvl); // столбики волны: чем громче — тем выше
             });
             AppHost.Lyrics = new LyricsState(AppHost.Media);
+            _ = AppHost.Lyrics.LoadAsync(AppHost.Media.Current); // трек мог играть ещё до запуска — его смену мы не увидим
             AppHost.Lyrics.Changed += () => { if (State == IslandState.Collapsed) ShowCollapsedContent(true); };
             Edge.Spectrum = () => AppHost.Spectrum.Running ? AppHost.Spectrum.Snapshot() : null;
             // по Клоди в чёлке можно тыкнуть — курсор-«рука» подсказывает это
@@ -1013,6 +1014,9 @@ namespace Isle
         private (double w, double h) ApplyPillMode()
         {
             var mode = AppSettings.Current.MusicPill;
+            // пилюля «С текстом»: текст текущего трека мог не загрузиться (трек начался раньше) — догружаем
+            var cur = AppHost.Media.Current;
+            if (mode == "lyrics" && AppHost.Lyrics != null && cur != null && AppHost.Lyrics.Key != cur.Artist + "|" + cur.Title) _ = AppHost.Lyrics.LoadAsync(cur); // один раз на трек, без повторов
             bool hasLyrics = AppSettings.Current.LyricsEnabled && AppHost.Lyrics?.Lines != null && AppHost.Lyrics.Lines.Count > 0;
             MiniButtons.Visibility = mode == "mini" ? Visibility.Visible : Visibility.Collapsed;
             MiniSub.Visibility = mode == "mini" ? Visibility.Visible : Visibility.Collapsed;
@@ -1025,7 +1029,7 @@ namespace Isle
             {
                 "bars" => (170, 34),
                 "mini" => (440, 64),
-                "lyrics" => (hasLyrics ? 440 : 340, 36),
+                "lyrics" => (hasLyrics ? 440 : 340, 42), // выше, чем было: Клоди в шапке, кружась, не задевает край
                 _ => (340, 42)
             };
         }
@@ -1038,15 +1042,51 @@ namespace Isle
                 MiniBarFill.Width = Math.Max(0, MiniBar.ActualWidth * Math.Clamp(m.LivePosition.TotalSeconds / m.Duration.TotalSeconds, 0, 1));
             if (AppSettings.Current.MusicPill == "lyrics")
             {
-                var line = AppHost.Lyrics?.LineAt(m.LivePosition);
-                var text = string.IsNullOrEmpty(line) ? (string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist) : line;
-                if (MiniTitle.Text != text)
+                var lines = AppHost.Lyrics?.Lines;
+                var (idx, prog) = Helpers.KaraokeText.Position(lines, m.LivePosition);
+                string text = idx >= 0 ? (lines[idx].Text.Length == 0 ? "♪" : lines[idx].Text) : (string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist);
+                bool karaoke = idx >= 0;
+                if (text != _pillLine)
                 {
-                    MiniTitle.Text = text;
-                    MiniTitle.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
+                    _pillLine = text;
+                    SwapPillLine(text, karaoke);
                 }
+                if (karaoke && !_pillSwapping) Helpers.KaraokeText.Update(MiniTitle, prog, _lyricOn, _lyricOff);
             }
             MiniPlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
+        }
+
+        private string _pillLine;
+        private bool _pillSwapping;
+        private readonly TranslateTransform _pillShift = new();
+        private static readonly Brush _lyricOn = MakeFrozen(Color.FromRgb(0xEC, 0xEC, 0xF1));
+        private static readonly Brush _lyricOff = MakeFrozen(Color.FromArgb(0x80, 0xEC, 0xEC, 0xF1));
+        private static Brush MakeFrozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+
+        /// <summary>Смена строки в пилюле: старая уезжает вверх и гаснет, новая выплывает снизу (как в раскрытой панели).</summary>
+        private void SwapPillLine(string text, bool karaoke)
+        {
+            MiniTitle.RenderTransform = _pillShift;
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            if (string.IsNullOrEmpty(MiniTitle.Text) && MiniTitle.Inlines.Count == 0)
+            {
+                ShowNew();
+                return;
+            }
+            _pillSwapping = true;
+            var outA = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
+            outA.Completed += (_, __) => { if (_pillLine == text) ShowNew(); };
+            MiniTitle.BeginAnimation(OpacityProperty, outA);
+            _pillShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -6, TimeSpan.FromMilliseconds(140)));
+
+            void ShowNew()
+            {
+                if (karaoke) Helpers.KaraokeText.Set(MiniTitle, text, _lyricOff);
+                else { MiniTitle.Inlines.Clear(); MiniTitle.Text = text; }
+                _pillSwapping = false;
+                MiniTitle.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+                _pillShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(7, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            }
         }
 
         private void OnMiniPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
@@ -1057,6 +1097,7 @@ namespace Isle
         {
             var m = AppHost.Media.Current;
             var mode = AppSettings.Current.MusicPill;
+            if (mode != "lyrics") { _pillLine = null; MiniTitle.BeginAnimation(OpacityProperty, null); MiniTitle.Opacity = 1; _pillShift.BeginAnimation(TranslateTransform.YProperty, null); _pillShift.Y = 0; }
             if (mode == "mini") { MiniTitle.Text = m.Title; MiniSub.Text = m.Artist; }
             else if (mode != "lyrics") MiniTitle.Text = string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist;
             MiniCover.Source = m.Cover;
@@ -1565,8 +1606,18 @@ namespace Isle
                 {
                     res["Card"] = Helpers.SunsetTheme.GlassCard();
                     res["CardBorder"] = Helpers.SunsetTheme.GlassBorder();
+                    // чипы, сегменты и выбранное — в цветах заката: лиловое стекло, выбранное — неоново-розовое
+                    res["ChipBg"] = new SolidColorBrush(Color.FromArgb(110, 0x2A, 0x14, 0x40));
+                    res["ChipHover"] = new SolidColorBrush(Color.FromArgb(150, 0x45, 0x1E, 0x5E));
+                    res["SelBg"] = new SolidColorBrush(Color.FromArgb(120, 0xFF, 0x4F, 0xA3));
+                    res["SelBorder"] = new SolidColorBrush(Helpers.SunsetTheme.Pink);
+                    TabIndicator.Background = new LinearGradientBrush(Color.FromArgb(170, 0xFF, 0x4F, 0xA3), Color.FromArgb(170, 0x9B, 0x3C, 0xFF), 0);
                 }
-                else { res.Remove("Card"); res.Remove("CardBorder"); }
+                else
+                {
+                    foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder" }) res.Remove(k);
+                    TabIndicator.Background = new SolidColorBrush(Color.FromRgb(0x24, 0x24, 0x2B));
+                }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;
             }
             catch { }
@@ -2753,11 +2804,34 @@ namespace Isle
         /// <summary>Чёлка над полосой режима выреза.</summary>
         public void KeepIslandOnTop() => KeepOnTop();
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+
+        /// <summary>Все открытые всплывающие окна Isle (списки, меню, подсказки) — поверх чёлки. true — хоть одно открыто.</summary>
+        private bool RaiseOurPopups()
+        {
+            bool any = false;
+            try
+            {
+                foreach (PresentationSource ps in PresentationSource.CurrentSources)
+                {
+                    if (ps is not System.Windows.Interop.HwndSource hs || hs.IsDisposed || hs.Handle == _hwnd) continue;
+                    if (hs.RootVisual?.GetType().Name != "PopupRoot" || !IsWindowVisible(hs.Handle)) continue;
+                    SetWindowPos(hs.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010 | 0x0200);
+                    any = true;
+                }
+            }
+            catch { }
+            return any;
+        }
+
         private void KeepOnTop()
         {
             if (_hwnd == IntPtr.Zero || !IsVisible) return;
             // открыта подсказка или выпадающий список — не поднимаем остров над ними, иначе они «уходят за чёлку»
             if (DateTime.Now < _tipUntil || _openMenus > 0 || CursorOverOurPopup()) return;
+            // открыт выпадающий список, меню или подсказка Isle — поднимаем их над чёлкой, а не чёлку над ними
+            // (раньше список звуковых выходов «проваливался» под панель, стоило увести курсор)
+            if (RaiseOurPopups()) return;
             // HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER
             SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010 | 0x0200);
         }

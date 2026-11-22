@@ -248,6 +248,7 @@ namespace Isle.Views
         private void Refresh()
         {
             var m = AppHost.Media.Current;
+            UpdateRepeat();
             // музыка на паузе дольше 3 минут — вместо плеера показываем «Недавно скопировано»
             if (m.HasSession && m.IsPlaying) _pausedSince = null;
             else if (_pausedSince == null) _pausedSince = DateTime.Now;
@@ -405,6 +406,9 @@ namespace Isle.Views
         private void ShowLine(int i)
         {
             if (i == _curLine || _lines.Count == 0) return;
+            // караоке: у прошлой строки снова обычный текст, у новой — слова, которые загораются по очереди
+            if (_curLine >= 0 && _curLine < _lines.Count) { var old = _lines[_curLine]; var t = _lyrics[_curLine].Text; old.Inlines.Clear(); old.Text = t.Length == 0 ? "♪" : t; }
+            if (i >= 0 && i < _lines.Count && _lyrics[i].Text.Length > 0) Helpers.KaraokeText.Set(_lines[i], _lyrics[i].Text, KaraokeOff);
             _curLine = i;
             if (_lines[0].ActualHeight <= 0) LyricsStack.UpdateLayout();
             var dur = TimeSpan.FromMilliseconds(420);
@@ -441,8 +445,16 @@ namespace Isle.Views
             }
             PosText.Text = Fmt(pos);
             if (_lyrics != null && _lyrics.Count > 0)
-                ShowLine(_lyrics.FindLastIndex(l => l.At <= pos + TimeSpan.FromMilliseconds(250)));
+            {
+                var (idx, prog) = Helpers.KaraokeText.Position(_lyrics, pos);
+                ShowLine(idx);
+                if (idx >= 0 && idx < _lines.Count) Helpers.KaraokeText.Update(_lines[idx], prog, KaraokeOn, KaraokeOff);
+            }
         }
+
+        private static readonly System.Windows.Media.Brush KaraokeOn = Frozen(System.Windows.Media.Color.FromRgb(0xEC, 0xEC, 0xF1));
+        private static readonly System.Windows.Media.Brush KaraokeOff = Frozen(System.Windows.Media.Color.FromArgb(0x70, 0xEC, 0xEC, 0xF1));
+        private static System.Windows.Media.Brush Frozen(System.Windows.Media.Color c) { var b = new System.Windows.Media.SolidColorBrush(c); b.Freeze(); return b; }
 
         private static string Fmt(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : ((int)t.TotalMinutes) + ":" + t.Seconds.ToString("00");
 
@@ -478,6 +490,30 @@ namespace Isle.Views
         }
 
         private void OnPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
+
+        private async void OnRepeat(object s, RoutedEventArgs e)
+        {
+            if (!await AppHost.Media.ToggleRepeatAsync())
+            {
+                var app = AppHost.Media.Current?.SourceApp ?? "";
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Info, Title = "Повтор переключается только в самом плеере", Icon = Icons.Repeat, Important = true, Duration = TimeSpan.FromSeconds(3.5),
+                    Subtitle = app.Contains("spotify", StringComparison.OrdinalIgnoreCase) ? "Spotify не даёт включать его снаружи — в Spotify: Ctrl+R" : "Этот плеер не даёт включать повтор снаружи",
+                });
+            }
+            await System.Threading.Tasks.Task.Delay(300);
+            UpdateRepeat();
+        }
+
+        private void UpdateRepeat()
+        {
+            var (supported, on) = AppHost.Media.Repeat;
+            RepeatIcon.Foreground = on ? (System.Windows.Media.Brush)FindResource("Accent") : (System.Windows.Media.Brush)FindResource("Muted");
+            RepeatOne.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            RepeatBtn.Opacity = supported ? 1 : 0.55;
+            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи" : on ? "Повтор трека включён — нажми, чтобы выключить" : "Повторять трек";
+        }
         private void OnNext(object s, RoutedEventArgs e) => AppHost.Media.Next();
         private void OnPlay(object s, RoutedEventArgs e) => AppHost.Media.PlayPause();
         private void OnSeek(object s, MouseButtonEventArgs e) => AppHost.Media.Seek(TimeSpan.FromSeconds(Progress.Value));
