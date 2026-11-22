@@ -35,7 +35,51 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)v.ActualWidth, (int)v.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(13, 17, 23)), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, v.ActualWidth, v.ActualHeight)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = Path.Combine(dir, "log.txt");
+            void L(string t) => File.AppendAllText(log, t + "\n");
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                var sw = new Isle.Views.SettingsWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -4000, Top = -4000, ShowActivated = false };
+                sw.Show(); await Task.Delay(1000);
+                if (sw.FindName("NavMusic") is RadioButton nav) { nav.IsChecked = true; nav.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); }
+                await Task.Delay(800);
+                SnapEl((FrameworkElement)sw.Content, dir, "settings-spotify");
+                sw.Close();
+                AppSettings.Current.SpotifyClientId = "0123456789abcdef0123456789abcdef";
+                var login = SpotifyService.LoginAsync();
+                await Task.Delay(1500);
+                using var http = new System.Net.Http.HttpClient();
+                var page = await http.GetStringAsync(SpotifyService.RedirectUri + "?code=fake&state=wrong");
+                L("ответ браузеру: " + (page.Contains("Что-то пошло не так") ? "«Что-то пошло не так»" : page.Length + " символов"));
+                L("итог входа: " + (await login ?? "успех"));
+                L("привязан: " + SpotifyService.Connected);
+                var second = SpotifyService.LoginAsync(); await Task.Delay(800);
+                var page2 = await http.GetStringAsync(SpotifyService.RedirectUri + "?error=access_denied&state=x");
+                L("второй вход, неверный state: " + (await second));
+                AppSettings.Current.SpotifyClientId = "";
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
