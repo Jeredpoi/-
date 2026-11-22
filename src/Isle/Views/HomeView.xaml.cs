@@ -47,7 +47,11 @@ namespace Isle.Views
             };
             AppVol.ValueChanged += OnAppVolume;
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
-            IsVisibleChanged += (_, __) => { if (IsVisible) _tick.Start(); else _tick.Stop(); };
+            IsVisibleChanged += (_, __) =>
+            {
+                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += KaraokeFrame; }
+                else { _tick.Stop(); Helpers.FrameClock.Tick -= KaraokeFrame; }
+            };
             foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
             Launcher.ItemsSource = _launch;
             _launch.CollectionChanged += (_, __) => UpdateLauncherHint();
@@ -450,6 +454,15 @@ namespace Isle.Views
                 ShowLine(idx);
                 if (idx >= 0 && idx < _lines.Count) Helpers.KaraokeText.Update(_lines[idx], pos, KaraokeOn, KaraokeOff);
             }
+        }
+
+        /// <summary>Заливка букв — каждый кадр (таймер позиции раз в 100 мс давал рывки).</summary>
+        private void KaraokeFrame(double dt)
+        {
+            if (_lyrics == null || _curLine < 0 || _curLine >= _lines.Count) return;
+            var m = AppHost.Media.Current;
+            if (!m.HasSession) return;
+            Helpers.KaraokeText.Update(_lines[_curLine], m.LivePosition, KaraokeOn, KaraokeOff);
         }
 
         private static readonly System.Windows.Media.Brush KaraokeOn = Frozen(System.Windows.Media.Color.FromRgb(0xEC, 0xEC, 0xF1));

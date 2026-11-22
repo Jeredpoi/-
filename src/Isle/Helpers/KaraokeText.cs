@@ -14,7 +14,7 @@ namespace Isle.Helpers
     /// </summary>
     public static class KaraokeText
     {
-        private sealed class Timing { public double[] Start, End; }
+        private sealed class Timing { public double[] Start, End; public double Last = double.MinValue; }
 
         /// <summary>Разбить строку на буквы (Run на каждую) и посчитать, когда каждая должна загореться.</summary>
         public static void Set(TextBlock tb, LyricLine line, TimeSpan? next, Brush off)
@@ -34,17 +34,26 @@ namespace Isle.Helpers
         {
             if (tb.Tag is not Timing t) return;
             double now = pos.TotalSeconds;
+            // плеер иногда присылает позицию чуть «назад» — не откатываем заливку на доли секунды, иначе она дёргается
+            if (now < t.Last && t.Last - now < 0.6) now = t.Last;
+            t.Last = now;
             int k = 0;
             foreach (var inline in tb.Inlines)
             {
                 if (inline is not Run r || k >= t.Start.Length) break;
-                double a = t.Start[k], b = t.End[k];
+                // мягкий край: каждая буква разгорается чуть дольше своего отрезка и заходит на соседние —
+                // несколько букв светятся по-разному одновременно, и заливка катится волной, а не щёлкает
+                double a = t.Start[k] - Soft * 0.5, b = t.End[k] + Soft * 0.5;
                 double f = now <= a ? 0 : now >= b ? 1 : (now - a) / Math.Max(0.001, b - a);
+                f = f * f * (3 - 2 * f); // плавный разгон и торможение
                 var want = Blend(on, off, f);
                 if (!ReferenceEquals(r.Foreground, want)) r.Foreground = want;
                 k++;
             }
         }
+
+        /// <summary>Ширина «гребня» волны, с: столько длится разгорание буквы сверх её собственного времени.</summary>
+        private const double Soft = 0.35;
 
         /// <summary>Номер строки на позиции pos (с небольшим запасом, чтобы строка успела въехать).</summary>
         public static int Index(List<LyricLine> lines, TimeSpan pos)
@@ -122,7 +131,7 @@ namespace Isle.Helpers
 
         private static readonly Dictionary<(Color, Color), Brush[]> Steps = new();
 
-        /// <summary>Промежуточный цвет между «не спето» и «спето»: 12 готовых кистей, без новых объектов на каждом кадре.</summary>
+        /// <summary>Промежуточный цвет между «не спето» и «спето»: 32 готовые кисти, без новых объектов на каждом кадре.</summary>
         private static Brush Blend(Brush on, Brush off, double f)
         {
             if (f <= 0) return off;
@@ -131,7 +140,7 @@ namespace Isle.Helpers
             var key = (a.Color, b.Color);
             if (!Steps.TryGetValue(key, out var arr))
             {
-                arr = new Brush[12];
+                arr = new Brush[32];
                 for (int i = 0; i < arr.Length; i++)
                 {
                     double t = (i + 1) / (double)(arr.Length + 1);
