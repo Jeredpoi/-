@@ -217,6 +217,22 @@ namespace Isle.Tests
             Assert.Equal("two", l[1].Text);
             Assert.Equal(TimeSpan.FromSeconds(62), l[1].At);
         }
+
+        [Fact]
+        public void ParsesLyricsFileWithWords()
+        {
+            var yaml = "version: '1.0'\nmetadata:\n  title: T\n  duration_ms: 1000\nlines:\n- text: I've been tryna call\n  start_ms: 27170\n  end_ms: 28268\n  words:\n  - text: 'I''ve '\n    start_ms: 27209\n  - text: 'been '\n    start_ms: 27598\n  - text: call\n    start_ms: 28200\n- text: \"Ooh, I'm\"\n  start_ms: 30000\n  end_ms: 31000\n";
+            var l = LyricsService.ParseLyricsFile(yaml);
+            Assert.Equal(2, l.Count);
+            Assert.Equal("I've been tryna call", l[0].Text);
+            Assert.Equal(TimeSpan.FromMilliseconds(27170), l[0].At);
+            Assert.Equal(TimeSpan.FromMilliseconds(28268), l[0].End);
+            Assert.Equal(3, l[0].Words.Count);
+            Assert.Equal("I've ", l[0].Words[0].Text);
+            Assert.Equal(TimeSpan.FromMilliseconds(27598), l[0].Words[1].At);
+            Assert.Equal("Ooh, I'm", l[1].Text);
+            Assert.Null(l[1].Words);
+        }
     }
 }
 
@@ -502,8 +518,8 @@ namespace Isle.Tests
             var rnd = new Random(1);
             for (int i = 0; i < 200; i++)
             {
-                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10, 15, 17, 18, 19 }); // быстро и плотно
-                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9, 14, 20 }); // медленно
+                Assert.Contains(Isle.Helpers.Character.PickDance(170, 0.8, -1, rnd), new[] { 4, 2, 8, 0, 11, 10, 15, 17, 18, 19, 22, 25, 26, 29 }); // быстро и плотно
+                Assert.Contains(Isle.Helpers.Character.PickDance(80, 0.3, -1, rnd), new[] { 1, 7, 5, 0, 6, 9, 14, 20, 25, 27, 23 }); // медленно
                 Assert.NotEqual(3, Isle.Helpers.Character.PickDance(110, 0.4, 3, rnd));                      // не повторяет текущий
             }
         }

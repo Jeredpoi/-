@@ -47,7 +47,11 @@ namespace Isle.Views
             };
             AppVol.ValueChanged += OnAppVolume;
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
-            IsVisibleChanged += (_, __) => { if (IsVisible) _tick.Start(); else _tick.Stop(); };
+            IsVisibleChanged += (_, __) =>
+            {
+                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += KaraokeFrame; }
+                else { _tick.Stop(); Helpers.FrameClock.Tick -= KaraokeFrame; }
+            };
             foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
             Launcher.ItemsSource = _launch;
             _launch.CollectionChanged += (_, __) => UpdateLauncherHint();
@@ -408,7 +412,7 @@ namespace Isle.Views
             if (i == _curLine || _lines.Count == 0) return;
             // караоке: у прошлой строки снова обычный текст, у новой — слова, которые загораются по очереди
             if (_curLine >= 0 && _curLine < _lines.Count) { var old = _lines[_curLine]; var t = _lyrics[_curLine].Text; old.Inlines.Clear(); old.Text = t.Length == 0 ? "♪" : t; }
-            if (i >= 0 && i < _lines.Count && _lyrics[i].Text.Length > 0) Helpers.KaraokeText.Set(_lines[i], _lyrics[i].Text, KaraokeOff);
+            if (i >= 0 && i < _lines.Count && _lyrics[i].Text.Length > 0) Helpers.KaraokeText.Set(_lines[i], _lyrics[i], Helpers.KaraokeText.NextAt(_lyrics, i), KaraokeOff);
             _curLine = i;
             if (_lines[0].ActualHeight <= 0) LyricsStack.UpdateLayout();
             var dur = TimeSpan.FromMilliseconds(420);
@@ -446,10 +450,19 @@ namespace Isle.Views
             PosText.Text = Fmt(pos);
             if (_lyrics != null && _lyrics.Count > 0)
             {
-                var (idx, prog) = Helpers.KaraokeText.Position(_lyrics, pos);
+                int idx = Helpers.KaraokeText.Index(_lyrics, pos);
                 ShowLine(idx);
-                if (idx >= 0 && idx < _lines.Count) Helpers.KaraokeText.Update(_lines[idx], prog, KaraokeOn, KaraokeOff);
+                if (idx >= 0 && idx < _lines.Count) Helpers.KaraokeText.Update(_lines[idx], pos, KaraokeOn, KaraokeOff);
             }
+        }
+
+        /// <summary>Заливка букв — каждый кадр (таймер позиции раз в 100 мс давал рывки).</summary>
+        private void KaraokeFrame(double dt)
+        {
+            if (_lyrics == null || _curLine < 0 || _curLine >= _lines.Count) return;
+            var m = AppHost.Media.Current;
+            if (!m.HasSession) return;
+            Helpers.KaraokeText.Update(_lines[_curLine], m.LivePosition, KaraokeOn, KaraokeOff);
         }
 
         private static readonly System.Windows.Media.Brush KaraokeOn = Frozen(System.Windows.Media.Color.FromRgb(0xEC, 0xEC, 0xF1));

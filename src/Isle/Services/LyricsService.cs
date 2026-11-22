@@ -7,7 +7,15 @@ using System.Threading.Tasks;
 
 namespace Isle.Services
 {
-    public class LyricLine { public TimeSpan At; public string Text; }
+    public class LyricLine
+    {
+        public TimeSpan At; public string Text;
+        /// <summary>Конец строки (если сервис его знает) и время начала каждого слова — для точного караоке.</summary>
+        public TimeSpan? End;
+        public List<LyricWord> Words;
+    }
+
+    public class LyricWord { public TimeSpan At; public string Text; }
 
     /// <summary>Синхронизированный текст песен с lrclib.net (бесплатно, без ключа).</summary>
     public static class LyricsService
@@ -36,15 +44,27 @@ namespace Isle.Services
                           (string.IsNullOrWhiteSpace(artist) ? "" : "&artist_name=" + Uri.EscapeDataString(CleanArtist(artist)));
                 using var doc = JsonDocument.Parse(await Http.GetStringAsync(url));
                 JsonElement? best = null;
-                double bestDiff = double.MaxValue;
+                double bestScore = double.MaxValue;
                 foreach (var item in doc.RootElement.EnumerateArray())
                 {
                     if (!item.TryGetProperty("syncedLyrics", out var s) || s.ValueKind != JsonValueKind.String) continue;
                     double dur = item.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetDouble() : 0;
                     double diff = duration > TimeSpan.Zero ? Math.Abs(dur - duration.TotalSeconds) : 0;
-                    if (diff < bestDiff) { bestDiff = diff; best = item; }
+                    // текст с временем каждого слова — в приоритете, если длительность совпадает (±3 с)
+                    bool words = item.TryGetProperty("hasWordSync", out var w) && w.ValueKind == JsonValueKind.True
+                                 && item.TryGetProperty("lyricsfile", out var lf) && lf.ValueKind == JsonValueKind.String;
+                    double score = diff - (words && diff <= 3 ? 1000 : 0);
+                    if (score < bestScore) { bestScore = score; best = item; }
                 }
-                if (best.HasValue) result = Parse(best.Value.GetProperty("syncedLyrics").GetString());
+                if (best.HasValue)
+                {
+                    var b = best.Value;
+                    if (b.TryGetProperty("lyricsfile", out var lf) && lf.ValueKind == JsonValueKind.String
+                        && b.TryGetProperty("hasWordSync", out var w) && w.ValueKind == JsonValueKind.True)
+                        result = ParseLyricsFile(lf.GetString());
+                    if (result == null || result.Count == 0) result = Parse(b.GetProperty("syncedLyrics").GetString());
+                    Journal.Info("lyrics", "«" + title + "»: " + (result?.Count ?? 0) + " строк, по словам: " + (result != null && result.Exists(l => l.Words != null) ? "да" : "нет"));
+                }
             }
             catch { return null; } // сеть или сервис упали — не запоминаем «нет текста», попробуем в следующий раз
             Cache[key] = result;
@@ -63,6 +83,56 @@ namespace Isle.Services
                 list.Add(new LyricLine { At = at, Text = m.Groups[3].Value.Trim() });
             }
             return list;
+        }
+
+        /// <summary>
+        /// Формат lrclib «lyricsfile» (YAML): строки с start_ms/end_ms и словами со start_ms. Читаем только эти поля,
+        /// без библиотеки YAML: структура плоская и всегда одинаковая.
+        /// </summary>
+        public static List<LyricLine> ParseLyricsFile(string yaml)
+        {
+            try
+            {
+                var list = new List<LyricLine>();
+                bool inLines = false;
+                LyricLine line = null; LyricWord word = null;
+                foreach (var raw in yaml.Replace("\r", "").Split('\n'))
+                {
+                    if (raw.Length == 0) continue;
+                    int indent = raw.Length - raw.TrimStart(' ').Length;
+                    var t = raw.Trim();
+                    if (indent == 0 && !t.StartsWith("-")) { inLines = t == "lines:"; continue; }
+                    if (!inLines) continue;
+                    bool item = t.StartsWith("- ");
+                    if (item) t = t.Substring(2);
+                    int c = t.IndexOf(':');
+                    if (c <= 0) continue;
+                    string key = t.Substring(0, c).Trim(), val = t.Substring(c + 1).Trim();
+                    if (indent == 0 && item) { line = new LyricLine { Text = "" }; word = null; list.Add(line); }
+                    else if (indent >= 2 && item && line != null) { word = new LyricWord { Text = "" }; (line.Words ??= new List<LyricWord>()).Add(word); }
+                    if (line == null) continue;
+                    bool onWord = word != null && indent >= 2;
+                    switch (key)
+                    {
+                        case "text": if (onWord) word.Text = Scalar(val); else line.Text = Scalar(val).Trim(); break;
+                        case "start_ms": if (long.TryParse(val, out var ms)) { if (onWord) word.At = TimeSpan.FromMilliseconds(ms); else line.At = TimeSpan.FromMilliseconds(ms); } break;
+                        case "end_ms": if (!onWord && long.TryParse(val, out var me)) line.End = TimeSpan.FromMilliseconds(me); break;
+                    }
+                }
+                foreach (var l in list) if (l.Words != null && l.Words.Count == 0) l.Words = null;
+                return list;
+            }
+            catch { return null; }
+        }
+
+        private static string Scalar(string v)
+        {
+            if (v.Length >= 2 && v[0] == '\'' && v[^1] == '\'') return v.Substring(1, v.Length - 2).Replace("''", "'");
+            if (v.Length >= 2 && v[0] == '"' && v[^1] == '"')
+            {
+                try { return JsonSerializer.Deserialize<string>(v); } catch { return v.Substring(1, v.Length - 2); }
+            }
+            return v;
         }
 
         private static string CleanTitle(string t)
