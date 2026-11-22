@@ -1043,20 +1043,26 @@ namespace Isle
             if (AppSettings.Current.MusicPill == "lyrics")
             {
                 var lines = AppHost.Lyrics?.Lines;
-                var (idx, prog) = Helpers.KaraokeText.Position(lines, m.LivePosition);
+                int idx = Helpers.KaraokeText.Index(lines, m.LivePosition);
                 string text = idx >= 0 ? (lines[idx].Text.Length == 0 ? "♪" : lines[idx].Text) : (string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist);
-                bool karaoke = idx >= 0;
-                if (text != _pillLine)
+                bool karaoke = idx >= 0 && lines[idx].Text.Length > 0;
+                // ключ — номер строки + текст: повтор той же строки (припев) тоже начинается заново
+                string key = idx + "|" + text;
+                if (key != _pillLine)
                 {
-                    _pillLine = text;
+                    _pillLine = key;
+                    _pillLyric = karaoke ? lines[idx] : null;
+                    _pillNext = karaoke ? Helpers.KaraokeText.NextAt(lines, idx) : null;
                     SwapPillLine(text, karaoke);
                 }
-                if (karaoke && !_pillSwapping) Helpers.KaraokeText.Update(MiniTitle, prog, _lyricOn, _lyricOff);
+                if (karaoke && !_pillSwapping) Helpers.KaraokeText.Update(MiniTitle, m.LivePosition, _lyricOn, _lyricOff);
             }
             MiniPlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
         }
 
         private string _pillLine;
+        private Services.LyricLine _pillLyric;
+        private TimeSpan? _pillNext;
         private bool _pillSwapping;
         private readonly TranslateTransform _pillShift = new();
         private static readonly Brush _lyricOn = MakeFrozen(Color.FromRgb(0xEC, 0xEC, 0xF1));
@@ -1075,13 +1081,14 @@ namespace Isle
             }
             _pillSwapping = true;
             var outA = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
-            outA.Completed += (_, __) => { if (_pillLine == text) ShowNew(); };
+            string want = _pillLine;
+            outA.Completed += (_, __) => { if (_pillLine == want) ShowNew(); };
             MiniTitle.BeginAnimation(OpacityProperty, outA);
             _pillShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -6, TimeSpan.FromMilliseconds(140)));
 
             void ShowNew()
             {
-                if (karaoke) Helpers.KaraokeText.Set(MiniTitle, text, _lyricOff);
+                if (karaoke && _pillLyric != null) Helpers.KaraokeText.Set(MiniTitle, _pillLyric, _pillNext, _lyricOff);
                 else { MiniTitle.Inlines.Clear(); MiniTitle.Text = text; }
                 _pillSwapping = false;
                 MiniTitle.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });

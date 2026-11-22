@@ -8,56 +8,141 @@ using Isle.Services;
 namespace Isle.Helpers
 {
     /// <summary>
-    /// «Караоке» для строки песни: слова загораются по очереди, как поют. В тексте песни есть время только
-    /// начала строк, поэтому темп внутри строки оцениваем: длина строки в буквах и время до следующей строки.
+    /// «Караоке» для строки песни: буквы закрашиваются по одной, как поют, а текущая буква — плавно.
+    /// Если у текста есть время каждого слова (lrclib «lyricsfile»), идём точно по нему; иначе темп внутри
+    /// строки оцениваем по её длине и паузе до следующей строки.
     /// </summary>
     public static class KaraokeText
     {
-        /// <summary>Разбить строку на слова (Run на каждое слово с пробелом после него).</summary>
-        public static void Set(TextBlock tb, string text, Brush off)
+        private sealed class Timing { public double[] Start, End; }
+
+        /// <summary>Разбить строку на буквы (Run на каждую) и посчитать, когда каждая должна загореться.</summary>
+        public static void Set(TextBlock tb, LyricLine line, TimeSpan? next, Brush off)
         {
             tb.Inlines.Clear();
             tb.Tag = null;
+            var text = line?.Text;
             if (string.IsNullOrEmpty(text)) return;
-            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var ends = new List<int>(); int acc = 0;
-            for (int i = 0; i < words.Length; i++)
-            {
-                tb.Inlines.Add(new Run(words[i] + (i < words.Length - 1 ? " " : "")) { Foreground = off });
-                acc += words[i].Length + 1; ends.Add(acc);
-            }
-            tb.Tag = (ends, acc);
+
+            var (starts, ends) = line.Words != null && line.Words.Count > 0 ? FromWords(line, next) : Estimate(line, next);
+            for (int i = 0; i < text.Length; i++) tb.Inlines.Add(new Run(text[i].ToString()) { Foreground = off });
+            tb.Tag = new Timing { Start = starts, End = ends };
         }
 
-        /// <summary>Подсветить слова до доли p (0..1) строки.</summary>
-        public static void Update(TextBlock tb, double p, Brush on, Brush off)
+        /// <summary>Закрасить буквы, которые к позиции pos уже спеты.</summary>
+        public static void Update(TextBlock tb, TimeSpan pos, Brush on, Brush off)
         {
-            if (tb.Tag is not ValueTuple<List<int>, int> t) return;
-            var (ends, total) = t;
+            if (tb.Tag is not Timing t) return;
+            double now = pos.TotalSeconds;
             int k = 0;
             foreach (var inline in tb.Inlines)
             {
-                if (inline is not Run r || k >= ends.Count) break;
-                // слово загорается, когда до его середины «допели»
-                double mid = (ends[k] - (k == 0 ? ends[k] : ends[k] - ends[k - 1]) / 2.0) / total;
-                var want = p >= mid ? on : off;
+                if (inline is not Run r || k >= t.Start.Length) break;
+                double a = t.Start[k], b = t.End[k];
+                double f = now <= a ? 0 : now >= b ? 1 : (now - a) / Math.Max(0.001, b - a);
+                var want = Blend(on, off, f);
                 if (!ReferenceEquals(r.Foreground, want)) r.Foreground = want;
                 k++;
             }
         }
 
-        /// <summary>Строка и доля пропетого в ней на позиции pos.</summary>
-        public static (int index, double progress) Position(List<LyricLine> lines, TimeSpan pos)
+        /// <summary>Номер строки на позиции pos (с небольшим запасом, чтобы строка успела въехать).</summary>
+        public static int Index(List<LyricLine> lines, TimeSpan pos)
         {
-            if (lines == null || lines.Count == 0) return (-1, 0);
+            if (lines == null || lines.Count == 0) return -1;
             var p = pos + TimeSpan.FromMilliseconds(250);
-            int i = lines.FindLastIndex(l => l.At <= p);
-            if (i < 0) return (-1, 0);
-            double gap = i + 1 < lines.Count ? (lines[i + 1].At - lines[i].At).TotalSeconds : 4;
-            int chars = Math.Max(1, lines[i].Text.Length);
-            // поют обычно быстрее, чем до следующей строки: не дольше 90% паузы и примерно 0,12 с на букву
-            double span = Math.Max(0.6, Math.Min(gap * 0.9, Math.Max(1.2, chars * 0.12)));
-            return (i, Math.Clamp((p - lines[i].At).TotalSeconds / span, 0, 1));
+            return lines.FindLastIndex(l => l.At <= p);
+        }
+
+        /// <summary>Следующая строка после i — чтобы знать, сколько времени есть у последнего слова.</summary>
+        public static TimeSpan? NextAt(List<LyricLine> lines, int i) => lines != null && i + 1 < lines.Count ? lines[i + 1].At : null;
+
+        // ----- время букв -----
+
+        /// <summary>По словам: буквы слова делят его время поровну; слово длится до начала следующего (но не бесконечно).</summary>
+        private static (double[], double[]) FromWords(LyricLine line, TimeSpan? next)
+        {
+            var text = line.Text;
+            var s = new double[text.Length];
+            var e = new double[text.Length];
+            double lineEnd = (line.End ?? next ?? line.At + TimeSpan.FromSeconds(4)).TotalSeconds;
+            int pos = 0;
+            for (int w = 0; w < line.Words.Count && pos < text.Length; w++)
+            {
+                var word = line.Words[w].Text.Trim();
+                if (word.Length == 0) continue;
+                int at = text.IndexOf(word, pos, StringComparison.Ordinal);
+                if (at < 0) at = pos; // текст слова чуть отличается от строки — идём по порядку
+                int len = Math.Min(word.Length, text.Length - at);
+                double ws = line.Words[w].At.TotalSeconds;
+                double we = w + 1 < line.Words.Count ? line.Words[w + 1].At.TotalSeconds : lineEnd;
+                // протяжная нота может тянуться, но не дольше разумного: иначе слово «зависает» на секунды
+                we = Math.Min(we, ws + Math.Max(0.35, len * 0.35 + 0.3));
+                if (we <= ws) we = ws + 0.2;
+                for (int i = pos; i < at; i++) { s[i] = ws; e[i] = ws; } // пробелы и знаки перед словом
+                for (int i = 0; i < len; i++)
+                {
+                    s[at + i] = ws + (we - ws) * i / len;
+                    e[at + i] = ws + (we - ws) * (i + 1) / len;
+                }
+                pos = at + len;
+            }
+            for (int i = pos; i < text.Length; i++) { s[i] = pos > 0 ? e[pos - 1] : lineEnd; e[i] = s[i]; }
+            return (s, e);
+        }
+
+        /// <summary>
+        /// Без слов: строку поют почти всю паузу до следующей (85%), но не быстрее ~0,22 с на букву —
+        /// прежняя оценка (0,12 с) убегала вперёд песни.
+        /// </summary>
+        private static (double[], double[]) Estimate(LyricLine line, TimeSpan? next)
+        {
+            var text = line.Text;
+            double start = line.At.TotalSeconds;
+            double gap = next.HasValue ? (next.Value - line.At).TotalSeconds : 4;
+            double span = line.End.HasValue ? (line.End.Value - line.At).TotalSeconds
+                : Math.Max(0.8, Math.Min(gap * 0.85, Math.Max(1.5, text.Length * 0.22)));
+            // время делим по буквам без пробелов: пробел не поётся
+            int letters = 0;
+            foreach (var ch in text) if (!char.IsWhiteSpace(ch)) letters++;
+            letters = Math.Max(1, letters);
+            var s = new double[text.Length];
+            var e = new double[text.Length];
+            int k = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                double a = start + span * k / letters;
+                if (char.IsWhiteSpace(text[i])) { s[i] = e[i] = a; continue; }
+                s[i] = a; e[i] = start + span * (k + 1) / letters; k++;
+            }
+            return (s, e);
+        }
+
+        // ----- цвет -----
+
+        private static readonly Dictionary<(Color, Color), Brush[]> Steps = new();
+
+        /// <summary>Промежуточный цвет между «не спето» и «спето»: 12 готовых кистей, без новых объектов на каждом кадре.</summary>
+        private static Brush Blend(Brush on, Brush off, double f)
+        {
+            if (f <= 0) return off;
+            if (f >= 1) return on;
+            if (on is not SolidColorBrush a || off is not SolidColorBrush b) return f >= 0.5 ? on : off;
+            var key = (a.Color, b.Color);
+            if (!Steps.TryGetValue(key, out var arr))
+            {
+                arr = new Brush[12];
+                for (int i = 0; i < arr.Length; i++)
+                {
+                    double t = (i + 1) / (double)(arr.Length + 1);
+                    byte L(byte x, byte y) => (byte)Math.Round(y + (x - y) * t);
+                    var br = new SolidColorBrush(Color.FromArgb(L(a.Color.A, b.Color.A), L(a.Color.R, b.Color.R), L(a.Color.G, b.Color.G), L(a.Color.B, b.Color.B)));
+                    br.Freeze();
+                    arr[i] = br;
+                }
+                Steps[key] = arr;
+            }
+            return arr[Math.Clamp((int)(f * arr.Length), 0, arr.Length - 1)];
         }
     }
 }
