@@ -35,7 +35,7 @@ namespace Isle.Services
     /// </summary>
     public static class AiService
     {
-        private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(120) };
+        private static readonly HttpClient Http = Helpers.Net.Client(TimeSpan.FromSeconds(120));
 
         public static readonly AiPreset[] Presets =
         {

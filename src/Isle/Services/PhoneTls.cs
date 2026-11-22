@@ -44,7 +44,7 @@ namespace Isle.Services
                 if (!stale) return;
                 try
                 {
-                    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                    using var http = Helpers.Net.Client(TimeSpan.FromSeconds(15));
                     var newPem = await http.GetStringAsync(PemUrl);
                     var newKey = await http.GetStringAsync(KeyUrl);
                     if (!newPem.Contains("BEGIN CERTIFICATE") || !newKey.Contains("PRIVATE KEY")) throw new InvalidDataException("не сертификат");

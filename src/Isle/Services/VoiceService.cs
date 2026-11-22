@@ -16,7 +16,7 @@ namespace Isle.Services
     /// </summary>
     public class VoiceService
     {
-        private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(90) };
+        private static readonly HttpClient Http = Helpers.Net.Client(TimeSpan.FromSeconds(90));
         private WasapiCapture _capture;
         private MemoryStream _pcm;
         private WaveFormat _srcFormat;
