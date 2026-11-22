@@ -26,7 +26,7 @@ namespace Isle.Services
 
         private static HttpClient CreateClient()
         {
-            var c = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var c = Helpers.Net.Client(TimeSpan.FromSeconds(10));
             c.DefaultRequestHeaders.UserAgent.ParseAdd("Isle/0.1 (desktop island app)");
             return c;
         }

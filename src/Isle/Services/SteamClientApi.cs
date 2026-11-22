@@ -161,9 +161,10 @@ namespace Isle.Services
             var dirs = new[]
             {
                 Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+                // общие ярлыки (для всех пользователей) — только с правами администратора, иначе каждый запуск — отказ доступа
+                IsAdmin() ? Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory) : null,
                 Environment.GetFolderPath(Environment.SpecialFolder.Programs),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+                IsAdmin() ? Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms) : null,
                 Path.Combine(app, @"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"),
                 Path.Combine(app, @"Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"),
             };
@@ -199,6 +200,12 @@ namespace Isle.Services
             }
             catch (Exception ex) { Log("точная скорость Steam: ярлыки: " + ex.Message); }
             finally { if (shell != null) try { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell); } catch { } }
+        }
+
+        private static bool IsAdmin()
+        {
+            try { using var id = System.Security.Principal.WindowsIdentity.GetCurrent(); return new System.Security.Principal.WindowsPrincipal(id).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); }
+            catch { return false; }
         }
 
         /// <summary>Автозапуск Steam вместе с Windows — с ключом, чтобы данные загрузок были доступны сразу.</summary>

@@ -29,7 +29,7 @@ namespace Isle.Services
         private const string Repo = "Jeredpoi/-";
         private static readonly HttpClient Http = CreateClient();
         /// <summary>Отдельный клиент для скачивания файла: заголовок GitHub API тут мешает.</summary>
-        private static readonly HttpClient Download = new() { Timeout = TimeSpan.FromMinutes(10) };
+        private static readonly HttpClient Download = Helpers.Net.Client(TimeSpan.FromMinutes(10));
         private static readonly DispatcherTimer Timer = new() { Interval = TimeSpan.FromHours(6) };
         private static bool _notified;
 
@@ -48,7 +48,7 @@ namespace Isle.Services
 
         private static HttpClient CreateClient()
         {
-            var c = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            var c = Helpers.Net.Client(TimeSpan.FromMinutes(5));
             c.DefaultRequestHeaders.UserAgent.ParseAdd("Isle-Updater");
             c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             return c;

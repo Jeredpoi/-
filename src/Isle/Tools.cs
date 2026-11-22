@@ -98,7 +98,7 @@ namespace Isle
 
         private static void Done(BitmapSource bmp)
         {
-            ClipboardService.ShotTaken();
+            ClipboardService.ShotTaken(bmp);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool copied = ScreenTools.CopyImage(bmp, ok =>
             {

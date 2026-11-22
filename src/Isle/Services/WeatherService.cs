@@ -82,7 +82,7 @@ namespace Isle.Services
         /// <summary>Градусы без «-0»: округляем до целого, минус — типографский.</summary>
         public static string Deg(double v) { int r = (int)Math.Round(v); return r < 0 ? "−" + (-r) : r.ToString(); }
 
-        private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+        private static readonly HttpClient Http = Helpers.Net.Client(TimeSpan.FromSeconds(15));
         private static readonly SemaphoreSlim ForecastLock = new(1, 1);
         private static readonly Dictionary<string, ForecastCache> Forecasts = new(StringComparer.Ordinal);
         /// <summary>Сырой прогноз храним целиком: «сейчас», почасовой и предупреждения пересчитываются от текущего времени при каждом обращении.</summary>

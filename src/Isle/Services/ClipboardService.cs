@@ -299,7 +299,22 @@ namespace Isle.Services
         public static void ForgetShotApp() => _shotApp = null;
 
         /// <summary>Снимок готов и сейчас ляжет в буфер: приложение действительно ещё 30 секунд.</summary>
-        public static void ShotTaken() => _shotAppAt = DateTime.Now;
+        public static void ShotTaken(BitmapSource shot = null)
+        {
+            _shotAppAt = DateTime.Now;
+            if (shot == null) return; // слой снимка отмечает время, а саму картинку передаст Tools.Done
+            if (!shot.IsFrozen && shot.CanFreeze) shot.Freeze();
+            _ownShot = shot.IsFrozen ? shot : null;
+            _ownShotAt = DateTime.Now;
+        }
+
+        /// <summary>
+        /// Снимок, который Isle только что сам положил в буфер. Событие буфера приходит сразу (и ещё раз, если
+        /// эмулятор или менеджер буфера перекладывает картинку): читать 4K обратно из буфера — до полсекунды
+        /// на потоке интерфейса, а картинка у нас и так есть.
+        /// </summary>
+        private static BitmapSource _ownShot;
+        private static DateTime _ownShotAt;
 
         private static readonly string OwnName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
         private static bool IsOwnProcess(string name) => string.Equals(name, OwnName, StringComparison.OrdinalIgnoreCase);
@@ -633,8 +648,8 @@ namespace Isle.Services
             try
             {
                 // буфер может быть на мгновение занят другой программой (CLIPBRD_E_CANT_OPEN) — пробуем ещё пару раз
-                BitmapSource img = null;
-                for (int attempt = 0; ; attempt++)
+                BitmapSource img = _ownShot != null && DateTime.Now - _ownShotAt < TimeSpan.FromSeconds(3) ? _ownShot : null;
+                for (int attempt = 0; img == null; attempt++)
                 {
                     try { img = Clipboard.GetImage(); break; }
                     // другая программа (эмулятор, менеджер буфера) может держать буфер дольше — до ~2,5 с попыток
