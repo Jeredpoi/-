@@ -74,7 +74,7 @@ namespace Isle
                 L("список выходов: " + (cb != null) + ", пунктов " + cb?.Items.Count);
                 if (cb != null)
                 {
-                    if (cb.Items.Count == 0) cb.Items.Add("Динамики (тест)");
+                    if (cb.Items.Count == 0) cb.ItemsSource = new[] { "Динамики (тест)", "Наушники (тест)" };
                     cb.IsDropDownOpen = true; await Task.Delay(600);
                     var island = (FrameworkElement)w.FindName("Island");
                     var c = island.PointToScreen(new Point(60, 200));
