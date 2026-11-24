@@ -322,6 +322,11 @@ namespace Isle
                 RegionRecorder.StateChanged += () => Dispatcher.InvokeAsync(UpdateRecChip);
                 RecChip.Cursor = Cursors.Hand;
                 RecChip.MouseLeftButtonUp += (_, e) => { if (RegionRecorder.Current != null) { e.Handled = true; Tools.Record(); } };
+                RecMic.MouseLeftButtonUp += (_, e) =>
+                {
+                    e.Handled = true; // не останавливать запись
+                    if (RegionRecorder.Current is { } r) r.SetMic(!r.MicOn);
+                };
                 // экономим память: свёрнутому острову не нужно держать лишнее в RAM
                 var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
                 trim.Tick += (_, __) =>
@@ -1607,6 +1612,15 @@ namespace Isle
             bool own = RegionRecorder.Current != null;
             RecChip.Visibility = own || ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
             RecChip.ToolTip = own ? "Идёт запись · клик — остановить" : null;
+            RecMic.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
+            if (own && RegionRecorder.Current is { } rec)
+            {
+                bool on = rec.MicOn;
+                RecMicIcon.Kind = on ? "Mic" : "MicOff";
+                // как на панели записи: зелёный — пишется, красный — выключен
+                RecMicIcon.Foreground = new SolidColorBrush(on ? Color.FromRgb(0x4A, 0xDE, 0x80) : Color.FromRgb(0xF8, 0x71, 0x71));
+                RecMic.ToolTip = on ? "Микрофон пишется · клик — выключить" : "Микрофон выключен · клик — включить";
+            }
             if (!own) RecText.Text = ObsService.Streaming ? (ObsService.Recording ? "LIVE · REC" : "LIVE") : "REC";
             // во время своей записи остров в видео не попадает (даже если включено «видно на скриншотах»)
             if (_hwnd != IntPtr.Zero) Win32.SetWindowDisplayAffinity(_hwnd, own || !AppSettings.Current.ShowInCaptures ? 0x11u : 0u);

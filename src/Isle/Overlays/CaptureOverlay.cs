@@ -13,6 +13,9 @@ namespace Isle.Overlays
 {
     public enum CaptureMode { Region, Ocr, Qr, Pipette }
 
+    /// <summary>Из снимка нажали «камеру»: эту область (пиксели экрана) записать на видео.</summary>
+    public record VideoRegion(int X, int Y, int W, int H);
+
     /// <summary>Полноэкранный слой поверх «замороженного» снимка экрана: выделение области или пипетка.</summary>
     public partial class CaptureOverlay : Window
     {

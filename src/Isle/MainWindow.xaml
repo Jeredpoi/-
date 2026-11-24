@@ -58,6 +58,10 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Ellipse x:Name="RecDot" Width="6" Height="6" Fill="#F87171" VerticalAlignment="Center"/>
                                     <TextBlock x:Name="RecText" Text="REC" Margin="4,0,0,0" FontSize="10" FontWeight="Bold" Foreground="#F87171"/>
+                                    <!-- микрофон во время своей записи: клик — выключить/включить -->
+                                    <Border x:Name="RecMic" Visibility="Collapsed" Margin="5,0,0,0" Padding="2,1" Background="Transparent" Cursor="Hand" VerticalAlignment="Center">
+                                        <h:Icon x:Name="RecMicIcon" Kind="Mic" Width="11" Height="11" StrokeWidth="2" Foreground="#F87171"/>
+                                    </Border>
                                 </StackPanel>
                             </Border>
                             <TextBlock x:Name="WeatherMini" Text="" FontSize="13" Foreground="#B9B9C3" Margin="8,0,0,0" VerticalAlignment="Center"/>

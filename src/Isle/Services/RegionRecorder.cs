@@ -41,7 +41,11 @@ namespace Isle.Services
 
         private readonly IntPtr _monitor;
         private readonly int _x, _y, _w, _h; // область в пикселях относительно монитора, размеры чётные
-        private readonly bool _sysAudio, _mic;
+        private readonly bool _sysAudio;
+        private bool _mic;
+        private volatile bool _micMuted;
+        /// <summary>Микрофон пишется сейчас (включён и не выключен на ходу).</summary>
+        public bool MicOn => _micCap != null && !_micMuted;
         private const int Fps = 30;
 
         private ID3D11Device _d3d;
@@ -169,11 +173,14 @@ namespace Isle.Services
             var path = Path.Combine(Path.GetTempPath(), "isle-rec-" + tag + "-" + Guid.NewGuid().ToString("N")[..8] + ".wav");
             var wav = new WaveFileWriter(path, cap.WaveFormat);
             var fmt = cap.WaveFormat;
+            bool isMic = tag == "mic";
             cap.DataAvailable += (_, e) =>
             {
                 lock (_lock)
                 {
                     if (_stopping) return;
+                    // микрофон выключили на ходу — вместо голоса тишина той же длины (дорожка не сдвигается)
+                    if (isMic && _micMuted) Array.Clear(e.Buffer, 0, e.BytesRecorded);
                     // пока ничего не звучит, звуковая карта не присылает данных — заполняем паузу тишиной по часам
                     long expected = (long)(_audioClock.Elapsed.TotalSeconds * fmt.AverageBytesPerSecond);
                     expected -= expected % fmt.BlockAlign;
@@ -190,6 +197,23 @@ namespace Isle.Services
         {
             var zero = new byte[Math.Min(bytes, 65536)];
             while (bytes > 0) { int n = (int)Math.Min(bytes, zero.Length); wav.Write(zero, 0, n); bytes -= n; }
+        }
+
+        /// <summary>
+        /// Включить/выключить микрофон во время записи. Не был включён при старте — начинает писаться сейчас
+        /// (начало дорожки заполняется тишиной по часам записи, звук не съезжает).
+        /// </summary>
+        public void SetMic(bool on)
+        {
+            if (_stopping) return;
+            if (on && _micCap == null)
+            {
+                try { lock (_lock) (_micCap, _micWav, _micPath) = StartAudio(new WasapiCapture(), "mic"); _mic = true; }
+                catch (Exception ex) { Journal.Warn("record", "микрофон не включился: " + ex.Message); return; }
+            }
+            _micMuted = !on;
+            Journal.Info("record", "микрофон " + (on ? "включён" : "выключен") + " во время записи");
+            StateChanged?.Invoke();
         }
 
         // ---------- кадры ----------
