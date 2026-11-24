@@ -33,7 +33,7 @@ namespace Isle.Helpers
         private readonly Flake[] _f = new Flake[Max + 48];
         private int _n, _stars;
         private readonly Random _rnd = new();
-        private double _next, _t, _rampIn;
+        private double _next = 0.3, _acc, _t, _rampIn;
         private bool _subscribed;
 
         /// <summary>Остров, из-под нижнего края которого сыплется снег.</summary>
@@ -167,12 +167,15 @@ namespace Isle.Helpers
                 double widthK = Math.Pow(Math.Clamp(edge.Width / 220, 1, 4.5), 0.6);
                 double rate = (2.5 + 6 * Math.Sqrt(I)) * widthK * _rampIn;
                 if (_n > 0.8 * Max) rate *= Math.Max(0, (Max - _n) / (0.2 * Max));
-                _next -= dt;
+                // пуассоновский поток, а не метроном: копим «ожидаемое число снежинок» и сравниваем со случайным порогом.
+                // Так плотность меняется плавно (разгон, раскрытие) — без многосекундной паузы в начале
+                _acc += rate * dt;
                 int guard = 0;
-                while (_next <= 0 && guard++ < 10)
+                while (_acc >= _next && guard++ < 10)
                 {
-                    if (rate > 0.01) Spawn(edge, cr, burst: false);
-                    _next += rate > 0.01 ? -Math.Log(1 - _rnd.NextDouble()) / rate : 0.5; // пуассоновский поток, а не метроном
+                    _acc -= _next;
+                    Spawn(edge, cr, burst: false);
+                    _next = -Math.Log(1 - _rnd.NextDouble());
                 }
             }
 
