@@ -320,13 +320,7 @@ namespace Isle
                 ObsService.Changed += () => Dispatcher.InvokeAsync(UpdateRecChip);
                 // встроенная запись области: красная точка и таймер в чёлке, клик по ним — стоп
                 RegionRecorder.StateChanged += () => Dispatcher.InvokeAsync(UpdateRecChip);
-                RecChip.Cursor = Cursors.Hand;
-                RecChip.MouseLeftButtonUp += (_, e) => { if (RegionRecorder.Current != null) { e.Handled = true; Tools.Record(); } };
-                RecMic.MouseLeftButtonUp += (_, e) =>
-                {
-                    e.Handled = true; // не останавливать запись
-                    if (RegionRecorder.Current is { } r) r.SetMic(!r.MicOn);
-                };
+                RecChip.Cursor = Cursors.Hand; // клики разбирает OnIslandMouseDown: он срабатывает раньше и иначе раскрывал остров
                 // экономим память: свёрнутому острову не нужно держать лишнее в RAM
                 var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
                 trim.Tick += (_, __) =>
@@ -810,6 +804,16 @@ namespace Isle
 
         private void OnIslandMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // своя запись экрана: клик по плашке REC — стоп, по динамику/микрофону — заглушить/вернуть.
+            // Обрабатываем здесь, до раскрытия острова (раньше клик раскрывал остров, и до таймера не доходил)
+            if (RegionRecorder.Current is { } rec && State != IslandState.Expanded && Within(e.OriginalSource as DependencyObject, RecChip))
+            {
+                e.Handled = true;
+                if (Within(e.OriginalSource as DependencyObject, RecMic)) rec.SetMic(!rec.MicOn);
+                else if (Within(e.OriginalSource as DependencyObject, RecSys)) rec.SetSystemAudio(!rec.SysOn);
+                else { Journal.Info("record", "стоп: клик по плашке в чёлке"); Tools.Record(); }
+                return;
+            }
             // у плашки своё действие по клику (обновление и т. п.)
             if (State == IslandState.Toast && !AlarmService.Ringing && _currentToast?.OnClick is Action onClick
                 && FindParent<Button>(e.OriginalSource as DependencyObject) == null)
@@ -1006,7 +1010,7 @@ namespace Isle
             RevealRow(timer ? TimerRow : media ? MediaRow : dl ? DownloadRow : (UIElement)IdleRow);
 
             double h = 34;
-            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? 60 : 0);
+            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? (RegionRecorder.Current != null ? 104 : 60) : 0);
             if (!AppSettings.Current.ShowClock && !timer && !media) w -= 50;
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
@@ -1620,15 +1624,28 @@ namespace Isle
             t.Start();
         }
 
+        private static bool Within(DependencyObject d, DependencyObject parent)
+        {
+            for (; d != null; d = d is Visual || d is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+                if (d == parent) return true;
+            return false;
+        }
+
         /// <summary>Точка REC в чёлке: запись OBS или встроенная запись области (с таймером).</summary>
         private void UpdateRecChip()
         {
             bool own = RegionRecorder.Current != null;
             RecChip.Visibility = own || ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
-            RecChip.ToolTip = own ? "Идёт запись · клик — остановить" : null;
-            RecMic.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
+            RecMic.Visibility = RecSys.Visibility = RecStop.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
+            RecDot.Visibility = own ? Visibility.Collapsed : Visibility.Visible;
+            RecChip.Padding = own ? new Thickness(7, 3, 6, 3) : new Thickness(6, 1, 6, 1);
+            RecChip.ToolTip = own ? "Клик — остановить запись" : null;
             if (own && RegionRecorder.Current is { } rec)
             {
+                bool sys = rec.SysOn;
+                RecSysIcon.Kind = sys ? "Volume" : "Mute";
+                RecSysIcon.Foreground = new SolidColorBrush(sys ? Color.FromRgb(0x4A, 0xDE, 0x80) : Color.FromRgb(0xF8, 0x71, 0x71));
+                RecSys.ToolTip = sys ? "Звук компьютера пишется · клик — заглушить" : "Звук компьютера заглушён · клик — включить";
                 bool on = rec.MicOn;
                 RecMicIcon.Kind = on ? "Mic" : "MicOff";
                 // как на панели записи: зелёный — пишется, красный — выключен
