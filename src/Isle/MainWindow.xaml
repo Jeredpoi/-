@@ -378,8 +378,7 @@
                           Width="{Binding ActualWidth, ElementName=Island}"/>
 
             <!-- снег из-под чёлки (зимой) -->
-            <h:SnowFall x:Name="Snow" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,34,24,0" Height="150"
-                        Width="{Binding ActualWidth, ElementName=Island}" Opacity="{Binding Opacity, ElementName=Island}"/>
+            <h:SnowFall x:Name="Snow" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="-1"/>
         </Grid>
     </Grid>
 </Window>

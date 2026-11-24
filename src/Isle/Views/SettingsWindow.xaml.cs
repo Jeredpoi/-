@@ -178,6 +178,7 @@ namespace Isle.Views
             foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
+            SnowWhy.Text = "Сейчас: " + (AppHost.Window?.SnowReason ?? "—");
             foreach (var rb in Themes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.Theme ?? "dark");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
             ScaleText.Text = (int)ScaleSlider.Value + "%";
@@ -492,6 +493,7 @@ namespace Isle.Views
         {
             S.WinterSnow = (string)((FrameworkElement)s).Tag;
             S.Save(); // чёлка подхватит на следующем кадре
+            Dispatcher.InvokeAsync(() => SnowWhy.Text = "Сейчас: " + (AppHost.Window?.SnowReason ?? "—"), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void OnOutfit(object s, RoutedEventArgs e)

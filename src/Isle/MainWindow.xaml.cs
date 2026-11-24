@@ -275,6 +275,7 @@ namespace Isle
                 if (AppHost.Timer.Running) AppHost.Timer.Pause(); else AppHost.Timer.Start();
                 e.Handled = true;
             };
+            Snow.Source = Island;
             TimerRow.Background = Brushes.Transparent; // чтобы клик ловился по всей строке
             TimerRow.ToolTip = "Клик — открыть · кнопка × — отменить · средняя кнопка мыши — пауза";
 
@@ -282,8 +283,6 @@ namespace Isle
             {
                 UpdateClip();
                 Edge.Margin = new Thickness(24, Math.Max(0, Island.ActualHeight - 1), 24, 0);
-                Snow.Margin = new Thickness(24, Island.ActualHeight, 24, 0);
-                Snow.SourceWidth = Island.ActualWidth;
                 Edge.CornerRadius = Island.CornerRadius.BottomLeft;
             };
             // Подсказку «положу на полку» показываем только у свёрнутой чёлки: в открытой файл можно бросить на нужное место (ярлыки, полка)
@@ -1587,14 +1586,22 @@ namespace Isle
 
         /// <summary>Акцент, прозрачность и персонаж из настроек.</summary>
         /// <summary>Снег из-под чёлки: зимой (1 декабря — 14 января), когда за окном снег, или всегда — по настройке.</summary>
+        /// <summary>Почему снег идёт или нет — для подписи в настройках.</summary>
+        public string SnowReason { get; private set; }
+
         private void UpdateSnow(bool weatherSnow)
         {
             var mode = AppSettings.Current.WinterSnow ?? "auto";
             var d = DateTime.Today;
             bool season = d.Month == 12 || (d.Month == 1 && d.Day <= 14);
             bool on = mode == "on" || (mode == "auto" && (season || weatherSnow));
-            // над раскрытой панелью и в спрятанной чёлке снег не нужен
-            bool active = on && State != IslandState.Expanded && !_oledHidden && Scaler.Visibility == Visibility.Visible;
+            // снег сыплется из-под нижнего края в любом виде острова (и под раскрытой панелью — по всей её ширине);
+            // спрятанная чёлка — снежинки сразу исчезают, а не замирают в воздухе
+            SnowReason = mode == "off" ? "снег выключен" : mode == "on" ? "снег идёт всегда"
+                : season ? "снег идёт — зима (1 декабря – 14 января)" : weatherSnow ? "снег идёт — за окном снег" : "снега нет — не сезон и за окном не снег";
+            bool hidden = _oledHidden || Scaler.Visibility != Visibility.Visible;
+            bool active = on && !hidden;
+            if (hidden) Snow.Clear();
             if (Snow.Active == active) return;
             Snow.Active = active;
             Snow.Sync();

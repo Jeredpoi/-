@@ -340,7 +340,8 @@
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Снег из-под чёлки"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="«Зимой» — с 1 декабря по 14 января и когда за окном идёт снег."/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="«Зимой» — с 1 декабря по 14 января, а в другие дни — когда за окном идёт снег (по прогнозу погоды)."/>
+                                    <TextBlock x:Name="SnowWhy" Style="{StaticResource RowNote}" Margin="0,4,0,0"/>
                                     <WrapPanel x:Name="SnowModes" Margin="0,10,0,0">
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Зимой" Click="OnSnowMode" Tag="auto"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Всегда" Click="OnSnowMode" Tag="on"/>
