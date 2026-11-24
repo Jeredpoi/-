@@ -85,6 +85,17 @@ namespace Isle
                 log.AppendLine("стоп и сохранение за " + sw.ElapsedMilliseconds + " мс: " + file + " " + (file != null ? new FileInfo(file).Length / 1024 + " КБ" : ""));
                 anim.Stop(); win.Close();
                 if (file != null) File.Copy(file, Path.Combine(dir, "rec-region.mp4"), true);
+                // сведение со звуком: на стенде нет звуковой карты — проверяем на сгенерированном тоне 440 Гц
+                if (file != null)
+                {
+                    var wav = Path.Combine(Path.GetTempPath(), "tone.wav");
+                    var gen = new NAudio.Wave.SampleProviders.SignalGenerator(48000, 2) { Frequency = 440, Gain = 0.2 };
+                    NAudio.Wave.WaveFileWriter.CreateWaveFile16(wav, new NAudio.Wave.SampleProviders.OffsetSampleProvider(gen) { TakeSamples = 48000 * 2 * 7 });
+                    var muxed = Path.Combine(dir, "rec-region-audio.mp4");
+                    sw.Restart();
+                    bool ok = await RegionRecorder.MuxAsync(file, new[] { wav }, TimeSpan.FromMilliseconds(300), muxed, RegionRecorder.Profile(640, 360, true));
+                    log.AppendLine("сведение со звуком: " + ok + " за " + sw.ElapsedMilliseconds + " мс, " + (File.Exists(muxed) ? new FileInfo(muxed).Length / 1024 + " КБ" : "нет файла"));
+                }
                 log.AppendLine("процессор/память: " + Environment.WorkingSet / 1048576 + " МБ");
             }
             catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
