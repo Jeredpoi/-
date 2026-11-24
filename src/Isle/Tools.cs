@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -216,10 +217,17 @@ namespace Isle
             ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Форматирование убрано", Subtitle = text.Length + " симв. — вставляй", Icon = Icons.Eraser, Accent = Green, Important = true });
         }
 
-        /// <summary>Запись экрана: если запущен OBS — старт/стоп записи в нём, иначе «Ножницы» Windows 11.</summary>
+        private static RecordFrame _recFrame;
+
+        /// <summary>
+        /// Запись экрана. Встроенная (по умолчанию): выделить область → запись в MP4, повторное нажатие — стоп.
+        /// В настройках можно выбрать OBS — тогда старт/стоп записи в нём.
+        /// </summary>
         public static async void Record()
         {
             AppHost.Window.Collapse();
+            if (RegionRecorder.Current != null) { await StopOwnRecording(); return; }
+            if ((AppSettings.Current.RecordEngine ?? "isle") != "obs") { await StartOwnRecording(); return; }
             if (ObsService.IsObsRunning())
             {
                 try
@@ -254,9 +262,51 @@ namespace Isle
                 });
                 return;
             }
-            ToastBus.Show(new Toast { Warning = true, Title = "OBS не установлен — открываю «Ножницы»", Subtitle = "Поставь OBS Studio, и кнопка будет писать через него", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
-            await Task.Delay(300);
-            Win32.SendKeyCombo(Win32.VK_LWIN, 0x10 /*Shift*/, 0x52 /*R*/);
+            ToastBus.Show(new Toast { Warning = true, Title = "OBS не установлен — пишу сам", Subtitle = "Выдели область для записи", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
+            await StartOwnRecording();
+        }
+
+        private static async Task StartOwnRecording()
+        {
+            await Task.Delay(200); // чёлка успевает свернуться — не мешает выделению
+            var picker = new RecordPicker();
+            picker.ShowDialog();
+            if (picker.Result is not { } r) return;
+            _recFrame = new RecordFrame(r.x, r.y, r.w, r.h);
+            _recFrame.Show();
+            try
+            {
+                await RegionRecorder.StartAsync(r.x, r.y, r.w, r.h, r.sys, r.mic);
+                ToastBus.Show(new Toast { Title = "Запись идёт", Subtitle = "Остановить — клик по REC в чёлке или " + (AppSettings.Current.HotkeyRecord ?? "Ctrl+Alt+R"),
+                    Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(2.5) });
+            }
+            catch (Exception ex)
+            {
+                _recFrame?.Close(); _recFrame = null;
+                Journal.Error("record", ex);
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Запись не началась", Subtitle = ex.Message, Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(6) });
+            }
+        }
+
+        private static async Task StopOwnRecording()
+        {
+            _recFrame?.Close(); _recFrame = null;
+            try
+            {
+                var file = await RegionRecorder.StopAsync();
+                if (file == null) return;
+                long size = new FileInfo(file).Length;
+                Journal.Info("record", "сохранено " + (size >> 20) + " МБ");
+                var t = ObsService.SavedToast(file);
+                t.Subtitle = Path.GetFileName(file) + " · " + (size > 1 << 20 ? (size / 1048576.0).ToString("0.0") + " МБ" : (size >> 10) + " КБ");
+                t.ReplaceKey = "rec-saved";
+                ToastBus.Show(t);
+            }
+            catch (Exception ex)
+            {
+                Journal.Error("record", ex);
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Видео не сохранилось", Subtitle = ex.Message, Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(6) });
+            }
         }
     }
 }

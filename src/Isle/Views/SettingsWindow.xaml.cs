@@ -178,6 +178,7 @@ namespace Isle.Views
             foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
+            foreach (var rb in RecEngines.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.RecordEngine ?? "isle");
             SnowWhy.Text = "Сейчас: " + (AppHost.Window?.SnowReason ?? "—");
             foreach (var rb in Themes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.Theme ?? "dark");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
@@ -487,6 +488,12 @@ namespace Isle.Views
             AppHost.Window.ApplyAppearance(); // фон, акцент и полоски — сразу; Клоди переоденется на следующем кадре
             ApplyTheme();
             UpdatePreview();
+        }
+
+        private void OnRecEngine(object s, RoutedEventArgs e)
+        {
+            S.RecordEngine = (string)((FrameworkElement)s).Tag;
+            S.Save();
         }
 
         private void OnSnowMode(object s, RoutedEventArgs e)
@@ -886,7 +893,7 @@ namespace Isle.Views
         private static readonly System.Collections.Generic.Dictionary<string, string> DefaultHotkeys = new()
         {
             ["island"] = "Ctrl+Alt+Space", ["command"] = "Ctrl+Alt+K", ["clipboard"] = "Ctrl+Alt+V",
-            ["screenshot"] = "Ctrl+Alt+S", ["voice"] = "Ctrl+Alt+D", ["voiceCommand"] = "Ctrl+Alt+A",
+            ["screenshot"] = "Ctrl+Alt+S", ["voice"] = "Ctrl+Alt+D", ["voiceCommand"] = "Ctrl+Alt+A", ["record"] = "Ctrl+Alt+R",
             ["collapse"] = "Escape"
         };
 
@@ -942,6 +949,7 @@ namespace Isle.Views
                 ("screenshot", "Снимок экрана", "Выделить область и сделать снимок"),
                 ("voice", "Голос в текст", "Начать или закончить диктовку"),
                 ("voiceCommand", "Голосовая команда", "Сказать команду ИИ"),
+                ("record", "Запись видео", "Выделить область и записать её на видео"),
                 ("collapse", "Свернуть остров", "Работает, когда остров активен"),
             };
             const string ResetIcon = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3 M4.5 4.5v4h4";
@@ -1068,7 +1076,7 @@ namespace Isle.Views
         private string GetHotkey(string name) => name switch
         {
             "island" => S.Hotkey, "command" => S.HotkeyCommand, "clipboard" => S.HotkeyClipboard,
-            "screenshot" => S.HotkeyScreenshot, "voice" => S.HotkeyVoice, "voiceCommand" => S.HotkeyVoiceCommand,
+            "screenshot" => S.HotkeyScreenshot, "voice" => S.HotkeyVoice, "voiceCommand" => S.HotkeyVoiceCommand, "record" => S.HotkeyRecord,
             "collapse" => S.HotkeyCollapse, _ => ""
         };
     }

@@ -19,7 +19,7 @@ namespace Isle
 
     public partial class MainWindow : Window
     {
-        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5, HkVoiceCmd = 6, HkPrint = 7;
+        private const int HkToggle = 1, HkCommand = 2, HkClipboard = 3, HkShot = 4, HkVoice = 5, HkVoiceCmd = 6, HkPrint = 7, HkRecord = 8;
         private static readonly Size ExpandedSize = new(900, 470);
 
         private HwndSource _src;
@@ -317,12 +317,11 @@ namespace Isle
                 ApplyOledMode();
                 UpdateService.StartAutoCheck();
                 ObsService.StartMonitor();
-                ObsService.Changed += () => Dispatcher.InvokeAsync(() =>
-                {
-                    RecChip.Visibility = ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
-                    RecText.Text = ObsService.Streaming ? (ObsService.Recording ? "LIVE · REC" : "LIVE") : "REC";
-                    if (State == IslandState.Collapsed) ShowCollapsedContent(false);
-                });
+                ObsService.Changed += () => Dispatcher.InvokeAsync(UpdateRecChip);
+                // встроенная запись области: красная точка и таймер в чёлке, клик по ним — стоп
+                RegionRecorder.StateChanged += () => Dispatcher.InvokeAsync(UpdateRecChip);
+                RecChip.Cursor = Cursors.Hand;
+                RecChip.MouseLeftButtonUp += (_, e) => { if (RegionRecorder.Current != null) { e.Handled = true; Tools.Record(); } };
                 // экономим память: свёрнутому острову не нужно держать лишнее в RAM
                 var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
                 trim.Tick += (_, __) =>
@@ -374,6 +373,7 @@ namespace Isle
             new(HkToggle, "island", s.Hotkey), new(HkCommand, "command", s.HotkeyCommand),
             new(HkClipboard, "clipboard", s.HotkeyClipboard), new(HkShot, "screenshot", s.HotkeyScreenshot),
             new(HkVoice, "voice", s.HotkeyVoice), new(HkVoiceCmd, "voiceCommand", s.HotkeyVoiceCommand),
+            new(HkRecord, "record", s.HotkeyRecord),
             new(0, "collapse", s.HotkeyCollapse)
         };
 
@@ -661,6 +661,7 @@ namespace Isle
                 case "screenshot": s.HotkeyScreenshot = value; break;
                 case "voice": s.HotkeyVoice = value; break;
                 case "voiceCommand": s.HotkeyVoiceCommand = value; break;
+                case "record": s.HotkeyRecord = value; break;
                 case "collapse": s.HotkeyCollapse = value; break;
             }
         }
@@ -728,7 +729,7 @@ namespace Isle
                 Journal.Info("hotkey", "хоткей id=" + w.ToInt32() + (w.ToInt32() switch
                 {
                     HkToggle => " (показать/скрыть)", HkCommand => " (команда)", HkClipboard => " (буфер)", HkVoice => " (голос в текст)",
-                    HkVoiceCmd => " (голосовая команда)", HkShot => " (снимок)", HkPrint => " (PrintScreen)", _ => ""
+                    HkVoiceCmd => " (голосовая команда)", HkShot => " (снимок)", HkPrint => " (PrintScreen)", HkRecord => " (запись видео)", _ => ""
                 }));
                 switch (w.ToInt32())
                 {
@@ -749,6 +750,9 @@ namespace Isle
                         break;
                     case HkVoiceCmd:
                         VoiceCommandKey();
+                        break;
+                    case HkRecord:
+                        Tools.Record();
                         break;
                     case HkShot:
                     case HkPrint:
@@ -1595,6 +1599,18 @@ namespace Isle
             var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(big ? 380 : 420) };
             t.Tick += (_, __) => { t.Stop(); Snow.Burst(big); };
             t.Start();
+        }
+
+        /// <summary>Точка REC в чёлке: запись OBS или встроенная запись области (с таймером).</summary>
+        private void UpdateRecChip()
+        {
+            bool own = RegionRecorder.Current != null;
+            RecChip.Visibility = own || ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
+            RecChip.ToolTip = own ? "Идёт запись · клик — остановить" : null;
+            if (!own) RecText.Text = ObsService.Streaming ? (ObsService.Recording ? "LIVE · REC" : "LIVE") : "REC";
+            // во время своей записи остров в видео не попадает (даже если включено «видно на скриншотах»)
+            if (_hwnd != IntPtr.Zero) Win32.SetWindowDisplayAffinity(_hwnd, own || !AppSettings.Current.ShowInCaptures ? 0x11u : 0u);
+            if (State == IslandState.Collapsed) ShowCollapsedContent(false);
         }
 
         /// <summary>Почему снег идёт или нет — для подписи в настройках.</summary>
@@ -3017,7 +3033,16 @@ namespace Isle
             if (Scaler.Visibility != Visibility.Visible || _oledHidden) return;
             UpdateMiniLive();
             AnimateDownloadRing(_frameDt);
-            if (RecChip.Visibility == Visibility.Visible) RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
+            if (RecChip.Visibility == Visibility.Visible)
+            {
+                RecDot.Opacity = (DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.25;
+                if (RegionRecorder.Current is { } rr)
+                {
+                    var t = rr.Elapsed;
+                    var txt = rr.Saving ? "СОХРАНЯЮ" : (t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss"));
+                    if (RecText.Text != txt) RecText.Text = txt;
+                }
+            }
             if (Buddy.Visibility == Visibility.Visible)
             {
                 var m = AppHost.Media?.Current;
