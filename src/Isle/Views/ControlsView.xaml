@@ -26,7 +26,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="{StaticResource CardHover}"/>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource CardHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Trigger.EnterActions>
@@ -59,7 +59,7 @@
         <Style x:Key="Badge" TargetType="Border">
             <Setter Property="Height" Value="22"/>
             <Setter Property="CornerRadius" Value="11"/>
-            <Setter Property="BorderBrush" Value="#1C1C20"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="9,0"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
@@ -90,12 +90,12 @@
                             <h:Icon Kind="Wifi" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="NetBadge" Style="{StaticResource Badge}" Margin="0,0,30,0">
-                            <TextBlock x:Name="NetBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="NetBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock x:Name="NetName" Text="Сеть" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="NetStatus" Text="—" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="NetStatus" Text="—" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
@@ -114,12 +114,12 @@
                             <h:Icon x:Name="BtIcon" Kind="Bluetooth" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="BtBadge" Style="{StaticResource Badge}" Margin="0">
-                            <TextBlock x:Name="BtBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="BtBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Bluetooth" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="BtStatus" Text="—" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="BtStatus" Text="—" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
@@ -130,12 +130,12 @@
                             <h:Icon x:Name="ThemeIcon" Kind="Contrast" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="ThemeBadge" Style="{StaticResource Badge}" Margin="0">
-                            <TextBlock x:Name="ThemeBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ThemeBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Тёмная тема" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="ThemeStatus" Text="—" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="ThemeStatus" Text="—" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>
@@ -146,12 +146,12 @@
                             <h:Icon Kind="Wave" Width="22" Height="22"/>
                         </Border>
                         <Border x:Name="TaskBadge" Style="{StaticResource Badge}" Margin="0">
-                            <TextBlock x:Name="TaskBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="#8B8B95" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TaskBadgeText" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
                     <StackPanel VerticalAlignment="Bottom">
                         <TextBlock Text="Диспетчер" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="LoadText" Text="задач" FontSize="13" Foreground="#8B8B95" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="LoadText" Text="задач" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </DockPanel>
             </Button>

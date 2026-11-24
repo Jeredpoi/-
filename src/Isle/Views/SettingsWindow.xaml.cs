@@ -33,6 +33,14 @@ namespace Isle.Views
             BuildKeys();
             Load();
             _loading = false;
+            // Esc — закрыть окно (запись сочетания клавиш перехватывает Esc раньше, сюда он не доходит);
+            // Enter в полях ключей и пароля — сохранить, не тянуться к кнопке
+            KeyDown += (_, e) => { if (e.Key == Key.Escape && !e.Handled) { e.Handled = true; Close(); } };
+            AiKey.KeyDown += (_, e) => { if (e.Key == Key.Enter) { OnAiSaveKey(AiKey, null); e.Handled = true; } };
+            VoiceKey.KeyDown += (_, e) => { if (e.Key == Key.Enter) { OnVoiceSaveKey(VoiceKey, null); e.Handled = true; } };
+            ObsPass.KeyDown += (_, e) => { if (e.Key == Key.Enter) { OnObsSave(ObsPass, null); e.Handled = true; } };
+            foreach (var tb in new[] { AiBase, AiModel })
+                tb.KeyDown += (_, e) => { if (e.Key == Key.Enter) { OnAiFieldsChanged(tb, null); e.Handled = true; } };
             UpdateService.Changed += RenderUpdate;
             Closed += (_, __) => UpdateService.Changed -= RenderUpdate;
             // поля ИИ, голоса и OBS сохраняются при уходе из поля — а при закрытии окна фокус не уходит
@@ -446,6 +454,10 @@ namespace Isle.Views
         {
             var keys = new[] { "SBg", "SSide", "SCard", "SCardBorder", "SField", "SFieldBorder", "SBtn", "SBtnBorder", "SSeg", "SSegHover", "SNavHover", "SNavSel", "SSep", "SNote" };
             if (!_darkRes.ContainsKey("SBg")) foreach (var k in keys) _darkRes[k] = Resources[k];
+            // в «Закате» акцент всегда розовый — выбор цвета акцента не действует, показываем это
+            Accents.IsEnabled = !Helpers.SunsetTheme.On;
+            Accents.Opacity = Helpers.SunsetTheme.On ? 0.4 : 1;
+            Accents.ToolTip = Helpers.SunsetTheme.On ? "В теме «Закат» акцент розовый" : null;
             if (!Helpers.SunsetTheme.On)
             {
                 foreach (var k in keys) Resources[k] = _darkRes[k];
@@ -639,9 +651,10 @@ namespace Isle.Views
                 if (p.Free)
                     content.Children.Add(new Border
                     {
-                        Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x2A, 0x22)), CornerRadius = new CornerRadius(6),
+                        // нейтральная полупрозрачная плашка: читается и на тёмной кнопке, и на выбранной (белой/розовой)
+                        Background = new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)), CornerRadius = new CornerRadius(6),
                         Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(8, 0, 0, 0),
-                        Child = new TextBlock { Text = "бесплатно", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0xD4, 0x9E)) }
+                        Child = new TextBlock { Text = "бесплатно", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xE8, 0xB2)) }
                     });
                 var rb = new RadioButton { Style = (Style)FindResource("SSegment"), GroupName = "ai", Tag = p.Id, Content = content };
                 rb.Click += (_, __) => SelectPreset(p.Id, true);
@@ -891,7 +904,12 @@ namespace Isle.Views
         };
 
         private static Brush Rgb(byte r, byte g, byte b, byte a = 255) { var x = new SolidColorBrush(Color.FromArgb(a, r, g, b)); x.Freeze(); return x; }
-        private static readonly Brush CapBg = Rgb(0x18, 0x18, 0x1C), CapLine = Rgb(0x2A, 0x2A, 0x32), CapFg = Rgb(0xEC, 0xEC, 0xF1),
+        // клавиши-«кнопки»: в «Закате» — светлое стекло, а не чёрные квадраты
+        private static Brush CapBg => Helpers.SunsetTheme.On ? CapBgGlass : CapBgDark;
+        private static Brush CapLine => Helpers.SunsetTheme.On ? CapLineGlass : CapLineDark;
+        private static readonly Brush CapBgDark = Rgb(0x18, 0x18, 0x1C), CapBgGlass = Rgb(0xFF, 0xFF, 0xFF, 0x1E),
+            CapLineDark = Rgb(0x2A, 0x2A, 0x32), CapLineGlass = Rgb(0xFF, 0xFF, 0xFF, 0x30);
+        private static readonly Brush CapFg = Rgb(0xEC, 0xEC, 0xF1),
             CapMuted = Rgb(0x8B, 0x8B, 0x95), HostHover = Rgb(0xFF, 0xFF, 0xFF, 0x0C), HostRec = Rgb(0xFF, 0xFF, 0xFF, 0x16);
 
         /// <summary>Сочетание кнопками-клавишами, как в знакомстве: [Ctrl] + [Alt] + [K].</summary>

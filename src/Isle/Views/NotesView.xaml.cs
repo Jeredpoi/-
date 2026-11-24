@@ -26,6 +26,7 @@ namespace Isle.Views
         public NotesView()
         {
             InitializeComponent();
+            RemInput.TextChanged += (_, __) => RemError.Text = ""; // ошибка уходит, как только начали исправлять
             if (_data.Notes.Count == 0) _data.Notes.Add(new Note());
             _save.Tick += (_, __) => { _save.Stop(); SaveNow(); };
             // выход из Isle сразу после набора — последние правки не теряем

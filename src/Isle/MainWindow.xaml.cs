@@ -1237,6 +1237,20 @@ namespace Isle
                     var ease = new Helpers.Spring { Damping = 9, Frequency = 9 };
                     TabIndicatorT.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(x, dur) { EasingFunction = ease });
                     TabIndicator.BeginAnimation(WidthProperty, new DoubleAnimation(Math.Max(30, w), dur) { EasingFunction = ease });
+                    // подпись выбранной вкладки раскрывается чуть позже — когда её ширина изменится, подсветка догонит
+                    // (раньше в «Закате» иногда оставался кружок шириной с иконку)
+                    SizeChangedEventHandler follow = null;
+                    follow = (_, __) =>
+                    {
+                        if (rb.IsChecked != true) { rb.SizeChanged -= follow; return; }
+                        var x2 = rb.TranslatePoint(new Point(0, 0), TabBar).X;
+                        TabIndicatorT.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(x2, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+                        TabIndicator.BeginAnimation(WidthProperty, new DoubleAnimation(Math.Max(30, rb.ActualWidth - 2), TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+                    };
+                    rb.SizeChanged += follow;
+                    var stop = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                    stop.Tick += (_, __) => { stop.Stop(); rb.SizeChanged -= follow; };
+                    stop.Start();
                 }
                 catch { }
             }, DispatcherPriority.Loaded);
@@ -1649,13 +1663,18 @@ namespace Isle
                     res["Pane"] = Helpers.SunsetTheme.GlassCard();
                     res["PaneBorder"] = Helpers.SunsetTheme.GlassBorder();
                     res["PanePad"] = new Thickness(12);
+                    // наведение и дорожки — тоже стеклом, а не серым #18181B
+                    res["CardHover"] = new SolidColorBrush(Color.FromArgb(150, 0x45, 0x1E, 0x5E));
+                    res["Track"] = new SolidColorBrush(Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF));
+                    res["Popup"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x12, 0x33));
+                    res["FocusBorder"] = new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0x4F, 0xA3));
                     // подписи светлее: на фото серый #8B8B95 тонет
                     res["Muted"] = new SolidColorBrush(Color.FromRgb(0xC4, 0xB8, 0xD8));
                     TabIndicator.Background = new LinearGradientBrush(Color.FromArgb(170, 0xFF, 0x4F, 0xA3), Color.FromArgb(170, 0x9B, 0x3C, 0xFF), 0);
                 }
                 else
                 {
-                    foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder", "Plate", "Well", "Pane", "PaneBorder", "PanePad", "Muted" }) res.Remove(k);
+                    foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder", "Plate", "Well", "Pane", "PaneBorder", "PanePad", "Muted", "CardHover", "Track", "Popup", "FocusBorder" }) res.Remove(k);
                     TabIndicator.Background = new SolidColorBrush(Color.FromRgb(0x24, 0x24, 0x2B));
                 }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;

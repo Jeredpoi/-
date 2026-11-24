@@ -170,7 +170,7 @@ namespace Isle.Views
             double height = WeatherFx.ActualHeight;
             if (width < 30 || height < 60) return;
             // та же погода и почти тот же размер — анимации уже идут, не перезапускаем их (иначе рывок)
-            string key = weather.Code + "|" + weather.IsDay + "|" + (weather.Wind >= 8) + "|" + Math.Round(width / 12) + "|" + Math.Round(height / 12);
+            string key = weather.Code + "|" + weather.IsDay + "|" + Isle.Helpers.SunsetTheme.On + "|" + (weather.Wind >= 8) + "|" + Math.Round(width / 12) + "|" + Math.Round(height / 12);
             if (key == _fxKey && WeatherFx.Children.Count > 0) return;
             _fxKey = key;
 

@@ -40,6 +40,15 @@ namespace Isle.Views
             (_mode == "day" ? ModeDay : _mode == "week" ? ModeWeek : ModeMonth).IsChecked = true;
             BuildChips();
             SetupTimeBox(FFrom, isStart: true);
+            // форма: Enter — сохранить, Esc — отмена; список календарей: Esc — закрыть
+            FormPane.PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter) { OnSave(null, null); e.Handled = true; }
+                else if (e.Key == Key.Escape) { OnCancel(null, null); e.Handled = true; }
+            };
+            FeedsPane.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { OnCancel(null, null); e.Handled = true; } };
+            // ошибка в форме прячется, как только начали исправлять
+            foreach (var t in new[] { FTitle, FFrom, FTo }) t.TextChanged += (_, __) => FError.Visibility = Visibility.Collapsed;
             SetupTimeBox(FTo, isStart: false);
             IsVisibleChanged += (_, __) => { if (IsVisible) { if (_day.Date != DateTime.Today && _shownToday != DateTime.Today) GoToday(); Render(); } };
             Render();
@@ -197,6 +206,8 @@ namespace Isle.Views
             if (e.Source == "local")
             {
                 row.Cursor = Cursors.Hand;
+                row.MouseEnter += (_, __) => row.SetResourceReference(Border.BackgroundProperty, "ChipHover");
+                row.MouseLeave += (_, __) => row.SetResourceReference(Border.BackgroundProperty, "Plate");
                 row.ToolTip = "Клик — изменить";
                 row.MouseLeftButtonUp += (_, __) => OpenForm(e);
             }
@@ -237,7 +248,12 @@ namespace Isle.Views
                 b.Child = new StackPanel { Children = {
                     new TextBlock { Text = o.Event.Title, FontSize = 12, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis },
                     new TextBlock { Text = o.TimeText, FontSize = 10, Foreground = muted } } };
-                if (o.Event.Source == "local") { b.Cursor = Cursors.Hand; var ev = o.Event; b.MouseLeftButtonUp += (_, __) => OpenForm(ev); }
+                if (o.Event.Source == "local")
+                {
+                    b.Cursor = Cursors.Hand; var ev = o.Event; b.MouseLeftButtonUp += (_, __) => OpenForm(ev);
+                    var normal = b.Background; var hover = Brush(o.Color, 0x66);
+                    b.MouseEnter += (_, __) => b.Background = hover; b.MouseLeave += (_, __) => b.Background = normal;
+                }
                 canvas.Children.Add(b);
                 blocks.Add((b, o));
             }

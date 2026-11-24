@@ -337,7 +337,7 @@ namespace Isle.Views
                 default:
                     Grid.SetColumnSpan(CoverGlow, 1);
                     Grid.SetColumnSpan(FillShade, 1);
-                    LyricsBorder.Background = (System.Windows.Media.Brush)FindResource("Card"); // ровный фон под текстом
+                    LyricsBorder.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "Card"); // ровный фон под текстом, следует за темой
                     CoverGlow.Margin = new Thickness(-30, -40, -10, -40);
                     CoverGlow.Opacity = 0.55;
                     CoverGlow.ClearValue(UIElement.OpacityMaskProperty);
@@ -522,7 +522,7 @@ namespace Isle.Views
         private void UpdateRepeat()
         {
             var (supported, on) = AppHost.Media.Repeat;
-            RepeatIcon.Foreground = on ? (System.Windows.Media.Brush)FindResource("Accent") : (System.Windows.Media.Brush)FindResource("Muted");
+            RepeatIcon.SetResourceReference(Helpers.Icon.ForegroundProperty, on ? "Accent" : "Muted");
             RepeatOne.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             RepeatBtn.Opacity = supported ? 1 : 0.55;
             RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи" : on ? "Повтор трека включён — нажми, чтобы выключить" : "Повторять трек";
