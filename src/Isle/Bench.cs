@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,70 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
+        private static void Call(object o, string method, params object[] args)
+        {
+            var m = o.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            m.Invoke(o, args);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                await Task.Delay(3000);
+                // «старые» события — без цвета, как в прошлой версии
+                var t = DateTime.Today;
+                foreach (var (title, h, d) in new[] { ("Созвон по проекту", 11.0, 0), ("Обед с мамой", 13.0, 0), ("Кино с друзьями", 18.0, 0), ("Спортзал", 8.0, 1), ("Стоматолог", 16.0, 2), ("Встреча", 10.0, 2), ("Отчёт", 15.0, 2) })
+                    CalendarService.Local.Add(new CalEvent { Title = title, Start = t.AddDays(d).AddHours(h), End = t.AddDays(d).AddHours(h + 1), Reminder = 10 });
+                typeof(CalendarService).GetMethod("AssignMissingColors", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
+                log.AppendLine("цвета: " + string.Join(", ", CalendarService.Local.Select(e => e.Title + "=" + e.Color)));
+                w.SuppressAutoCollapse = true;
+                w.Expand("calendar"); w.SelectTab("calendar"); await Task.Delay(1800);
+                var cal = (Isle.Views.CalendarView)w.GetView("calendar");
+                var rb = (RadioButton)cal.FindName("ModeMonth"); rb.IsChecked = true; Call(cal, "OnMode", rb, new RoutedEventArgs());
+                await Task.Delay(900);
+                SnapEl((FrameworkElement)w.Content, dir, "cal-month");
+                Call(cal, "OpenForm", new object[] { null }); await Task.Delay(700);
+                var from = (TextBox)cal.FindName("FFrom");
+                from.Text = ""; from.Text = "1830"; log.AppendLine("1830 → " + from.Text);
+                from.Text = ""; from.Text = "930"; log.AppendLine("930 → " + from.Text);
+                from.Text = "18:30";
+                from.RaiseEvent(new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, 120) { RoutedEvent = UIElement.PreviewMouseWheelEvent });
+                log.AppendLine("колёсико вверх: " + from.Text + " конец " + ((TextBox)cal.FindName("FTo")).Text);
+                await Task.Delay(500);
+                SnapEl((FrameworkElement)w.Content, dir, "cal-form");
+                AppSettings.Current.Theme = "sunset"; AppSettings.Current.Save(); w.ApplyAppearance(); await Task.Delay(900);
+                SnapEl((FrameworkElement)w.Content, dir, "cal-form-sunset");
+                Call(cal, "OnCancel", cal, new RoutedEventArgs()); await Task.Delay(600);
+                SnapEl((FrameworkElement)w.Content, dir, "cal-month-sunset");
+                AppSettings.Current.Theme = "dark"; AppSettings.Current.Save();
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
