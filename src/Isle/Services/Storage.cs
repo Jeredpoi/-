@@ -156,6 +156,10 @@ namespace Isle.Services
         /// «Привязать заново» выдаёт новый ключ, старая ссылка перестаёт открываться.
         /// </summary>
         public string PhoneToken { get; set; }
+        /// <summary>Напоминания о событиях календаря плашкой в чёлке.</summary>
+        public bool CalendarReminders { get; set; } = true;
+        /// <summary>Вид календаря: «day», «week», «month».</summary>
+        public string CalendarMode { get; set; } = "month";
         /// <summary>Привязанный телефон («iPhone · Safari»), null — ещё не привязан.</summary>
         public string PhonePairedName { get; set; }
         /// <summary>Снег из-под чёлки: «auto» — с 1 декабря по 14 января и когда за окном снег, «on» — всегда, «off» — никогда.</summary>

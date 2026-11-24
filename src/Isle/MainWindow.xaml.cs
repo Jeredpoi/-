@@ -332,6 +332,8 @@ namespace Isle
                     try { Win32.SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, new IntPtr(-1), new IntPtr(-1)); } catch { }
                 };
                 trim.Start();
+                // календарь: напоминания о событиях плашкой и обновление подключённых календарей
+                try { Services.CalendarService.Start(); } catch (Exception ex) { Journal.Warn("calendar", "старт: " + ex.Message); }
                 // привязанный телефон: страничка-закладка должна открываться сразу, без захода во вкладку
                 try { if (Services.PhoneLink.Paired) { Views.PhoneView.Hook(); Services.PhoneLink.StartIfPaired(); } } catch (Exception ex) { Journal.Warn("phone", "старт: " + ex.Message); }
                 App.Trace("все модули запущены");
@@ -1174,6 +1176,7 @@ namespace Isle
             else if (sender == TabText) SelectTab("text");
             else if (sender == TabChat) SelectTab("chat");
             else if (sender == TabNotes) SelectTab("notes");
+            else if (sender == TabCalendar) SelectTab("calendar");
             else if (sender == TabWeather) SelectTab("weather");
             else if (sender == TabControls) SelectTab("controls");
         }
@@ -1189,6 +1192,7 @@ namespace Isle
                 "text" => new Views.TextView(),
                 "chat" => new Views.ChatView(),
                 "notes" => new Views.NotesView(),
+                "calendar" => new Views.CalendarView(),
                 "weather" => new Views.WeatherView(),
                 "controls" => new Views.ControlsView(),
                 _ => new Views.HomeView()
@@ -1239,7 +1243,7 @@ namespace Isle
 
         private RadioButton TabButton(string tab) => tab switch
         {
-            "clip" => TabClip, "shelf" => TabShelf, "phone" => TabPhone, "text" => TabText, "chat" => TabChat, "notes" => TabNotes,
+            "clip" => TabClip, "shelf" => TabShelf, "phone" => TabPhone, "text" => TabText, "chat" => TabChat, "notes" => TabNotes, "calendar" => TabCalendar,
             "weather" => TabWeather, "controls" => TabControls, _ => TabHome
         };
 

@@ -1,0 +1,153 @@
+<UserControl x:Class="Isle.Views.CalendarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:h="clr-namespace:Isle.Helpers">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- шапка: месяц и стрелки слева, вид и кнопки справа -->
+        <DockPanel Margin="0,0,0,10">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border CornerRadius="12" Padding="3" Background="{DynamicResource ChipBg}" Margin="0,0,8,0">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="ModeDay" Style="{StaticResource Segment}" GroupName="calmode" Content="День" Tag="day" Click="OnMode" Margin="0"/>
+                        <RadioButton x:Name="ModeWeek" Style="{StaticResource Segment}" GroupName="calmode" Content="Неделя" Tag="week" Click="OnMode" Margin="4,0,0,0"/>
+                        <RadioButton x:Name="ModeMonth" Style="{StaticResource Segment}" GroupName="calmode" Content="Месяц" Tag="month" Click="OnMode" Margin="4,0,0,0"/>
+                    </StackPanel>
+                </Border>
+                <Button Style="{StaticResource Flat}" Width="34" Height="34" Padding="0" Click="OnFeeds" ToolTip="Календари: Google, Outlook, Apple, файл .ics">
+                    <h:Icon Kind="Link" Width="15" Height="15"/>
+                </Button>
+                <Button Style="{StaticResource Primary}" Width="34" Height="34" Padding="0" Margin="6,0,0,0" Click="OnAdd" ToolTip="Новое событие">
+                    <h:Icon Kind="Plus" Width="15" Height="15" StrokeWidth="2.4" Foreground="#08080A"/>
+                </Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnPrev" ToolTip="Назад">
+                    <h:Icon Kind="ChevLeft" Width="15" Height="15"/>
+                </Button>
+                <TextBlock x:Name="MonthTitle" FontSize="16" FontWeight="SemiBold" Width="150" TextAlignment="Center" VerticalAlignment="Center"/>
+                <Button Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Click="OnNext" ToolTip="Вперёд">
+                    <h:Icon Kind="ChevRight" Width="15" Height="15"/>
+                </Button>
+                <Button x:Name="TodayBtn" Style="{StaticResource Ghost}" Padding="10,5" Margin="6,0,0,0" Click="OnToday">
+                    <TextBlock Text="Сегодня" FontSize="12"/>
+                </Button>
+            </StackPanel>
+        </DockPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="318"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- месяц: дни с точками событий -->
+            <Border Style="{StaticResource CardBox}" Padding="10,8,10,8">
+                <DockPanel>
+                    <UniformGrid x:Name="WeekDays" DockPanel.Dock="Top" Columns="7" Margin="0,0,0,2"/>
+                    <UniformGrid x:Name="Days" Columns="7" Rows="6"/>
+                </DockPanel>
+            </Border>
+
+            <!-- справа: события выбранного дня / недели, форма события или список календарей -->
+            <Border Grid.Column="2" Style="{StaticResource CardBox}" Padding="14,12,6,10">
+                <Grid>
+                    <DockPanel x:Name="ListPane">
+                        <TextBlock x:Name="DayTitle" DockPanel.Dock="Top" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="2,0,0,8"/>
+                        <ScrollViewer x:Name="ListScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+                            <StackPanel x:Name="List"/>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <!-- новое событие / изменить своё -->
+                    <DockPanel x:Name="FormPane" Visibility="Collapsed" Margin="0,0,8,0">
+                        <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                            <Button x:Name="DeleteBtn" DockPanel.Dock="Left" Style="{StaticResource Ghost}" Padding="10,6" Click="OnDelete" Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal"><h:Icon Kind="Trash" Width="13" Height="13" Foreground="#F87171"/><TextBlock Text="Удалить" FontSize="12" Foreground="#F87171" Margin="6,0,0,0"/></StackPanel>
+                            </Button>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource Flat}" Padding="14,6" Click="OnCancel"><TextBlock Text="Отмена" FontSize="12"/></Button>
+                                <Button Style="{StaticResource Primary}" Padding="14,6" Margin="6,0,0,0" Click="OnSave"><TextBlock Text="Сохранить" FontSize="12"/></Button>
+                            </StackPanel>
+                        </DockPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBox x:Name="FTitle" Tag="Что будет?" FontSize="14" Height="38" VerticalContentAlignment="Center"/>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="74"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="74"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="FDate" Tag="дд.мм.гггг" Height="34" VerticalContentAlignment="Center" ToolTip="Дата: 24.11.2026"/>
+                                    <TextBox x:Name="FFrom" Grid.Column="2" Tag="18:00" Height="34" VerticalContentAlignment="Center" ToolTip="Начало"/>
+                                    <TextBox x:Name="FTo" Grid.Column="4" Tag="19:00" Height="34" VerticalContentAlignment="Center" ToolTip="Конец"/>
+                                </Grid>
+                                <TextBox x:Name="FPlace" Tag="Где (необязательно)" Height="34" VerticalContentAlignment="Center" Margin="0,8,0,0"/>
+                                <WrapPanel Margin="0,10,0,0">
+                                    <ToggleButton x:Name="FAllDay" Style="{StaticResource Chip}" Content="Весь день" Click="OnAllDay" Margin="0,0,6,6"/>
+                                </WrapPanel>
+                                <TextBlock Text="Напомнить" FontSize="11" Foreground="{DynamicResource Muted}" Margin="2,4,0,6"/>
+                                <WrapPanel x:Name="FRemind"/>
+                                <TextBlock Text="Повторять" FontSize="11" Foreground="{DynamicResource Muted}" Margin="2,6,0,6"/>
+                                <WrapPanel x:Name="FRepeat"/>
+                                <TextBlock x:Name="FError" Foreground="#F87171" FontSize="11" TextWrapping="Wrap" Margin="2,6,0,0" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <!-- календари: подключить по ссылке, импорт файла -->
+                    <DockPanel x:Name="FeedsPane" Visibility="Collapsed" Margin="0,0,8,0">
+                        <DockPanel DockPanel.Dock="Top" Margin="2,0,0,8">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Width="28" Height="28" Padding="0" Click="OnCancel" ToolTip="Закрыть">
+                                <h:Icon Kind="Close" Width="13" Height="13"/>
+                            </Button>
+                            <TextBlock Text="Календари" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <StackPanel x:Name="FeedList"/>
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="FeedUrl" Tag="Ссылка iCal: https://… или webcal://…" Height="34" VerticalContentAlignment="Center" KeyDown="OnFeedKey"/>
+                                    <Button x:Name="FeedAddBtn" Grid.Column="1" Style="{StaticResource Primary}" Padding="12,0" Height="34" Margin="8,0,0,0" Click="OnFeedAdd">
+                                        <TextBlock Text="Подключить" FontSize="12"/>
+                                    </Button>
+                                </Grid>
+                                <TextBlock x:Name="FeedStatus" FontSize="11" TextWrapping="Wrap" Margin="2,6,0,0" Visibility="Collapsed"/>
+                                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" LineHeight="16" Margin="2,10,0,0"
+                                           Text="Где взять ссылку — входить в аккаунт не нужно:"/>
+                                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" LineHeight="16" Margin="2,4,0,0"
+                                           Text="• Google: настройки календаря → «Интеграция календаря» → «Секретный адрес в формате iCal»."/>
+                                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" LineHeight="16" Margin="2,2,0,0"
+                                           Text="• Outlook: Параметры → Календарь → «Общие календари» → «Опубликовать календарь» → ссылка ICS."/>
+                                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" LineHeight="16" Margin="2,2,0,0"
+                                           Text="• Apple: в «Календаре» на iPhone или iCloud.com — «Поделиться» → «Публичный календарь» → скопировать ссылку."/>
+                                <TextBlock Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" LineHeight="16" Margin="2,2,0,0"
+                                           Text="Подключённый календарь обновляется сам раз в полчаса. События из него только показываются — менять их нужно там."/>
+                                <WrapPanel Margin="0,10,0,0">
+                                    <Button Style="{StaticResource Flat}" Padding="12,6" Margin="0,0,6,6" Click="OnImport" ToolTip="Перенести все события из выгрузки (.ics) в свой календарь Isle">
+                                        <StackPanel Orientation="Horizontal"><h:Icon Kind="File" Width="13" Height="13"/><TextBlock Text="Импорт файла .ics" FontSize="12" Margin="6,0,0,0"/></StackPanel>
+                                    </Button>
+                                    <ToggleButton x:Name="RemindToggle" Style="{StaticResource Chip}" Click="OnRemindToggle" Margin="0,0,6,6" Height="32" ToolTip="Плашка в чёлке перед началом события">
+                                        <StackPanel Orientation="Horizontal"><h:Icon Kind="Bell" Width="12" Height="12"/><TextBlock Text="Напоминать в чёлке" Margin="6,0,0,0"/></StackPanel>
+                                    </ToggleButton>
+                                </WrapPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

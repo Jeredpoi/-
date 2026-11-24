@@ -276,6 +276,9 @@
                                 <RadioButton Style="{StaticResource Tab}" Content="Заметка" x:Name="TabNotes" Checked="OnTab">
                                     <RadioButton.Tag><h:Icon Kind="Note" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>
+                                <RadioButton Style="{StaticResource Tab}" Content="Календарь" x:Name="TabCalendar" Checked="OnTab">
+                                    <RadioButton.Tag><h:Icon Kind="Calendar" Width="18" Height="18"/></RadioButton.Tag>
+                                </RadioButton>
                                 <RadioButton Style="{StaticResource Tab}" Content="Погода" x:Name="TabWeather" Checked="OnTab">
                                     <RadioButton.Tag><h:Icon Kind="Sun" Width="18" Height="18"/></RadioButton.Tag>
                                 </RadioButton>

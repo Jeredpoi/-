@@ -110,6 +110,9 @@ namespace Isle.Services
         public const string Search = "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M15.5 15.5L20 20";
         public const string Trash = "M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l.8 11.6a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7M10 11v5M14 11v5";
         public const string Plus = "M12 5v14M5 12h14";
+        public const string ChevLeft = "M15 5.5l-6.5 6.5 6.5 6.5";
+        public const string ChevRight = "M9 5.5l6.5 6.5-6.5 6.5";
+        public const string Calendar = "M8 2.5v4M16 2.5v4M3.5 9.5h17M5.5 4.5h13a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2z";
         public const string Send = "M12 19V5M6 11l6-6 6 6";
         public const string Lock = "M6.5 10.5h11A1.5 1.5 0 0 1 19 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5V12a1.5 1.5 0 0 1 1.5-1.5zM8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2";
         public const string Restart = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9M4.5 4.5V9H9";

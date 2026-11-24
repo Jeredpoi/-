@@ -20,6 +20,7 @@ namespace Isle.Helpers
             new("text", "Текст", "Text"),
             new("chat", "Чат", "Chat"),
             new("notes", "Заметка", "Note"),
+            new("calendar", "Календарь", "Calendar"),
             new("weather", "Погода", "Sun"),
             new("controls", "Управление", "Sliders"),
         };
