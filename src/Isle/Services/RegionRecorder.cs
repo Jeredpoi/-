@@ -44,6 +44,9 @@ namespace Isle.Services
         private readonly bool _sysAudio;
         private bool _mic;
         private volatile bool _micMuted;
+        private volatile bool _sysMuted;
+        /// <summary>Звук компьютера пишется сейчас (включён и не заглушён на ходу).</summary>
+        public bool SysOn => _sysCap != null && !_sysMuted;
         /// <summary>Микрофон пишется сейчас (включён и не выключен на ходу).</summary>
         public bool MicOn => _micCap != null && !_micMuted;
         private const int Fps = 30;
@@ -181,6 +184,7 @@ namespace Isle.Services
                     if (_stopping) return;
                     // микрофон выключили на ходу — вместо голоса тишина той же длины (дорожка не сдвигается)
                     if (isMic && _micMuted) Array.Clear(e.Buffer, 0, e.BytesRecorded);
+                    if (!isMic && _sysMuted) Array.Clear(e.Buffer, 0, e.BytesRecorded);
                     // пока ничего не звучит, звуковая карта не присылает данных — заполняем паузу тишиной по часам
                     long expected = (long)(_audioClock.Elapsed.TotalSeconds * fmt.AverageBytesPerSecond);
                     expected -= expected % fmt.BlockAlign;
@@ -213,6 +217,20 @@ namespace Isle.Services
             }
             _micMuted = !on;
             Journal.Info("record", "микрофон " + (on ? "включён" : "выключен") + " во время записи");
+            StateChanged?.Invoke();
+        }
+
+        /// <summary>Заглушить/вернуть звук компьютера во время записи (не был включён — начинает писаться сейчас).</summary>
+        public void SetSystemAudio(bool on)
+        {
+            if (_stopping) return;
+            if (on && _sysCap == null)
+            {
+                try { lock (_lock) (_sysCap, _sysWav, _sysPath) = StartAudio(new WasapiLoopbackCapture(), "sys"); }
+                catch (Exception ex) { Journal.Warn("record", "звук компьютера не включился: " + ex.Message); return; }
+            }
+            _sysMuted = !on;
+            Journal.Info("record", "звук компьютера " + (on ? "включён" : "заглушён") + " во время записи");
             StateChanged?.Invoke();
         }
 

@@ -26,6 +26,9 @@ namespace Isle.Overlays
         private readonly Border _bar = new() { CornerRadius = new CornerRadius(14), Padding = new Thickness(6), Visibility = Visibility.Collapsed };
         private readonly Border _hint;
         private bool _micOn = AppSettings.Current.RecordMic;
+        private bool _sysOn = AppSettings.Current.RecordSystemAudio;
+        private Border _sysBtn;
+        private Icon _sysIcon;
         private Border _micBtn;
         private Icon _micIcon;
         private readonly (int x, int y, int w, int h)? _preset;
@@ -74,6 +77,10 @@ namespace Isle.Overlays
             _bar.Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x12, 0x12, 0x16));
             _bar.BorderBrush = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x32)); _bar.BorderThickness = new Thickness(1);
             // микрофон: круглая кнопка, зелёная — пишется, красная — выключен
+            // звук компьютера — так же: зелёный — пишется, красный — заглушён
+            _sysIcon = new Icon { Kind = "Volume", Width = 15, Height = 15, StrokeWidth = 2, Foreground = Brushes.White };
+            _sysBtn = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(17), Cursor = Cursors.Hand, Child = _sysIcon, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+            _sysBtn.MouseLeftButtonUp += (_, e) => { e.Handled = true; _sysOn = !_sysOn; PaintMic(); };
             _micIcon = new Icon { Kind = "Mic", Width = 15, Height = 15, StrokeWidth = 2, Foreground = Brushes.White };
             _micBtn = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(17), Cursor = Cursors.Hand, Child = _micIcon, VerticalAlignment = VerticalAlignment.Center };
             _micBtn.MouseLeftButtonUp += (_, e) => { e.Handled = true; _micOn = !_micOn; PaintMic(); };
@@ -87,7 +94,7 @@ namespace Isle.Overlays
             var cancel = new Button { Style = (Style)Application.Current.FindResource("Ghost"), Width = 32, Height = 32, Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 0), Cursor = Cursors.Hand,
                 ToolTip = "Отмена (Esc)", Content = new Icon { Kind = "Close", Width = 13, Height = 13, Foreground = Brushes.White } };
             cancel.Click += (_, __) => Finish(false);
-            _bar.Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { _micBtn, go, cancel } };
+            _bar.Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { _sysBtn, _micBtn, go, cancel } };
             _canvas.Children.Add(_bar);
             Content = _canvas;
 
@@ -129,6 +136,10 @@ namespace Isle.Overlays
             _micBtn.Background = new SolidColorBrush(_micOn ? Color.FromRgb(0x22, 0xC5, 0x5E) : Color.FromRgb(0xEF, 0x44, 0x44));
             _micIcon.Kind = _micOn ? "Mic" : "MicOff";
             _micBtn.ToolTip = _micOn ? "Микрофон включён · клик — выключить" : "Микрофон выключен · клик — включить";
+            if (_sysBtn == null) return;
+            _sysBtn.Background = new SolidColorBrush(_sysOn ? Color.FromRgb(0x22, 0xC5, 0x5E) : Color.FromRgb(0xEF, 0x44, 0x44));
+            _sysIcon.Kind = _sysOn ? "Volume" : "Mute";
+            _sysBtn.ToolTip = _sysOn ? "Звук компьютера пишется · клик — заглушить" : "Звук компьютера заглушён · клик — включить";
         }
 
         private void OnDown(object s, MouseButtonEventArgs e)
@@ -212,8 +223,9 @@ namespace Isle.Overlays
             {
                 var px = ToPixels(_sel);
                 AppSettings.Current.RecordMic = _micOn;
+                AppSettings.Current.RecordSystemAudio = _sysOn;
                 AppSettings.Current.Save();
-                Result = (px.x, px.y, px.w, px.h, AppSettings.Current.RecordSystemAudio, _micOn);
+                Result = (px.x, px.y, px.w, px.h, _sysOn, _micOn);
             }
             Close();
         }
