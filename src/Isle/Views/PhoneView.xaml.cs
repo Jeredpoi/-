@@ -486,21 +486,75 @@ namespace Isle.Views
                 info.Children.Add(new TextBlock { Text = it.Text != null ? it.Text.Replace('\n', ' ') : it.Name, FontSize = 13, FontWeight = FontWeights.Medium, TextTrimming = TextTrimming.CharacterEllipsis });
                 info.Children.Add(new TextBlock { Text = (it.Text != null ? "текст · в буфере" : Size(it.Size)) + " · " + it.Time.ToString("HH:mm"), Style = (Style)FindResource("MutedText"), FontSize = 11 });
                 Grid.SetColumn(info, 1); g.Children.Add(info);
+                // справа — кнопки «Открыть» и «Показать в папке»; клик по самой записи только копирует
+                if (it.Path != null)
+                {
+                    g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    var btns = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+                    btns.Children.Add(RowButton("External", "Открыть", () => OpenFile(it.Path)));
+                    btns.Children.Add(RowButton("Folder", "Показать в папке", () => ShowInFolder(it.Path)));
+                    Grid.SetColumn(btns, 2); g.Children.Add(btns);
+                }
                 row.Child = g;
-                row.ToolTip = it.Text != null ? "Клик — скопировать снова" : "Клик — открыть · правый клик — показать в папке";
+                row.ToolTip = it.Text != null ? "Клик — скопировать снова" : "Клик — скопировать" + (it.IsPhoto ? " (вставится и как картинка, и как файл)" : "");
                 row.MouseLeftButtonUp += (_, __) =>
                 {
-                    if (it.Text != null) { ClipboardService.SetText(it.Text); ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = "Скопировано", Icon = Icons.Copy, Important = true, Duration = TimeSpan.FromSeconds(1.2) }); }
-                    else if (File.Exists(it.Path)) { try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(it.Path) { UseShellExecute = true }); AppHost.Window.Collapse(); } catch { } }
-                };
-                row.MouseRightButtonUp += (_, e) =>
-                {
-                    e.Handled = true;
-                    if (it.Path != null && File.Exists(it.Path)) { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + it.Path + "\""); AppHost.Window.Collapse(); }
+                    if (it.Text != null) { ClipboardService.SetText(it.Text); Copied(); }
+                    else if (File.Exists(it.Path)) CopyFile(it);
+                    else ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Файла больше нет", Subtitle = it.Name, Icon = Icons.File, Important = true, Duration = TimeSpan.FromSeconds(2) });
                 };
                 InList.Children.Add(row);
             }
             if (fresh && InList.Children.Count > 0) SlideIn((FrameworkElement)InList.Children[0]);
+        }
+
+        private Button RowButton(string icon, string tip, Action act)
+        {
+            var b = new Button { Style = (Style)FindResource("Ghost"), Width = 30, Height = 30, Padding = new Thickness(0), ToolTip = tip,
+                Content = new Icon { Kind = icon, Width = 14, Height = 14 } };
+            b.Click += (_, e) => { e.Handled = true; act(); };
+            return b;
+        }
+
+        private static void Copied(string what = "Скопировано") =>
+            ToastBus.Show(new Toast { Kind = ToastKind.Success, Title = what, Icon = Icons.Copy, Important = true, Duration = TimeSpan.FromSeconds(1.2) });
+
+        /// <summary>Файл — в буфер как файл (вставится в папку, чат, письмо); фото — ещё и как картинка (вставится в редактор).</summary>
+        private static void CopyFile(PhoneItem it)
+        {
+            var path = it.Path;
+            BitmapSource img = null;
+            if (it.IsPhoto)
+            {
+                try
+                {
+                    var b = new BitmapImage();
+                    b.BeginInit(); b.CacheOption = BitmapCacheOption.OnLoad; b.UriSource = new Uri(path); b.EndInit(); b.Freeze();
+                    img = b;
+                }
+                catch { } // формат, который Windows не умеет показывать (например, HEIC без расширения) — копируем только файл
+            }
+            ClipboardService.IgnoreUntil = DateTime.Now.AddMilliseconds(600); // в историю буфера он уже попал, когда пришёл
+            bool ok = ClipboardWrite.SetOrLater(() =>
+            {
+                var d = new DataObject();
+                d.SetFileDropList(new System.Collections.Specialized.StringCollection { path });
+                if (img != null) d.SetImage(img);
+                return d;
+            }, it.IsPhoto ? "фото с телефона" : "файл с телефона");
+            if (ok) Copied(it.IsPhoto ? "Фото скопировано" : "Файл скопирован");
+        }
+
+        private static void OpenFile(string path)
+        {
+            if (!File.Exists(path)) return;
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); AppHost.Window.Collapse(); } catch { }
+        }
+
+        private static void ShowInFolder(string path)
+        {
+            if (!File.Exists(path)) return;
+            try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\""); AppHost.Window.Collapse(); } catch { }
         }
 
         // ---------- на телефон ----------
