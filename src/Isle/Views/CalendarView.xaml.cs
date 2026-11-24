@@ -293,6 +293,25 @@ namespace Isle.Views
 
         private void OnToday(object s, RoutedEventArgs e) => GoToday();
 
+        /// <summary>
+        /// Колёсико над месяцем — листать месяцы (вниз — следующий). Тачпад шлёт много мелких шагов —
+        /// копим до одного «щелчка», и не чаще раза в 120 мс, чтобы месяцы не пролетали пачкой.
+        /// </summary>
+        private int _wheel;
+        private DateTime _wheelAt;
+        private void OnMonthWheel(object s, MouseWheelEventArgs e)
+        {
+            e.Handled = true;
+            _wheel += e.Delta;
+            if (Math.Abs(_wheel) < 120 || DateTime.Now - _wheelAt < TimeSpan.FromMilliseconds(120)) return;
+            int dir = _wheel < 0 ? 1 : -1;
+            _wheel = 0; _wheelAt = DateTime.Now;
+            _month = _month.AddMonths(dir);
+            // в «Месяце» выбранный день идёт за месяцем (сегодня — если вернулись в текущий), в «Дне»/«Неделе» остаётся
+            if (_mode == "month") _day = _month.Month == DateTime.Today.Month && _month.Year == DateTime.Today.Year ? DateTime.Today : _month;
+            Render();
+        }
+
         private void GoToday()
         {
             _shownToday = DateTime.Today;
