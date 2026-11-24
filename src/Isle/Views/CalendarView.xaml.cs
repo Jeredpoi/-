@@ -381,7 +381,7 @@ namespace Isle.Views
                 _formDate = start.Date;
                 FFrom.Text = start.ToString("HH:mm"); FTo.Text = start.AddHours(1).ToString("HH:mm");
                 FAllDay.IsChecked = false; _remind = 10; _repeat = null;
-                _color = CalendarService.PickColor(start.Date);
+                _color = null; // цвет раздаст приложение при сохранении — без повторов в дне
             }
             else
             {
@@ -393,7 +393,6 @@ namespace Isle.Views
             }
             DeleteBtn.Visibility = ev != null ? Visibility.Visible : Visibility.Collapsed;
             SetFormDate(_formDate);
-            BuildColors();
             OnAllDay(null, null);
             SyncChips();
             ShowPane(FormPane);
@@ -426,7 +425,8 @@ namespace Isle.Views
             ev.Start = start; ev.End = end; ev.AllDay = all;
             ev.Reminder = all && _remind is < 1440 ? null : _remind;
             ev.Rule = _repeat == null ? null : new CalRule { Freq = _repeat, Interval = 1 };
-            ev.Color = _color;
+            // цвет — сам: у нового — которого в этот день ещё нет; у изменённого — прежний, если дата не сменилась
+            ev.Color = _editing != null && _editing.Start.Date == start.Date ? _color : CalendarService.PickColor(start.Date, ev);
             CalendarService.Save(ev);
             Journal.Info("calendar", (_editing == null ? "добавлено" : "изменено") + " событие" + (ev.Rule != null ? ", повтор " + ev.Rule.Freq : ""));
             _day = start.Date;
@@ -449,22 +449,6 @@ namespace Isle.Views
 
         private void OnFormPrevDay(object s, RoutedEventArgs e) => SetFormDate(_formDate.AddDays(-1));
         private void OnFormNextDay(object s, RoutedEventArgs e) => SetFormDate(_formDate.AddDays(1));
-
-        /// <summary>Кружки цветов: выбранный — с белым кольцом.</summary>
-        private void BuildColors()
-        {
-            FColors.Children.Clear();
-            foreach (var hex in CalendarService.Palette)
-            {
-                var c = hex;
-                bool sel = string.Equals(c, _color, StringComparison.OrdinalIgnoreCase);
-                var ring = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(13), Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand,
-                    BorderThickness = new Thickness(2), BorderBrush = sel ? (Brush)FindResource("Fg") : Brushes.Transparent, Background = Brushes.Transparent,
-                    Child = new Ellipse { Width = 16, Height = 16, Fill = Brush(c) } };
-                ring.MouseLeftButtonUp += (_, __) => { _color = c; BuildColors(); };
-                FColors.Children.Add(ring);
-            }
-        }
 
         /// <summary>
         /// Поле времени: принимает только цифры, двоеточие ставит само («1830» → «18:30», «930» → «9:30»),
@@ -563,6 +547,7 @@ namespace Isle.Views
         {
             FeedList.Children.Clear();
             RemindToggle.IsChecked = AppSettings.Current.CalendarReminders;
+            SoundToggle.IsChecked = AppSettings.Current.CalendarSound;
             var rows = new List<(string color, string name, string sub, Action remove)>
             {
                 (CalendarService.LocalColor, "Мой календарь (Isle)", CalendarService.Local.Count + " событий", null)
@@ -631,6 +616,12 @@ namespace Isle.Views
             }
             catch (Exception ex) { Status("Файл не прочитался: " + ex.Message, true); }
             finally { if (AppHost.Window != null) AppHost.Window.SuppressAutoCollapse = false; }
+        }
+
+        private void OnSoundToggle(object s, RoutedEventArgs e)
+        {
+            AppSettings.Current.CalendarSound = SoundToggle.IsChecked == true;
+            AppSettings.Current.Save();
         }
 
         private void OnRemindToggle(object s, RoutedEventArgs e)

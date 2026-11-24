@@ -158,6 +158,8 @@ namespace Isle.Services
         public string PhoneToken { get; set; }
         /// <summary>Напоминания о событиях календаря плашкой в чёлке.</summary>
         public bool CalendarReminders { get; set; } = true;
+        /// <summary>Звук в момент начала события.</summary>
+        public bool CalendarSound { get; set; } = true;
         /// <summary>Вид календаря: «day», «week», «month».</summary>
         public string CalendarMode { get; set; } = "month";
         /// <summary>Привязанный телефон («iPhone · Safari»), null — ещё не привязан.</summary>

@@ -110,8 +110,6 @@
                                 <WrapPanel Margin="0,10,0,0">
                                     <ToggleButton x:Name="FAllDay" Style="{StaticResource Chip}" Content="Весь день" Click="OnAllDay" Margin="0,0,6,6"/>
                                 </WrapPanel>
-                                <TextBlock Text="Цвет" FontSize="11" Foreground="{DynamicResource Muted}" Margin="2,4,0,6"/>
-                                <WrapPanel x:Name="FColors" Margin="0,0,0,6"/>
                                 <TextBlock Text="Напомнить" FontSize="11" Foreground="{DynamicResource Muted}" Margin="2,4,0,6"/>
                                 <WrapPanel x:Name="FRemind"/>
                                 <TextBlock Text="Повторять" FontSize="11" Foreground="{DynamicResource Muted}" Margin="2,6,0,6"/>
@@ -157,6 +155,9 @@
                                     <Button Style="{StaticResource Flat}" Padding="12,6" Margin="0,0,6,6" Click="OnImport" ToolTip="Перенести все события из выгрузки (.ics) в свой календарь Isle">
                                         <StackPanel Orientation="Horizontal"><h:Icon Kind="File" Width="13" Height="13"/><TextBlock Text="Импорт файла .ics" FontSize="12" Margin="6,0,0,0"/></StackPanel>
                                     </Button>
+                                    <ToggleButton x:Name="SoundToggle" Style="{StaticResource Chip}" Click="OnSoundToggle" Margin="0,0,6,6" Height="32" ToolTip="Один короткий звук, когда событие начинается">
+                                        <StackPanel Orientation="Horizontal"><h:Icon Kind="Volume" Width="12" Height="12"/><TextBlock Text="Звук в начале" Margin="6,0,0,0"/></StackPanel>
+                                    </ToggleButton>
                                     <ToggleButton x:Name="RemindToggle" Style="{StaticResource Chip}" Click="OnRemindToggle" Margin="0,0,6,6" Height="32" ToolTip="Плашка в чёлке перед началом события">
                                         <StackPanel Orientation="Horizontal"><h:Icon Kind="Bell" Width="12" Height="12"/><TextBlock Text="Напоминать в чёлке" Margin="6,0,0,0"/></StackPanel>
                                     </ToggleButton>

@@ -131,11 +131,16 @@ namespace Isle.Services
         }
 
         /// <summary>Цвет для события в этот день: первый, которого в дне ещё нет (иначе — самый редкий).</summary>
+        private static readonly Random Rng = new();
         public static string PickColor(DateTime day, CalEvent except = null)
         {
-            var used = Local.Where(e => e != except && !string.IsNullOrEmpty(e.Color) && e.Start.Date <= day && e.End >= day)
-                            .GroupBy(e => e.Color).ToDictionary(g => g.Key, g => g.Count());
-            return Palette.OrderBy(c => used.TryGetValue(c, out var n) ? n : 0).ThenBy(c => Array.IndexOf(Palette, c)).First();
+            // учитываем и повторы (событие «каждый день» стоит в каждом дне), и подключённые календари
+            var used = Between(day.Date, day.Date.AddDays(1)).Where(o => o.Event != except && !(except?.Uid != null && o.Event.Uid == except.Uid))
+                            .GroupBy(o => o.Color.ToUpperInvariant()).ToDictionary(g => g.Key, g => g.Count());
+            // без повторов; из свободных — случайный, чтобы календарь не был «светофором» одного порядка
+            var free = Palette.Where(c => !used.ContainsKey(c)).ToList();
+            if (free.Count > 0) return free[Rng.Next(free.Count)];
+            return Palette.OrderBy(c => used.TryGetValue(c, out var n) ? n : 0).First();
         }
 
         private static void SaveLocal() => Write(LocalPath, JsonSerializer.Serialize(Local));
@@ -354,7 +359,8 @@ namespace Isle.Services
         }
 
         // ---------- напоминания ----------
-        private static readonly DispatcherTimer Ticker = new() { Interval = TimeSpan.FromSeconds(20) };
+        // проверка раз в 5 секунд: плашка и звук в начале события — без заметной задержки
+        private static readonly DispatcherTimer Ticker = new() { Interval = TimeSpan.FromSeconds(5) };
         private static readonly DispatcherTimer FeedTimer = new() { Interval = TimeSpan.FromMinutes(30) };
         private static readonly HashSet<string> Fired = new();
 
@@ -400,8 +406,29 @@ namespace Isle.Services
             {
                 Kind = ToastKind.Info, Title = o.Event.Title, Private = true,
                 Subtitle = when + " · " + o.TimeText + (string.IsNullOrWhiteSpace(o.Event.Location) ? "" : " · " + o.Event.Location),
-                Icon = Icons.Calendar, Important = true, Duration = TimeSpan.FromSeconds(kind == "start" ? 6 : 5),
+                Icon = Icons.Calendar, Important = true, Duration = TimeSpan.FromSeconds(kind == "start" ? 8 : 5),
             });
+            // в момент начала — один короткий звук (заранее — тихо, только плашка)
+            if (kind == "start" && AppSettings.Current.CalendarSound) Chime();
+        }
+
+        /// <summary>Звук напоминания Windows («Календарь»), если его нет — обычный системный. Один раз, без повторов.</summary>
+        private static void Chime()
+        {
+            try
+            {
+                var media = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media");
+                foreach (var name in new[] { "Windows Notify Calendar.wav", "Windows Notify System Generic.wav", "notify.wav" })
+                {
+                    var p = Path.Combine(media, name);
+                    if (!File.Exists(p)) continue;
+                    var player = new System.Media.SoundPlayer(p);
+                    player.Play(); // асинхронно, один раз
+                    return;
+                }
+                System.Media.SystemSounds.Asterisk.Play();
+            }
+            catch { }
         }
 
         public static string Minutes(int m) => m >= 60 && m % 60 == 0 ? (m / 60) + " ч" : m >= 60 ? (m / 60) + " ч " + (m % 60) + " мин" : Math.Max(1, m) + " мин";
