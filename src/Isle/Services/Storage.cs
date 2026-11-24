@@ -220,6 +220,12 @@ namespace Isle.Services
         public string HotkeyVoice { get; set; } = "Ctrl+Alt+D";
         public string HotkeyVoiceCommand { get; set; } = "Ctrl+Alt+A";
         public string HotkeyCollapse { get; set; } = "Escape";
+        /// <summary>Запись выбранной области видео (встроенная запись).</summary>
+        public string HotkeyRecord { get; set; } = "Ctrl+Alt+R";
+        /// <summary>Чем записывать экран: «isle» — встроенная запись области, «obs» — через OBS.</summary>
+        public string RecordEngine { get; set; } = "isle";
+        public bool RecordSystemAudio { get; set; } = true;
+        public bool RecordMic { get; set; }
         /// <summary>Клавиша PrintScreen делает снимок через Isle (выделение области, карточка в чёлке).</summary>
         public bool PrintScreenIsle { get; set; }
         /// <summary>Сохранять снимки Isle в «Изображения\\Isle» (а не только в буфер обмена).</summary>
