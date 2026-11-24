@@ -72,6 +72,14 @@ namespace Isle
                 anim.Start();
                 await Task.Delay(800);
                 var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                // панель записи над уже выбранной областью (как после «камеры» в снимке)
+                {
+                    var d0 = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                    var pk = new Isle.Overlays.RecordPicker((int)(100 * d0.M11), (int)(150 * d0.M22), (int)(640 * d0.M11), (int)(360 * d0.M22));
+                    pk.Show(); await Task.Delay(900);
+                    SnapEl((FrameworkElement)pk.Content, dir, "picker");
+                    pk.Close(); await Task.Delay(300);
+                }
                 int px(double v) => (int)Math.Round(v * dev.M11);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 await RegionRecorder.StartAsync(px(100), px(150), px(640), px(360), true, false);
