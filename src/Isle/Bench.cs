@@ -59,7 +59,7 @@ namespace Isle
                 w.SuppressAutoCollapse = true;
                 // запись экрана идёт первые 15 секунд: снег у свёрнутой чёлки, раскрытие, сворачивание
                 await Task.Delay(5000);
-                for (int k = 0; k < 4; k++) { SnapEl((FrameworkElement)w.Content, dir, "snow-collapsed-" + k); await Task.Delay(400); }
+                for (int k = 0; k < 4; k++) { SnapEl((FrameworkElement)w.Content, dir, "snow-collapsed-" + k); await Task.Delay(1500); }
                 File.WriteAllText(Path.Combine(dir, "snow-state.txt"), "visible=" + w.Snow.IsVisible + " active=" + w.Snow.Active + " size=" + w.Snow.ActualWidth + "x" + w.Snow.ActualHeight);
                 w.Expand("home");
                 await Task.Delay(700);
