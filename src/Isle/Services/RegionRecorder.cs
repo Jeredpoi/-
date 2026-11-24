@@ -312,33 +312,45 @@ namespace Isle.Services
             bool anyAudio = tracks[0] != null || tracks[1] != null;
             if (!anyAudio) { File.Move(_videoTmp, final); return final; }
 
-            // сводим видео и звук в один файл
+            // сводим видео и звук в один файл; звук начали писать чуть раньше первого кадра — эту долю отрезаем
             var sw = Stopwatch.StartNew();
-            var comp = new MediaComposition();
-            comp.Clips.Add(await MediaClip.CreateFromFileAsync(await StorageFile.GetFileFromPathAsync(_videoTmp)));
-            // звук начали писать чуть раньше первого кадра — эту долю отрезаем
             var audioStart = TimeSpan.FromTicks((long)(_audioStartQpc * (TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency)));
             var lead = _t0.Value - audioStart;
-            foreach (var p in tracks)
-            {
-                if (p == null) continue;
-                var track = await BackgroundAudioTrack.CreateFromFileAsync(await StorageFile.GetFileFromPathAsync(p));
-                if (lead > TimeSpan.Zero && lead < track.OriginalDuration) track.TrimTimeFromStart = lead;
-                comp.BackgroundAudioTracks.Add(track);
-            }
-            File.WriteAllBytes(final, Array.Empty<byte>());
-            var outFile = await StorageFile.GetFileFromPathAsync(final);
-            var result = await comp.RenderToFileAsync(outFile, MediaTrimmingPreference.Precise, VideoProfile(withAudio: true));
-            if (result != Windows.Media.Transcoding.TranscodeFailureReason.None)
+            if (!await MuxAsync(_videoTmp, tracks, lead, final, VideoProfile(withAudio: true)))
             {
                 // не свелось — сохраняем хотя бы видео без звука
-                Journal.Warn("record", "звук не свёлся: " + result);
-                File.Delete(final);
+                if (File.Exists(final)) File.Delete(final);
                 File.Move(_videoTmp, final);
             }
             Journal.Info("record", "сведение видео и звука: " + sw.ElapsedMilliseconds + " мс");
             return final;
         }
+
+        /// <summary>Видео + дорожки WAV → один MP4 (видео и звук AAC). false — не получилось (причина в журнале).</summary>
+        public static async Task<bool> MuxAsync(string video, string[] wavs, TimeSpan lead, string output, MediaEncodingProfile profile)
+        {
+            try
+            {
+                var comp = new MediaComposition();
+                comp.Clips.Add(await MediaClip.CreateFromFileAsync(await StorageFile.GetFileFromPathAsync(video)));
+                foreach (var p in wavs)
+                {
+                    if (p == null || !File.Exists(p)) continue;
+                    var track = await BackgroundAudioTrack.CreateFromFileAsync(await StorageFile.GetFileFromPathAsync(p));
+                    if (lead > TimeSpan.Zero && lead < track.OriginalDuration) track.TrimTimeFromStart = lead;
+                    comp.BackgroundAudioTracks.Add(track);
+                }
+                File.WriteAllBytes(output, Array.Empty<byte>());
+                var outFile = await StorageFile.GetFileFromPathAsync(output);
+                var result = await comp.RenderToFileAsync(outFile, MediaTrimmingPreference.Precise, profile);
+                if (result != TranscodeFailureReason.None) { Journal.Warn("record", "звук не свёлся: " + result); return false; }
+                return true;
+            }
+            catch (Exception ex) { Journal.Warn("record", "звук не свёлся: " + ex.Message); return false; }
+        }
+
+        /// <summary>Профиль MP4 под размер (для сведения и проверок).</summary>
+        public static MediaEncodingProfile Profile(int w, int h, bool withAudio) => new RegionRecorder(IntPtr.Zero, 0, 0, w, h, false, false).VideoProfile(withAudio);
 
         private void Cleanup()
         {
