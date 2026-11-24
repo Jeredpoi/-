@@ -188,6 +188,12 @@ namespace Isle.Overlays
             }
             row.Children.Add(BarDivider());
             row.Children.Add(BarButton(new Helpers.Icon { Data = "M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11", Width = 17, Height = 17, Foreground = BarFg }, "Отменить (Ctrl+Z)", MarkUndo));
+            // камера: эту же область — на видео (кнопки «Начать» и микрофон появятся над ней)
+            row.Children.Add(BarButton(new Helpers.Icon { Data = Icons.Record, Width = 18, Height = 18, Foreground = Frz(Color.FromRgb(0xF8, 0x71, 0x71)) }, "Записать эту область на видео", () =>
+            {
+                var px = PixelRect(_area);
+                Finish(new VideoRegion(_vs.X + px.X, _vs.Y + px.Y, px.Width, px.Height));
+            }));
             row.Children.Add(BarButton(new Helpers.Icon { Data = Icons.Close, Width = 16, Height = 16, Foreground = BarFg }, "Отмена (Esc)", () => Finish(null)));
             var save = new Border
             {

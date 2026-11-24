@@ -142,6 +142,7 @@ namespace Isle.Services
         public const string ListCheck = "M3.5 6.5L5 8l3-3M3.5 13.5L5 15l3-3M11 7h9.5M11 14h9.5M11 19.5h9.5";
         public const string Battery2 = Battery;
         public const string MapPin = "M12 21s6.5-5.8 6.5-11a6.5 6.5 0 0 0-13 0c0 5.2 6.5 11 6.5 11zM12 7.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5";
+        public const string MicOff = "M12 3.5a3 3 0 0 0-3 3V12a3 3 0 0 0 5.1 2.1M15 9.5V6.5a3 3 0 0 0-5.8-1.1M18 11.5a6 6 0 0 1-9.6 4.8M12 17.5v3M4.5 4.5l15 15";
         public const string Mic = "M12 3.5a3 3 0 0 0-3 3V12a3 3 0 0 0 6 0V6.5a3 3 0 0 0-3-3M18 11.5a6 6 0 0 1-12 0M12 17.5v3";
     }
 }

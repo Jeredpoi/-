@@ -55,7 +55,9 @@ namespace Isle
 
         public static async Task RegionShot()
         {
-            if (await Capture(CaptureMode.Region) is BitmapSource bmp) Done(bmp);
+            var r = await Capture(CaptureMode.Region);
+            if (r is BitmapSource bmp) Done(bmp);
+            else if (r is VideoRegion v) await StartOwnRecording(v);
         }
 
         public static async Task FullShot()
@@ -266,10 +268,11 @@ namespace Isle
             await StartOwnRecording();
         }
 
-        private static async Task StartOwnRecording()
+        private static async Task StartOwnRecording(VideoRegion preset = null)
         {
+            if (RegionRecorder.Current != null) return;
             await Task.Delay(200); // чёлка успевает свернуться — не мешает выделению
-            var picker = new RecordPicker();
+            var picker = preset != null ? new RecordPicker(preset.X, preset.Y, preset.W, preset.H) : new RecordPicker();
             picker.ShowDialog();
             if (picker.Result is not { } r) return;
             _recFrame = new RecordFrame(r.x, r.y, r.w, r.h);

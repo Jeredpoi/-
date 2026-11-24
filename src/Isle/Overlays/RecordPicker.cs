@@ -25,11 +25,17 @@ namespace Isle.Overlays
         private readonly TextBlock _sizeText = new() { Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeights.SemiBold };
         private readonly Border _bar = new() { CornerRadius = new CornerRadius(14), Padding = new Thickness(6), Visibility = Visibility.Collapsed };
         private readonly Border _hint;
-        private readonly ToggleButton _sys, _mic;
+        private bool _micOn = AppSettings.Current.RecordMic;
+        private Border _micBtn;
+        private Icon _micIcon;
+        private readonly (int x, int y, int w, int h)? _preset;
         private Point? _start;
         private Rect _sel;
         private bool _done;
         private readonly Win32.RECT _mon;
+
+        /// <summary>Область уже выбрана (из снимка нажали «камеру») — сразу кнопки «Начать» и микрофон.</summary>
+        public RecordPicker(int x, int y, int w, int h) : this() { _preset = (x, y, w, h); }
 
         public RecordPicker()
         {
@@ -67,8 +73,11 @@ namespace Isle.Overlays
             // панель над/под областью
             _bar.Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x12, 0x12, 0x16));
             _bar.BorderBrush = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x32)); _bar.BorderThickness = new Thickness(1);
-            _sys = Toggle("Volume", "Звук ПК", AppSettings.Current.RecordSystemAudio);
-            _mic = Toggle("Mic", "Микрофон", AppSettings.Current.RecordMic);
+            // микрофон: круглая кнопка, зелёная — пишется, красная — выключен
+            _micIcon = new Icon { Kind = "Mic", Width = 15, Height = 15, StrokeWidth = 2, Foreground = Brushes.White };
+            _micBtn = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(17), Cursor = Cursors.Hand, Child = _micIcon, VerticalAlignment = VerticalAlignment.Center };
+            _micBtn.MouseLeftButtonUp += (_, e) => { e.Handled = true; _micOn = !_micOn; PaintMic(); };
+            PaintMic();
             var go = new Button { Style = (Style)Application.Current.FindResource("Flat"), Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(6, 0, 0, 0),
                 Background = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)), Foreground = Brushes.White, Cursor = Cursors.Hand,
                 Content = new StackPanel { Orientation = Orientation.Horizontal, Children = {
@@ -78,7 +87,7 @@ namespace Isle.Overlays
             var cancel = new Button { Style = (Style)Application.Current.FindResource("Ghost"), Width = 32, Height = 32, Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 0), Cursor = Cursors.Hand,
                 ToolTip = "Отмена (Esc)", Content = new Icon { Kind = "Close", Width = 13, Height = 13, Foreground = Brushes.White } };
             cancel.Click += (_, __) => Finish(false);
-            _bar.Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { _sys, _mic, go, cancel } };
+            _bar.Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { _micBtn, go, cancel } };
             _canvas.Children.Add(_bar);
             Content = _canvas;
 
@@ -88,7 +97,19 @@ namespace Isle.Overlays
                 var h = new WindowInteropHelper(this).Handle;
                 SetWindowPos(h, new IntPtr(-1), _mon.Left, _mon.Top, _mon.Right - _mon.Left, _mon.Bottom - _mon.Top, 0x0040);
             };
-            Loaded += (_, __) => { UpdateDim(); PlaceHint(); Activate(); Focus(); };
+            Loaded += (_, __) =>
+            {
+                if (_preset is { } p)
+                {
+                    // область пришла из снимка: переводим пиксели экрана в координаты окна и сразу показываем кнопки
+                    var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                    _sel = new Rect((p.x - _mon.Left) / m.M11, (p.y - _mon.Top) / m.M22, p.w / m.M11, p.h / m.M22);
+                    _hint.Visibility = Visibility.Collapsed;
+                    UpdateDim(); PlaceBar();
+                }
+                else { UpdateDim(); PlaceHint(); }
+                Activate(); Focus();
+            };
             MouseLeftButtonDown += OnDown;
             MouseMove += OnMove;
             MouseLeftButtonUp += OnUp;
@@ -103,13 +124,11 @@ namespace Isle.Overlays
         /// <summary>Результат: область в пикселях экрана и звук; null — отменили.</summary>
         public (int x, int y, int w, int h, bool sys, bool mic)? Result { get; private set; }
 
-        private ToggleButton Toggle(string icon, string text, bool on)
+        private void PaintMic()
         {
-            var t = new ToggleButton { Style = (Style)Application.Current.FindResource("Chip"), IsChecked = on, Height = 32, Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand,
-                Content = new StackPanel { Orientation = Orientation.Horizontal, Children = {
-                    new Icon { Kind = icon, Width = 13, Height = 13 },
-                    new TextBlock { Text = text, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center } } } };
-            return t;
+            _micBtn.Background = new SolidColorBrush(_micOn ? Color.FromRgb(0x22, 0xC5, 0x5E) : Color.FromRgb(0xEF, 0x44, 0x44));
+            _micIcon.Kind = _micOn ? "Mic" : "MicOff";
+            _micBtn.ToolTip = _micOn ? "Микрофон включён · клик — выключить" : "Микрофон выключен · клик — включить";
         }
 
         private void OnDown(object s, MouseButtonEventArgs e)
@@ -192,10 +211,9 @@ namespace Isle.Overlays
             if (ok && _sel.Width >= 8 && _sel.Height >= 8)
             {
                 var px = ToPixels(_sel);
-                AppSettings.Current.RecordSystemAudio = _sys.IsChecked == true;
-                AppSettings.Current.RecordMic = _mic.IsChecked == true;
+                AppSettings.Current.RecordMic = _micOn;
                 AppSettings.Current.Save();
-                Result = (px.x, px.y, px.w, px.h, _sys.IsChecked == true, _mic.IsChecked == true);
+                Result = (px.x, px.y, px.w, px.h, AppSettings.Current.RecordSystemAudio, _micOn);
             }
             Close();
         }
