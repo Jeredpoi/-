@@ -13,6 +13,8 @@
                 Width="{Binding ActualWidth, ElementName=Island}"
                 Background="#01000000" Visibility="Collapsed"/>
 
+        <!-- снег из-под чёлки (зимой): на всё окно, под островом; снежинки сыплются с его нижнего края -->
+        <h:SnowFall x:Name="Snow" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
         <Grid x:Name="Scaler" VerticalAlignment="Top" HorizontalAlignment="Center">
             <Grid.LayoutTransform>
                 <ScaleTransform x:Name="ScaleT" ScaleX="1" ScaleY="1"/>
@@ -377,8 +379,6 @@
             <h:LiquidEdge x:Name="Edge" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,33,24,0"
                           Width="{Binding ActualWidth, ElementName=Island}"/>
 
-            <!-- снег из-под чёлки (зимой) -->
-            <h:SnowFall x:Name="Snow" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="-1"/>
         </Grid>
     </Grid>
 </Window>
