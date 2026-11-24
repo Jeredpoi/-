@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,96 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                await Task.Delay(3000);
+                // движущаяся картинка: цветной квадрат ездит по окну 640×360
+                var box = new Border { Width = 80, Height = 80, Background = Brushes.OrangeRed, CornerRadius = new CornerRadius(12) };
+                var cv = new Canvas { Background = new SolidColorBrush(Color.FromRgb(30, 60, 110)), Width = 640, Height = 360 };
+                var label = new TextBlock { Foreground = Brushes.White, FontSize = 28, Text = "Isle запись" };
+                Canvas.SetLeft(label, 20); Canvas.SetTop(label, 300);
+                cv.Children.Add(box); cv.Children.Add(label);
+                var win = new Window { Content = cv, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, Left = 100, Top = 150, Topmost = true, ShowActivated = false };
+                win.Show();
+                var t0 = DateTime.Now;
+                var anim = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+                anim.Tick += (_, __) => { double t = (DateTime.Now - t0).TotalSeconds; Canvas.SetLeft(box, 280 + 240 * Math.Sin(t * 2)); Canvas.SetTop(box, 140 + 100 * Math.Cos(t * 3)); label.Text = "Isle запись " + t.ToString("0.0"); };
+                anim.Start();
+                await Task.Delay(800);
+                var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                // панель записи над уже выбранной областью (как после «камеры» в снимке)
+                {
+                    var d0 = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                    var pk = new Isle.Overlays.RecordPicker((int)(100 * d0.M11), (int)(150 * d0.M22), (int)(640 * d0.M11), (int)(360 * d0.M22));
+                    pk.Show(); await Task.Delay(900);
+                    SnapEl((FrameworkElement)pk.Content, dir, "picker");
+                    pk.Close(); await Task.Delay(300);
+                }
+                int px(double v) => (int)Math.Round(v * dev.M11);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await RegionRecorder.StartAsync(px(100), px(150), px(640), px(360), true, false);
+                log.AppendLine("старт за " + sw.ElapsedMilliseconds + " мс");
+                await Task.Delay(1500);
+                SnapEl((FrameworkElement)w.Content, dir, "island-rec");
+                log.AppendLine("в чёлке: " + w.RecText.Text + " видно=" + w.RecChip.Visibility);
+                await Task.Delay(1500);
+                // настоящий клик мышью по плашке REC — запись должна остановиться, остров — не раскрыться
+                var pt = w.RecText.PointToScreen(new Point(w.RecText.ActualWidth / 2, w.RecText.ActualHeight / 2));
+                SetCursorPos((int)pt.X, (int)pt.Y);
+                await Task.Delay(200);
+                mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                string file = null;
+                for (int k = 0; k < 40 && RegionRecorder.Current != null; k++) await Task.Delay(100);
+                log.AppendLine("после клика: запись " + (RegionRecorder.Current == null ? "остановлена" : "ИДЁТ") + ", остров " + w.State);
+                var dirV = RegionRecorder.Folder;
+                if (Directory.Exists(dirV)) { var fs = new DirectoryInfo(dirV).GetFiles("*.mp4"); if (fs.Length > 0) file = fs.OrderBy(f => f.LastWriteTime).Last().FullName; }
+                sw.Restart();
+                log.AppendLine("стоп и сохранение за " + sw.ElapsedMilliseconds + " мс: " + file + " " + (file != null ? new FileInfo(file).Length / 1024 + " КБ" : ""));
+                anim.Stop(); win.Close();
+                if (file != null) File.Copy(file, Path.Combine(dir, "rec-region.mp4"), true);
+                // сведение со звуком: на стенде нет звуковой карты — проверяем на сгенерированном тоне 440 Гц
+                if (file != null)
+                {
+                    var wav = Path.Combine(Path.GetTempPath(), "tone.wav");
+                    var gen = new NAudio.Wave.SampleProviders.SignalGenerator(48000, 2) { Frequency = 440, Gain = 0.2 };
+                    NAudio.Wave.WaveFileWriter.CreateWaveFile16(wav, new NAudio.Wave.SampleProviders.OffsetSampleProvider(gen) { TakeSamples = 48000 * 2 * 7 });
+                    var muxed = Path.Combine(dir, "rec-region-audio.mp4");
+                    sw.Restart();
+                    bool ok = await RegionRecorder.MuxAsync(file, new[] { wav }, TimeSpan.FromMilliseconds(300), muxed, RegionRecorder.Profile(640, 360, true));
+                    log.AppendLine("сведение со звуком: " + ok + " за " + sw.ElapsedMilliseconds + " мс, " + (File.Exists(muxed) ? new FileInfo(muxed).Length / 1024 + " КБ" : "нет файла"));
+                }
+                log.AppendLine("процессор/память: " + Environment.WorkingSet / 1048576 + " МБ");
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
