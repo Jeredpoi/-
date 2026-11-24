@@ -48,7 +48,7 @@ namespace Isle.Views
         // ---------- отрисовка ----------
         private void Render()
         {
-            MonthTitle.Text = Ru.TextInfo.ToTitleCase(_month.ToString("LLLL yyyy", Ru));
+            MonthTitle.Text = Ru.DateTimeFormat.MonthNames[_month.Month - 1] is var mn && mn.Length > 0 ? char.ToUpper(mn[0]) + mn[1..] + " " + _month.Year : _month.ToString("yyyy"); // «Ноябрь 2026» — именительный падеж
             TodayBtn.Visibility = _day.Date == DateTime.Today && _month.Month == DateTime.Today.Month && _month.Year == DateTime.Today.Year ? Visibility.Hidden : Visibility.Visible;
             RenderMonth();
             if (ListPane.Visibility == Visibility.Visible) RenderList();
@@ -126,7 +126,7 @@ namespace Isle.Views
                     {
                         var d = ws.AddDays(i);
                         var dayOcc = occ.Where(o => o.Start.Date <= d && (o.End > d || o.Start.Date == d)).ToList();
-                        var head = new TextBlock { Text = Ru.TextInfo.ToTitleCase(d.ToString("dddd, d MMMM", Ru)), FontSize = 12, FontWeight = FontWeights.SemiBold,
+                        var head = new TextBlock { Text = Cap(d.ToString("dddd, d MMMM", Ru)), FontSize = 12, FontWeight = FontWeights.SemiBold,
                             Margin = new Thickness(2, i == 0 ? 0 : 10, 0, 6), Cursor = Cursors.Hand };
                         if (d == DateTime.Today) head.Foreground = (Brush)FindResource("Accent");
                         else if (dayOcc.Count == 0) head.Foreground = (Brush)FindResource("Muted");
@@ -138,12 +138,12 @@ namespace Isle.Views
                     break;
                 }
                 case "day":
-                    DayTitle.Text = Ru.TextInfo.ToTitleCase(_day.ToString("dddd, d MMMM", Ru)).ToUpper(Ru);
+                    DayTitle.Text = _day.ToString("dddd, d MMMM", Ru).ToUpper(Ru);
                     RenderTimeline();
                     break;
                 default:
                 {
-                    DayTitle.Text = Ru.TextInfo.ToTitleCase(_day.ToString("dddd, d MMMM", Ru)).ToUpper(Ru);
+                    DayTitle.Text = _day.ToString("dddd, d MMMM", Ru).ToUpper(Ru);
                     var occ = CalendarService.On(_day);
                     if (occ.Count == 0) { List.Children.Add(Empty()); break; }
                     foreach (var o in occ) List.Children.Add(EventCard(o, compact: false));
@@ -262,6 +262,8 @@ namespace Isle.Views
             double target = (timed.Count > 0 ? timed[0].Start.TimeOfDay.TotalHours : _day == DateTime.Today ? DateTime.Now.TimeOfDay.TotalHours : 8) - 1;
             Dispatcher.InvokeAsync(() => ListScroll.ScrollToVerticalOffset(Math.Max(0, target * H)), System.Windows.Threading.DispatcherPriority.Loaded);
         }
+
+        private static string Cap(string t) => string.IsNullOrEmpty(t) ? t : char.ToUpper(t[0]) + t[1..];
 
         private static UIElement Pos(UIElement el, double x, double y) { Canvas.SetLeft(el, x); Canvas.SetTop(el, y); return el; }
 
