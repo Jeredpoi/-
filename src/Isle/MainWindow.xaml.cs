@@ -332,6 +332,8 @@ namespace Isle
                     try { Win32.SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, new IntPtr(-1), new IntPtr(-1)); } catch { }
                 };
                 trim.Start();
+                // привязанный телефон: страничка-закладка должна открываться сразу, без захода во вкладку
+                try { if (Services.PhoneLink.Paired) { Views.PhoneView.Hook(); Services.PhoneLink.StartIfPaired(); } } catch (Exception ex) { Journal.Warn("phone", "старт: " + ex.Message); }
                 App.Trace("все модули запущены");
                 // режим выреза: полоса сверху высотой со свёрнутую чёлку (в пикселях экрана)
                 Helpers.NotchBar.Height = () =>

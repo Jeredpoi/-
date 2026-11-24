@@ -4,12 +4,13 @@
              xmlns:h="clr-namespace:Isle.Helpers">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="268"/>
+            <ColumnDefinition x:Name="QrCol" Width="268"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- QR-код: телефон сканирует камерой и открывает страничку -->
-        <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="16,18,16,14">
+        <Border x:Name="PairCard" Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="16,18,16,14">
+          <Border.RenderTransform><TranslateTransform x:Name="PairCardShift"/></Border.RenderTransform>
           <Grid>
             <DockPanel>
                 <StackPanel DockPanel.Dock="Bottom">
@@ -100,7 +101,24 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <DockPanel Margin="0,0,0,4">
+            <!-- телефон привязан: QR больше не нужен — его имя, связь и «Привязать заново» -->
+            <Border x:Name="PairedBox" DockPanel.Dock="Right" Visibility="Collapsed" CornerRadius="12" Padding="10,4,4,4" Background="{DynamicResource Plate}" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="PairedDot" Width="8" Height="8" Fill="#6F6F79" VerticalAlignment="Center"/>
+                    <StackPanel Margin="8,0,10,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="PairedName" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="PairedState" FontSize="10" Foreground="{DynamicResource Muted}"/>
+                    </StackPanel>
+                    <Button Style="{StaticResource Ghost}" Padding="8,5" Click="OnShowQr" ToolTip="Показать QR-код ещё раз — например, если закладка на телефоне потерялась">
+                        <h:Icon Kind="Qr" Width="13" Height="13"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Padding="8,5" Click="OnRepair" ToolTip="Новый ключ: старая ссылка перестанет открываться — отсканируй новый QR-код">
+                        <StackPanel Orientation="Horizontal"><h:Icon Kind="Restart" Width="12" Height="12"/><TextBlock Text="Привязать заново" FontSize="11" Margin="6,0,0,0"/></StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+            <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="PaneFiles" Style="{StaticResource Segment}" GroupName="phonepane" IsChecked="True" Click="OnPane">
                     <StackPanel Orientation="Horizontal"><h:Icon Kind="Image" Width="13" Height="13"/><TextBlock Text="С телефона" Margin="7,0,0,0"/></StackPanel>
                 </RadioButton>
@@ -112,6 +130,7 @@
                     </StackPanel>
                 </RadioButton>
             </StackPanel>
+            </DockPanel>
 
             <Border Grid.Row="1" Margin="0,6,0,0" Background="{DynamicResource Pane}" BorderBrush="{DynamicResource PaneBorder}" BorderThickness="1" CornerRadius="16"/>
             <!-- что пришло с телефона -->
