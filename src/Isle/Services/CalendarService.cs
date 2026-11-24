@@ -39,6 +39,8 @@ namespace Isle.Services
         public DateTime? RecurrenceId { get; set; }
         /// <summary>«local» — своё событие, иначе id подключённого календаря.</summary>
         public string Source { get; set; } = "local";
+        /// <summary>Цвет события (#RRGGBB). Нет — подберётся сам (старые события получают цвет при первом запуске).</summary>
+        public string Color { get; set; }
     }
 
     /// <summary>Конкретное появление события в календаре (повторы уже развёрнуты).</summary>
@@ -71,6 +73,8 @@ namespace Isle.Services
     public static class CalendarService
     {
         public const string LocalColor = "#4ADE80";
+        /// <summary>Цвета событий: читаются и на чёрной теме, и на «Закате».</summary>
+        public static readonly string[] Palette = { "#4ADE80", "#60A5FA", "#F472B6", "#FBBF24", "#A78BFA", "#2DD4BF", "#FB923C", "#F87171" };
         private static readonly string[] FeedColors = { "#60A5FA", "#F472B6", "#FBBF24", "#A78BFA", "#2DD4BF", "#FB923C" };
 
         public static readonly List<CalEvent> Local = new();
@@ -92,13 +96,51 @@ namespace Isle.Services
             _loaded = true;
             try
             {
-                if (File.Exists(LocalPath)) Local.AddRange(JsonSerializer.Deserialize<List<CalEvent>>(File.ReadAllText(LocalPath)) ?? new());
+                if (File.Exists(LocalPath))
+                {
+                    try { Local.AddRange(JsonSerializer.Deserialize<List<CalEvent>>(File.ReadAllText(LocalPath)) ?? new()); }
+                    catch (Exception ex)
+                    {
+                        // файл не читается — не затираем его пустым списком: откладываем в сторону, события можно будет вернуть
+                        var bad = Path.Combine(Dir, "events.broken-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                        try { File.Copy(LocalPath, bad, true); } catch { }
+                        Journal.Warn("calendar", "свои события не прочитались (" + ex.Message + "), файл сохранён как " + Path.GetFileName(bad));
+                    }
+                }
+                AssignMissingColors();
                 if (File.Exists(FeedsPath)) Feeds.AddRange(JsonSerializer.Deserialize<List<CalFeed>>(File.ReadAllText(FeedsPath)) ?? new());
                 foreach (var f in Feeds)
                     if (File.Exists(FeedFile(f.Id))) FeedEvents[f.Id] = Ics.Parse(File.ReadAllText(FeedFile(f.Id)), f.Id);
                 Journal.Info("calendar", "своих событий " + Local.Count + ", подключённых календарей " + Feeds.Count);
             }
             catch (Exception ex) { Journal.Warn("calendar", "не прочитался: " + ex.Message); }
+        }
+
+        /// <summary>
+        /// События из прошлых версий были без цвета (все зелёные). Раздаём цвета так, чтобы в одном дне они различались;
+        /// перед этим — копия файла, на всякий случай.
+        /// </summary>
+        private static void AssignMissingColors()
+        {
+            var bare = Local.Where(e => string.IsNullOrEmpty(e.Color)).ToList();
+            if (bare.Count == 0) return;
+            try { File.Copy(LocalPath, Path.Combine(Dir, "events.backup-" + DateTime.Now.ToString("yyyyMMdd") + ".json"), true); } catch { }
+            foreach (var e in bare.OrderBy(e => e.Start)) e.Color = PickColor(e.Start.Date, e);
+            SaveLocal();
+            Journal.Info("calendar", "событиям без цвета раздали цвета: " + bare.Count);
+        }
+
+        /// <summary>Цвет для события в этот день: первый, которого в дне ещё нет (иначе — самый редкий).</summary>
+        private static readonly Random Rng = new();
+        public static string PickColor(DateTime day, CalEvent except = null)
+        {
+            // учитываем и повторы (событие «каждый день» стоит в каждом дне), и подключённые календари
+            var used = Between(day.Date, day.Date.AddDays(1)).Where(o => o.Event != except && !(except?.Uid != null && o.Event.Uid == except.Uid))
+                            .GroupBy(o => o.Color.ToUpperInvariant()).ToDictionary(g => g.Key, g => g.Count());
+            // без повторов; из свободных — случайный, чтобы календарь не был «светофором» одного порядка
+            var free = Palette.Where(c => !used.ContainsKey(c)).ToList();
+            if (free.Count > 0) return free[Rng.Next(free.Count)];
+            return Palette.OrderBy(c => used.TryGetValue(c, out var n) ? n : 0).First();
         }
 
         private static void SaveLocal() => Write(LocalPath, JsonSerializer.Serialize(Local));
@@ -118,6 +160,7 @@ namespace Isle.Services
         // ---------- свои события ----------
         public static void Save(CalEvent e)
         {
+            if (string.IsNullOrEmpty(e.Color)) e.Color = PickColor(e.Start.Date, e);
             if (!Local.Contains(e)) Local.Add(e);
             SaveLocal();
             Changed?.Invoke();
@@ -138,6 +181,7 @@ namespace Isle.Services
             foreach (var e in list)
             {
                 if (e.Uid != null && Local.Any(x => x.Uid == e.Uid && x.RecurrenceId == e.RecurrenceId)) continue;
+                e.Color = PickColor(e.Start.Date);
                 Local.Add(e); added++;
             }
             SaveLocal();
@@ -212,7 +256,15 @@ namespace Isle.Services
         }
 
         // ---------- выборка ----------
-        public static string ColorOf(CalEvent e) => e.Source == "local" ? LocalColor : Feeds.FirstOrDefault(f => f.Id == e.Source)?.Color ?? "#60A5FA";
+        /// <summary>Цвет события: свой, а у событий из подключённых календарей — по названию (разные дела — разные цвета).</summary>
+        public static string ColorOf(CalEvent e)
+        {
+            if (!string.IsNullOrEmpty(e.Color)) return e.Color;
+            if (e.Source == "local") return LocalColor;
+            uint h = 2166136261;
+            foreach (var ch in e.Uid ?? e.Title ?? "") h = (h ^ ch) * 16777619;
+            return Palette[h % (uint)Palette.Length];
+        }
 
         /// <summary>Все появления событий, пересекающие [from, to), по времени начала.</summary>
         public static List<CalOccurrence> Between(DateTime from, DateTime to)
@@ -307,7 +359,8 @@ namespace Isle.Services
         }
 
         // ---------- напоминания ----------
-        private static readonly DispatcherTimer Ticker = new() { Interval = TimeSpan.FromSeconds(20) };
+        // проверка раз в 5 секунд: плашка и звук в начале события — без заметной задержки
+        private static readonly DispatcherTimer Ticker = new() { Interval = TimeSpan.FromSeconds(5) };
         private static readonly DispatcherTimer FeedTimer = new() { Interval = TimeSpan.FromMinutes(30) };
         private static readonly HashSet<string> Fired = new();
 
@@ -353,8 +406,29 @@ namespace Isle.Services
             {
                 Kind = ToastKind.Info, Title = o.Event.Title, Private = true,
                 Subtitle = when + " · " + o.TimeText + (string.IsNullOrWhiteSpace(o.Event.Location) ? "" : " · " + o.Event.Location),
-                Icon = Icons.Calendar, Important = true, Duration = TimeSpan.FromSeconds(kind == "start" ? 6 : 5),
+                Icon = Icons.Calendar, Important = true, Duration = TimeSpan.FromSeconds(kind == "start" ? 8 : 5),
             });
+            // в момент начала — один короткий звук (заранее — тихо, только плашка)
+            if (kind == "start" && AppSettings.Current.CalendarSound) Chime();
+        }
+
+        /// <summary>Звук напоминания Windows («Календарь»), если его нет — обычный системный. Один раз, без повторов.</summary>
+        private static void Chime()
+        {
+            try
+            {
+                var media = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media");
+                foreach (var name in new[] { "Windows Notify Calendar.wav", "Windows Notify System Generic.wav", "notify.wav" })
+                {
+                    var p = Path.Combine(media, name);
+                    if (!File.Exists(p)) continue;
+                    var player = new System.Media.SoundPlayer(p);
+                    player.Play(); // асинхронно, один раз
+                    return;
+                }
+                System.Media.SystemSounds.Asterisk.Play();
+            }
+            catch { }
         }
 
         public static string Minutes(int m) => m >= 60 && m % 60 == 0 ? (m / 60) + " ч" : m >= 60 ? (m / 60) + " ч " + (m % 60) + " мин" : Math.Max(1, m) + " мин";
