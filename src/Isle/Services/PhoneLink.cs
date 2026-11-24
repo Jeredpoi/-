@@ -60,6 +60,11 @@ namespace Isle.Services
         private static readonly System.Windows.Threading.DispatcherTimer IdleStop = new() { Interval = TimeSpan.FromMinutes(1) };
 
         public static bool Running => _listener != null;
+        /// <summary>Телефон уже привязан (страничка хоть раз открывалась с этим ключом).</summary>
+        public static bool Paired => !string.IsNullOrEmpty(AppSettings.Current.PhonePairedName);
+        public static string PairedName => AppSettings.Current.PhonePairedName;
+        /// <summary>Телефон привязался впервые — вкладка убирает QR-код.</summary>
+        public static event Action PairedNow;
         public static int Port { get; private set; }
         /// <summary>Телефон обращался за последние 15 секунд (страничка открыта и опрашивает).</summary>
         public static bool PhoneOnline => DateTime.Now - _lastRequest < TimeSpan.FromSeconds(15);
@@ -91,8 +96,11 @@ namespace Isle.Services
         public static void Start()
         {
             if (Running) return;
-            _token ??= Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
             var s = AppSettings.Current;
+            // ключ постоянный: привязанный телефон открывает ту же ссылку и после перезапуска Isle
+            if (string.IsNullOrEmpty(s.PhoneToken)) { s.PhoneToken = NewToken(); s.Save(); }
+            _token = s.PhoneToken;
+            LoadHistory();
             if (s.PhonePort is < 1024 or > 65000) { s.PhonePort = 47000 + RandomNumberGenerator.GetInt32(2000); s.Save(); }
             foreach (var port in new[] { s.PhonePort, 0 })
             {
@@ -128,9 +136,72 @@ namespace Isle.Services
             Changed?.Invoke();
         }
 
+        private static string NewToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+
+        /// <summary>«Привязать заново»: новый ключ — старая ссылка (и закладка на старом телефоне) больше не откроется.</summary>
+        public static void Unpair()
+        {
+            var s = AppSettings.Current;
+            s.PhoneToken = NewToken();
+            s.PhonePairedName = null;
+            s.Save();
+            _token = s.PhoneToken;
+            _lastRequest = DateTime.MinValue;
+            Journal.Info("phone", "привязка сброшена — новый ключ, нужен новый QR-код");
+            Changed?.Invoke();
+        }
+
+        /// <summary>Привязанный телефон — сервер поднимаем вместе с Isle, чтобы закладка на телефоне открывалась сразу.</summary>
+        public static void StartIfPaired() { if (Paired) Start(); }
+
+        /// <summary>Имя телефона по заголовку браузера: «iPhone · Safari», «Android · Chrome».</summary>
+        private static string DeviceName(string ua)
+        {
+            ua ??= "";
+            string dev = ua.Contains("iPhone") ? "iPhone" : ua.Contains("iPad") ? "iPad" : ua.Contains("Android") ? "Android" : ua.Contains("Windows") ? "Компьютер" : "Телефон";
+            string br = ua.Contains("YaBrowser") ? "Яндекс" : ua.Contains("SamsungBrowser") ? "Samsung" : ua.Contains("Firefox") || ua.Contains("FxiOS") ? "Firefox"
+                : ua.Contains("EdgiOS") || ua.Contains("EdgA") ? "Edge" : ua.Contains("CriOS") || ua.Contains("Chrome") ? "Chrome" : ua.Contains("Safari") ? "Safari" : "";
+            return br.Length > 0 ? dev + " · " + br : dev;
+        }
+
+        // ---------- история: что пришло с телефона, переживает перезапуск ----------
+        private static string HistoryPath => System.IO.Path.Combine(Storage.Dir, "phone-history.json");
+        private static bool _historyLoaded;
+
+        private static void LoadHistory()
+        {
+            if (_historyLoaded) return;
+            _historyLoaded = true;
+            try
+            {
+                if (!File.Exists(HistoryPath)) return;
+                var list = JsonSerializer.Deserialize<List<PhoneItem>>(File.ReadAllText(HistoryPath));
+                if (list == null) return;
+                // файлы, которые уже удалили из «Загрузок», в истории не показываем
+                Received.AddRange(list.Where(x => x != null && (x.Text != null || (x.Path != null && File.Exists(x.Path)))).Take(200));
+                Journal.Info("phone", "история с телефона: " + Received.Count + " записей");
+            }
+            catch (Exception ex) { Journal.Warn("phone", "история с телефона не прочиталась: " + ex.Message); }
+        }
+
+        private static void SaveHistory()
+        {
+            try
+            {
+                Directory.CreateDirectory(Storage.Dir);
+                var tmp = HistoryPath + ".tmp";
+                File.WriteAllText(tmp, JsonSerializer.Serialize(Received.Take(200).ToList()));
+                File.Move(tmp, HistoryPath, true);
+            }
+            catch (Exception ex) { Journal.Warn("phone", "история с телефона не сохранилась: " + ex.Message); }
+        }
+
+        public static void ClearHistory() { Received.Clear(); SaveHistory(); Changed?.Invoke(); }
+
         private static DateTime _idleSince;
         private static void OnIdleTick(object s, EventArgs e)
         {
+            if (Paired) { _idleSince = DateTime.Now; return; } // привязанный телефон должен достучаться в любой момент
             if (KeepAlive || DateTime.Now - _lastRequest < TimeSpan.FromMinutes(15)) { _idleSince = DateTime.Now; return; }
             if (DateTime.Now - _idleSince > TimeSpan.FromMinutes(15)) Stop();
         }
@@ -242,7 +313,19 @@ namespace Isle.Services
                     if (method == "GET" && route == "")
                     {
                         await Send(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(Page));
-                        Application.Current?.Dispatcher.InvokeAsync(() => PageOpened?.Invoke());
+                        headers.TryGetValue("User-Agent", out var ua);
+                        Application.Current?.Dispatcher.InvokeAsync(() =>
+                        {
+                            bool first = !Paired;
+                            if (first)
+                            {
+                                AppSettings.Current.PhonePairedName = DeviceName(ua);
+                                AppSettings.Current.Save();
+                                Journal.Info("phone", "телефон привязан: " + AppSettings.Current.PhonePairedName);
+                            }
+                            PageOpened?.Invoke();
+                            if (first) PairedNow?.Invoke();
+                        });
                     }
                     else if (method == "GET" && route == "list") await Send(stream, 200, "application/json", JsonSerializer.SerializeToUtf8Bytes(new
                     {
@@ -379,6 +462,7 @@ namespace Isle.Services
             {
                 Received.Insert(0, item);
                 if (Received.Count > 200) Received.RemoveAt(Received.Count - 1);
+                SaveHistory();
                 ItemReceived?.Invoke(item);
                 Changed?.Invoke();
             });
@@ -441,6 +525,7 @@ textarea:focus{border-color:#55555F}
 </style></head><body>
 <div id="isl"><span class="d"></span><span class="t">Isle</span></div>
 <h1 class="in">Отправить на ПК</h1><p class="s in" style="animation-delay:.05s">Фото, файлы и текст — прямо в Isle, без проводов и приложений</p>
+<div id="bm" style="display:none;margin:-8px 0 18px;padding:10px 12px;border-radius:14px;background:rgba(74,222,128,.12);color:#bbf7d0;font-size:13px;line-height:1.4">Телефон привязан. Добавь страничку в закладки или на экран «Домой» — QR-код больше не нужен. <a href="#" id="bmx" style="color:#4ade80">Понятно</a></div>
 <div class="card in" style="animation-delay:.1s"><h2>На компьютер</h2>
 <div class="tiles">
 <label class="tile main"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><circle cx="9" cy="10.5" r="1.6"/><path d="M21 16l-5-5-8 9"/></svg></span>Фото и видео<small>галерея или камера</small><input id="ph" type="file" accept="image/*,video/*" multiple></label>
@@ -498,6 +583,7 @@ function poll(){fetch(base+'list',{cache:'no-store'}).then(r=>r.json()).then(d=>
 const s=JSON.stringify(d);if(s===last)return;render(d);last=s}).catch(()=>{if(online){online=false;isl.classList.add('off');islT.textContent='Нет связи с ПК'}})}
 setTimeout(()=>island(ICON.ok+' Подключено к компьютеру',2000),350);
 poll();setInterval(()=>{if(!document.hidden)poll()},2500);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
+try{if(!localStorage.getItem('isle-bm')){var bm=document.getElementById('bm');bm.style.display='block';document.getElementById('bmx').onclick=function(e){e.preventDefault();bm.style.display='none';localStorage.setItem('isle-bm','1')}}}catch(e){}
 </script></body></html>
 """;
     }

@@ -36,8 +36,14 @@ namespace Isle.Views
                 if (!IsVisible) _lastFit = -1;
                 if (IsVisible) { PhoneLink.Start(); _status.Start(); Refresh(); } else _status.Stop();
             };
-            if (!_hooked) { _hooked = true; PhoneLink.ItemReceived += OnReceived; }
-            PhoneLink.PageOpened += () => { if (IsVisible) PlayConnected(); };
+            Hook();
+            PhoneLink.PairedNow += () => Dispatcher.InvokeAsync(() => DispatcherTimerOnce(2600, () => ShowPaired(true)));
+            PhoneLink.PageOpened += () =>
+            {
+                if (IsVisible) PlayConnected();
+                // показывали код привязанному телефону (потерял закладку) — открыл: снова прячем
+                if (_qrForced && PhoneLink.Paired) { _qrForced = false; DispatcherTimerOnce(2600, () => ShowPaired(true)); }
+            };
             PhoneLink.NoticesChanged += () => Dispatcher.InvokeAsync(BuildNotices);
             QrHost.SizeChanged += (_, __) => FitQr();
             // размер клеток пересчитываем, когда вкладку показали (после анимации раскрытия), а не на каждый проход раскладки
@@ -46,6 +52,14 @@ namespace Isle.Views
         }
 
         public void OnShown() { PhoneLink.Start(); Refresh(); }
+
+        /// <summary>Пришедшее с телефона — в буфер и плашку, даже если вкладку ещё не открывали (сервер стартует с Isle).</summary>
+        public static void Hook()
+        {
+            if (_hooked) return;
+            _hooked = true;
+            PhoneLink.ItemReceived += OnReceived;
+        }
 
         /// <summary>С телефона пришло: в «Буфер» (текст — сразу в буфер обмена) и плашка в чёлке.</summary>
         private static void OnReceived(PhoneItem it)
@@ -111,6 +125,7 @@ namespace Isle.Views
             }
             BuildIn();
             BuildOut();
+            ShowPaired(false);
             UpdateStatus();
             UpdateHttpsHelp();
         }
@@ -124,6 +139,12 @@ namespace Isle.Views
             StatusText.Text = !PhoneLink.Running ? "Сервер не запущен" : _ip == null ? "Нет общей сети" : online ? "Телефон на связи" : "Ждёт телефон";
             StatusText.Foreground = online ? new SolidColorBrush(Green) : (Brush)FindResource("Muted");
             StatusPill.Background = new SolidColorBrush(online ? Color.FromRgb(0x0F, 0x24, 0x18) : Color.FromRgb(0x16, 0x16, 0x1A));
+            if (PhoneLink.Paired)
+            {
+                PairedName.Text = PhoneLink.PairedName;
+                PairedState.Text = online ? "на связи" : "открой страничку из закладок";
+                PairedDot.Fill = new SolidColorBrush(online ? Green : Color.FromRgb(0x6F, 0x6F, 0x79));
+            }
             if (online != _wasOnline)
             {
                 _wasOnline = online;
@@ -145,6 +166,63 @@ namespace Isle.Views
                 }
                 UpdateBreath();
             }
+        }
+
+        // ---------- привязка ----------
+        private bool _qrForced;     // «Показать QR» у привязанного телефона
+        private bool _pairAnim;
+
+        /// <summary>
+        /// Привязан — QR-карточка уезжает влево и прячется, справа сверху имя телефона и «Привязать заново».
+        /// Не привязан — карточка с кодом на месте.
+        /// </summary>
+        private void ShowPaired(bool animate)
+        {
+            bool paired = PhoneLink.Paired;
+            PairedBox.Visibility = paired ? Visibility.Visible : Visibility.Collapsed;
+            bool hideQr = paired && !_qrForced;
+            if (_pairAnim) return;
+            if (!hideQr)
+            {
+                PairCardShift.BeginAnimation(TranslateTransform.XProperty, null); PairCardShift.X = 0;
+                PairCard.BeginAnimation(OpacityProperty, null); PairCard.Opacity = 1;
+                PairCard.Visibility = Visibility.Visible;
+                QrCol.Width = new GridLength(268);
+                return;
+            }
+            if (PairCard.Visibility != Visibility.Visible) return;
+            if (!animate || !IsVisible) { PairCard.Visibility = Visibility.Collapsed; QrCol.Width = new GridLength(0); return; }
+            _pairAnim = true;
+            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn };
+            var slide = new System.Windows.Media.Animation.DoubleAnimation(0, -300, TimeSpan.FromMilliseconds(420)) { EasingFunction = ease };
+            slide.Completed += (_, __) =>
+            {
+                _pairAnim = false;
+                PairCard.Visibility = Visibility.Collapsed;
+                QrCol.Width = new GridLength(0);
+                // правая часть плавно занимает освободившееся место
+                if (QrCol.Width.Value == 0 && Content is Grid root && root.Children.Count > 1 && root.Children[1] is FrameworkElement right)
+                {
+                    var tt = new TranslateTransform(282, 0);
+                    right.RenderTransform = tt;
+                    tt.BeginAnimation(TranslateTransform.XProperty, new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(380))
+                        { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } });
+                }
+            };
+            PairCardShift.BeginAnimation(TranslateTransform.XProperty, slide);
+            PairCard.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(380)));
+        }
+
+        private void OnShowQr(object s, RoutedEventArgs e)
+        {
+            _qrForced = !_qrForced;
+            ShowPaired(true);
+        }
+
+        private void OnRepair(object s, RoutedEventArgs e)
+        {
+            _qrForced = false;
+            PhoneLink.Unpair(); // новый ключ → Changed → Refresh: карточка с новым QR-кодом возвращается
         }
 
         private void DispatcherTimerOnce(int ms, Action a)

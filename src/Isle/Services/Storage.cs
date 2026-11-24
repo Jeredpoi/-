@@ -151,6 +151,17 @@ namespace Isle.Services
         public int PhonePort { get; set; }
         /// <summary>Страничка телефона по https через local-ip.sh (без интернета у телефона — выключить, будет http).</summary>
         public bool PhoneHttps { get; set; } = true;
+        /// <summary>
+        /// Постоянный ключ странички телефона: привязал один раз — закладка на телефоне работает и после перезапуска.
+        /// «Привязать заново» выдаёт новый ключ, старая ссылка перестаёт открываться.
+        /// </summary>
+        public string PhoneToken { get; set; }
+        /// <summary>Напоминания о событиях календаря плашкой в чёлке.</summary>
+        public bool CalendarReminders { get; set; } = true;
+        /// <summary>Вид календаря: «day», «week», «month».</summary>
+        public string CalendarMode { get; set; } = "month";
+        /// <summary>Привязанный телефон («iPhone · Safari»), null — ещё не привязан.</summary>
+        public string PhonePairedName { get; set; }
         /// <summary>Снег из-под чёлки: «auto» — с 1 декабря по 14 января и когда за окном снег, «on» — всегда, «off» — никогда.</summary>
         public string WinterSnow { get; set; } = "auto";
         /// <summary>Тема: «dark» — чёрная, «sunset» — закат (неон, размытые пальмы за матовым стеклом).</summary>

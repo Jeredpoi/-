@@ -219,6 +219,36 @@ namespace Isle.Tests
         }
 
         [Fact]
+        public void ParsesIcsEvents()
+        {
+            var ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a1\r\nSUMMARY:Кино с друзь\r\n ями\\, вечер\r\nDTSTART:20261108T180000\r\nDTEND:20261108T190000\r\nLOCATION:ТЦ\r\n"
+                    + "BEGIN:VALARM\r\nTRIGGER:-PT30M\r\nEND:VALARM\r\nEND:VEVENT\r\n"
+                    + "BEGIN:VEVENT\r\nUID:b2\r\nSUMMARY:Отпуск\r\nDTSTART;VALUE=DATE:20261110\r\nDTEND;VALUE=DATE:20261113\r\nEND:VEVENT\r\n"
+                    + "BEGIN:VEVENT\r\nUID:c3\r\nSUMMARY:Спорт\r\nDTSTART:20261102T080000\r\nDURATION:PT1H\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=4\r\nEXDATE:20261104T080000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+            var list = Ics.Parse(ics, "t");
+            Assert.Equal(3, list.Count);
+            var kino = list[0];
+            Assert.Equal("Кино с друзьями, вечер", kino.Title);
+            Assert.Equal(new DateTime(2026, 11, 8, 18, 0, 0), kino.Start);
+            Assert.Equal(new DateTime(2026, 11, 8, 19, 0, 0), kino.End);
+            Assert.Equal(30, kino.Reminder);
+            Assert.True(list[1].AllDay);
+            Assert.Equal(new DateTime(2026, 11, 13), list[1].End);
+            // по понедельникам и средам, 4 раза, без 4 ноября: 2, 9, 11 ноября
+            var occ = CalendarService.Expand(list[2], new DateTime(2026, 11, 1), new DateTime(2026, 12, 31)).Select(x => x.start).ToList();
+            Assert.Equal(new[] { new DateTime(2026, 11, 2, 8, 0, 0), new DateTime(2026, 11, 9, 8, 0, 0), new DateTime(2026, 11, 11, 8, 0, 0) }, occ);
+        }
+
+        [Fact]
+        public void ExpandsMonthlyAndSkipsShortMonths()
+        {
+            var e = new CalEvent { Start = new DateTime(2026, 1, 31, 10, 0, 0), End = new DateTime(2026, 1, 31, 11, 0, 0), Rule = new CalRule { Freq = "MONTHLY", Interval = 1 } };
+            var occ = CalendarService.Expand(e, new DateTime(2026, 1, 1), new DateTime(2026, 6, 1)).Select(x => x.start.Month).ToList();
+            Assert.Equal(new[] { 1, 3, 5 }, occ); // в феврале и апреле 31-го нет
+            Assert.True(Ics.TryDuration("-PT15M", out var d) && d == TimeSpan.FromMinutes(-15));
+        }
+
+        [Fact]
         public void ParsesLyricsFileWithWords()
         {
             var yaml = "version: '1.0'\nmetadata:\n  title: T\n  duration_ms: 1000\nlines:\n- text: I've been tryna call\n  start_ms: 27170\n  end_ms: 28268\n  words:\n  - text: 'I''ve '\n    start_ms: 27209\n  - text: 'been '\n    start_ms: 27598\n  - text: call\n    start_ms: 28200\n- text: \"Ooh, I'm\"\n  start_ms: 30000\n  end_ms: 31000\n";
