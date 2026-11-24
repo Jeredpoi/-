@@ -35,7 +35,92 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
+        private static void Call(object o, string method, params object[] args)
+        {
+            var m = o.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            m.Invoke(o, args);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                await Task.Delay(3000);
+                // события для съёмки
+                var t = DateTime.Today;
+                CalendarService.Save(new CalEvent { Title = "Кино с друзьями", Location = "ТЦ «Галерея»", Start = t.AddHours(18), End = t.AddHours(19), Reminder = 10 });
+                CalendarService.Save(new CalEvent { Title = "Созвон по проекту", Start = t.AddHours(11), End = t.AddHours(11.5), Reminder = 5 });
+                CalendarService.Save(new CalEvent { Title = "Обед с мамой", Start = t.AddHours(13), End = t.AddHours(14), Reminder = 30 });
+                CalendarService.Save(new CalEvent { Title = "Спортзал", Start = t.AddDays(-20).AddHours(8), End = t.AddDays(-20).AddHours(9), Reminder = 10, Rule = new CalRule { Freq = "WEEKLY", Interval = 1, ByDay = new() { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday } } });
+                CalendarService.Save(new CalEvent { Title = "Поездка в Питер", AllDay = true, Start = t.AddDays(5), End = t.AddDays(8) });
+                CalendarService.Save(new CalEvent { Title = "День рождения Димы", AllDay = true, Start = t.AddDays(-3), End = t.AddDays(-2), Rule = new CalRule { Freq = "YEARLY" } });
+                CalendarService.Save(new CalEvent { Title = "Стоматолог", Start = t.AddDays(2).AddHours(16), End = t.AddDays(2).AddHours(17), Reminder = 60 });
+                // напоминание: событие через 10 минут
+                CalendarService.Save(new CalEvent { Title = "Встреча с Аней", Start = DateTime.Now.AddMinutes(10), End = DateTime.Now.AddMinutes(70), Reminder = 10 });
+                CalendarService.Start();
+                w.SuppressAutoCollapse = true;
+                await Task.Delay(21500);
+                SnapEl((FrameworkElement)w.Content, dir, "reminder");
+                await Task.Delay(6000);
+                foreach (var theme in new[] { "dark", "sunset" })
+                {
+                    AppSettings.Current.Theme = theme; AppSettings.Current.Save(); w.ApplyAppearance();
+                    w.Expand("calendar"); w.SelectTab("calendar"); await Task.Delay(1800);
+                    var cal = (Isle.Views.CalendarView)w.GetView("calendar");
+                    foreach (var mode in new[] { "month", "week", "day" })
+                    {
+                        AppSettings.Current.CalendarMode = mode;
+                        var rb = (RadioButton)cal.FindName(mode == "day" ? "ModeDay" : mode == "week" ? "ModeWeek" : "ModeMonth");
+                        rb.IsChecked = true; Call(cal, "OnMode", rb, new RoutedEventArgs());
+                        await Task.Delay(900);
+                        SnapEl((FrameworkElement)w.Content, dir, theme + "-cal-" + mode);
+                        if (theme == "sunset") break;
+                    }
+                    if (theme == "dark")
+                    {
+                        Call(cal, "OpenForm", new object[] { null }); await Task.Delay(700);
+                        SnapEl((FrameworkElement)w.Content, dir, "dark-cal-form");
+                        Call(cal, "OnFeeds", cal, new RoutedEventArgs()); await Task.Delay(700);
+                        SnapEl((FrameworkElement)w.Content, dir, "dark-cal-feeds");
+                        Call(cal, "OnCancel", cal, new RoutedEventArgs());
+                        // телефон: до и после привязки
+                        w.SelectTab("phone"); await Task.Delay(1500);
+                        SnapEl((FrameworkElement)w.Content, dir, "dark-phone-unpaired");
+                        AppSettings.Current.PhonePairedName = "iPhone · Safari";
+                        var pv = w.GetView("phone");
+                        Call(pv, "ShowPaired", true); await Task.Delay(1200);
+                        Call(pv, "UpdateStatus");
+                        SnapEl((FrameworkElement)w.Content, dir, "dark-phone-paired");
+                        w.SelectTab("calendar"); await Task.Delay(800);
+                    }
+                }
+                AppSettings.Current.Theme = "dark"; AppSettings.Current.Save();
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
