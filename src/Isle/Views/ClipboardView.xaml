@@ -50,7 +50,7 @@
             <StackPanel x:Name="TypesPanel" DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8"/>
 
             <!-- куда сейчас сохраняются копии -->
-            <Border x:Name="RecordBar" DockPanel.Dock="Top" Background="#14141A" BorderBrush="#2A2A33" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,8" Visibility="Collapsed">
+            <Border x:Name="RecordBar" DockPanel.Dock="Top" Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,8" Visibility="Collapsed">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="8,2" Click="OnStopRecord" ToolTip="Перестать сохранять в папку">
                         <TextBlock Text="Выключить" FontSize="11"/>
@@ -61,7 +61,7 @@
             </Border>
 
             <!-- у папки есть приложения: их снимки попадают сюда сами -->
-            <Border x:Name="AppsBar" DockPanel.Dock="Top" Background="#121216" BorderBrush="#24242B" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,8" Visibility="Collapsed">
+            <Border x:Name="AppsBar" DockPanel.Dock="Top" Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,8" Visibility="Collapsed">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="8,2" Click="OnEditApps">
                         <TextBlock Text="Изменить" FontSize="11"/>
@@ -74,7 +74,7 @@
             <Grid DockPanel.Dock="Bottom" Margin="2,8,0,0">
                 <TextBlock x:Name="Hint" Style="{StaticResource MutedText}" FontSize="11"
                            Text="Клик — вставить · Shift+клик — только скопировать · перетащи запись в папку слева или в другую программу"/>
-                <Border x:Name="UndoBar" Background="#1A1A1F" CornerRadius="10" Padding="12,5" Visibility="Collapsed" HorizontalAlignment="Left">
+                <Border x:Name="UndoBar" Background="{DynamicResource ChipHover}" CornerRadius="10" Padding="12,5" Visibility="Collapsed" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="UndoText" FontSize="12" VerticalAlignment="Center"/>
                         <Button Style="{StaticResource Ghost}" Margin="10,0,0,0" Padding="8,2" Click="OnUndo">
@@ -114,8 +114,8 @@
                                                 </LinearGradientBrush>
                                             </Border.Background>
                                         </Border>
-                                        <Border Grid.Column="1" Background="#121216" BorderBrush="#24242B" BorderThickness="1" CornerRadius="10" Padding="12,3" Margin="10,0">
-                                            <TextBlock Text="{Binding Name, Converter={StaticResource DayTitle}}" FontSize="11" FontWeight="SemiBold" Foreground="#9A9AA5"/>
+                                        <Border Grid.Column="1" Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10" Padding="12,3" Margin="10,0">
+                                            <TextBlock Text="{Binding Name, Converter={StaticResource DayTitle}}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}"/>
                                         </Border>
                                         <Border Grid.Column="2" Height="1" VerticalAlignment="Center">
                                             <Border.Background>
@@ -190,13 +190,13 @@
                                     <Setter TargetName="actBtn" Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                    <Setter TargetName="row" Property="Background" Value="{StaticResource CardHover}"/>
-                                    <Setter TargetName="row" Property="BorderBrush" Value="#34343C"/>
+                                    <Setter TargetName="row" Property="Background" Value="{DynamicResource CardHover}"/>
+                                    <Setter TargetName="row" Property="BorderBrush" Value="{DynamicResource SelBorder}"/>
                                     <Setter TargetName="row" Property="BorderThickness" Value="1"/>
                                     <Setter TargetName="row" Property="Padding" Value="11,8"/>
                                 </DataTrigger>
                                 <Trigger SourceName="row" Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="row" Property="Background" Value="{StaticResource CardHover}"/>
+                                    <Setter TargetName="row" Property="Background" Value="{DynamicResource CardHover}"/>
                                     <Setter TargetName="actions" Property="Visibility" Value="Visible"/>
                                 </Trigger>
                             </DataTemplate.Triggers>

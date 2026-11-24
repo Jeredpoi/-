@@ -138,7 +138,8 @@ namespace Isle.Views
             StatusDot.Fill = new SolidColorBrush(online ? Green : Color.FromRgb(0x6F, 0x6F, 0x79));
             StatusText.Text = !PhoneLink.Running ? "Сервер не запущен" : _ip == null ? "Нет общей сети" : online ? "Телефон на связи" : "Ждёт телефон";
             StatusText.Foreground = online ? new SolidColorBrush(Green) : (Brush)FindResource("Muted");
-            StatusPill.Background = new SolidColorBrush(online ? Color.FromRgb(0x0F, 0x24, 0x18) : Color.FromRgb(0x16, 0x16, 0x1A));
+            if (online) StatusPill.Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x24, 0x18));
+            else StatusPill.SetResourceReference(Border.BackgroundProperty, "Plate");
             if (PhoneLink.Paired)
             {
                 PairedName.Text = PhoneLink.PairedName;
@@ -394,7 +395,7 @@ namespace Isle.Views
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                g.Children.Add(new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20)), VerticalAlignment = VerticalAlignment.Top,
+                g.Children.Add(new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(10), Background = (Brush)FindResource("Plate"), VerticalAlignment = VerticalAlignment.Top,
                     Child = new Icon { Kind = "Phone", Width = 15, Height = 15, Foreground = (Brush)FindResource("Muted") } });
                 var info = new StackPanel { Margin = new Thickness(12, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
                 info.Children.Add(new TextBlock { Text = n.Title, FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
@@ -471,7 +472,10 @@ namespace Isle.Views
             InEmpty.Visibility = PhoneLink.Received.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             foreach (var it in PhoneLink.Received.Take(50))
             {
-                var row = new Border { Background = (Brush)FindResource("Card"), CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 0, 0, 6), Cursor = Cursors.Hand };
+                var row = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 0, 0, 6), Cursor = Cursors.Hand };
+                row.SetResourceReference(Border.BackgroundProperty, "Card");
+                row.MouseEnter += (_, __) => row.SetResourceReference(Border.BackgroundProperty, "CardHover");
+                row.MouseLeave += (_, __) => row.SetResourceReference(Border.BackgroundProperty, "Card");
                 var g = new Grid();
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -479,7 +483,7 @@ namespace Isle.Views
                 if (it.IsPhoto && LoadThumb(it.Path, 72) is BitmapSource th)
                     icon = new Border { Width = 56, Height = 40, CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = new Image { Source = th, Stretch = Stretch.UniformToFill } };
                 else
-                    icon = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x20)),
+                    icon = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(8), Background = (Brush)FindResource("Plate"),
                         Child = new Icon { Kind = it.Text != null ? "Text" : "File", Width = 15, Height = 15, Foreground = (Brush)FindResource("Muted") } };
                 g.Children.Add(icon);
                 var info = new StackPanel { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -576,7 +580,7 @@ namespace Isle.Views
             var x = new Button { Style = (Style)FindResource("Ghost"), Padding = new Thickness(2), Content = new Icon { Kind = "Close", Width = 11, Height = 11 }, ToolTip = "Убрать" };
             x.Click += (_, __) => remove();
             sp.Children.Add(x);
-            return new Border { Child = sp, Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x1A)), CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 4, 4, 4), Margin = new Thickness(0, 0, 6, 6) };
+            return new Border { Child = sp, Background = (Brush)FindResource("ChipBg"), CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 4, 4, 4), Margin = new Thickness(0, 0, 6, 6) };
         }
 
         private void OnDragEnter(object s, DragEventArgs e)

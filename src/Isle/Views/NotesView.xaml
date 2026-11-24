@@ -36,7 +36,7 @@
                     <Button Style="{StaticResource Ghost}" Click="OnBold" ToolTip="Жирный (Ctrl+B)"><h:Icon Kind="Bold" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnItalic" ToolTip="Курсив (Ctrl+I)"><h:Icon Kind="Italic" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnStrike" ToolTip="Зачеркнуть"><h:Icon Kind="Strike" Width="13" Height="13"/></Button>
-                    <Border Width="1" Height="14" Background="#26262B" Margin="6,0"/>
+                    <Border Width="1" Height="14" Background="{DynamicResource CardBorder}" Margin="6,0"/>
                     <Button Style="{StaticResource Ghost}" Click="OnBullets" ToolTip="Список"><h:Icon Kind="ListBullet" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnNumbers" ToolTip="Нумерованный список"><h:Icon Kind="ListNumber" Width="13" Height="13"/></Button>
                     <Button Style="{StaticResource Ghost}" Click="OnCheck" ToolTip="Чек-лист: ☐ / ☑"><h:Icon Kind="ListCheck" Width="13" Height="13"/></Button>
@@ -46,7 +46,7 @@
             <Border Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="12">
                 <Grid>
                     <TextBlock x:Name="EditorHint" Text="Пиши сюда что угодно: номер заказа, список дел, кусок кода. Сохраняется само."
-                               Foreground="#6F6F79" FontSize="13" Margin="14,10" TextWrapping="Wrap" IsHitTestVisible="False"/>
+                               Foreground="{DynamicResource Muted}" Opacity="0.75" FontSize="13" Margin="14,10" TextWrapping="Wrap" IsHitTestVisible="False"/>
                     <RichTextBox x:Name="Editor" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Fg}" CaretBrush="{StaticResource Fg}"
                                  SelectionBrush="{StaticResource Blue}" FontSize="13" Padding="8,6" AcceptsTab="True"
                                  VerticalScrollBarVisibility="Auto" TextChanged="OnEdit" PreviewMouseLeftButtonUp="OnEditorClick">
@@ -68,7 +68,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Grid Width="84" Height="84">
-                        <Ellipse Stroke="#26262B" StrokeThickness="5"/>
+                        <Ellipse Stroke="{DynamicResource Track}" StrokeThickness="5"/>
                         <Path x:Name="Ring" Stroke="{DynamicResource Accent}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <TextBlock x:Name="TimeText" Text="5:00" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
@@ -94,7 +94,7 @@
                     <Run Text="Напоминания"/>
                 </TextBlock>
                 <TextBox DockPanel.Dock="Bottom" x:Name="RemInput" Tag="Позвонить маме завтра в 9" Padding="10,7" FontSize="12" KeyDown="OnRemKey"/>
-                <TextBlock DockPanel.Dock="Bottom" x:Name="RemError" FontSize="11" Foreground="{StaticResource Red}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                <TextBlock DockPanel.Dock="Bottom" x:Name="RemError" FontSize="11" Foreground="{StaticResource Danger}" Margin="0,0,0,4" TextWrapping="Wrap"/>
                 <Grid>
                     <TextBlock x:Name="RemHint" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center"
                                Text="Напиши по-человечески, о чём и когда: «позвонить маме завтра в 9», «таблетки каждый день в 23:00», «через 20 минут выключить плиту»"/>

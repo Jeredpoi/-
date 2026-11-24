@@ -12,7 +12,8 @@
         <Border CornerRadius="18" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" Padding="0">
             <Grid ClipToBounds="True">
                 <Border x:Name="HeroBackground" CornerRadius="17" Background="#243246"/>
-                <Canvas x:Name="WeatherFx" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnWeatherFxSizeChanged"/>
+                <!-- облака и осадки — фоном, приглушённо: не спорят с цифрами -->
+                <Canvas x:Name="WeatherFx" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnWeatherFxSizeChanged" Opacity="0.6"/>
                 <DockPanel Margin="16">
                 <DockPanel DockPanel.Dock="Top">
                     <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Click="OnRefresh" ToolTip="Обновить">
@@ -29,18 +30,18 @@
                 <TextBlock DockPanel.Dock="Top" x:Name="Desc" FontSize="14" FontWeight="Medium" TextWrapping="Wrap">
                     <TextBlock.Effect><DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="0" Opacity="0.55"/></TextBlock.Effect>
                 </TextBlock>
-                <TextBlock DockPanel.Dock="Top" x:Name="Snow" FontSize="11" Foreground="{DynamicResource Accent}" Margin="0,3,0,0"/>
+                <TextBlock DockPanel.Dock="Top" x:Name="Snow" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Fg}" Margin="0,3,0,0" TextWrapping="Wrap"/>
                 <TextBlock DockPanel.Dock="Top" x:Name="Feels" FontSize="11" Foreground="#A1A1AB" Margin="0,2,0,0"/>
                 <TextBlock DockPanel.Dock="Bottom" x:Name="Sun" FontSize="11" Foreground="#A1A1AB" Margin="0,8,0,0"/>
                 <UniformGrid DockPanel.Dock="Bottom" Columns="3" VerticalAlignment="Bottom">
                     <Border CornerRadius="10" Background="{DynamicResource Plate}" Padding="8,6" Margin="0,0,4,0">
-                        <StackPanel><TextBlock Text="Ветер" FontSize="10" Foreground="{DynamicResource Muted}"/><TextBlock x:Name="Wind" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                        <StackPanel><TextBlock Text="Ветер" FontSize="10" Foreground="{DynamicResource Muted}"/><TextBlock x:Name="Wind" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></StackPanel>
                     </Border>
                     <Border CornerRadius="10" Background="{DynamicResource Plate}" Padding="8,6" Margin="2,0">
-                        <StackPanel><TextBlock Text="Влажность" FontSize="10" Foreground="{DynamicResource Muted}"/><TextBlock x:Name="Hum" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                        <StackPanel><TextBlock Text="Влажность" FontSize="10" Foreground="{DynamicResource Muted}"/><TextBlock x:Name="Hum" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></StackPanel>
                     </Border>
                     <Border CornerRadius="10" Background="{DynamicResource Plate}" Padding="8,6" Margin="4,0,0,0">
-                        <StackPanel><TextBlock Text="Осадки сейчас" FontSize="10" Foreground="{DynamicResource Muted}"/><TextBlock x:Name="Prec" FontSize="12" FontWeight="SemiBold"/></StackPanel>
+                        <StackPanel><TextBlock Text="Осадки" FontSize="10" Foreground="{DynamicResource Muted}" ToolTip="Осадки сейчас"/><TextBlock x:Name="Prec" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></StackPanel>
                     </Border>
                 </UniformGrid>
                 <Grid/>
@@ -84,7 +85,7 @@
                                     <TextBlock Grid.Column="1" Text="{Binding Icon}" FontSize="13"/>
                                     <TextBlock Grid.Column="2" Text="{Binding MinText}" FontSize="12" Foreground="{DynamicResource Muted}" TextAlignment="Right" Margin="0,0,8,0"/>
                                     <Grid Grid.Column="3" VerticalAlignment="Center" Height="4" Width="160" HorizontalAlignment="Left">
-                                        <Border CornerRadius="2" Background="{StaticResource Track}"/>
+                                        <Border CornerRadius="2" Background="{DynamicResource Track}"/>
                                         <Canvas>
                                             <Border Canvas.Left="{Binding BarLeft}" Width="{Binding BarWidth}" Height="4" CornerRadius="2">
                                                 <Border.Background>

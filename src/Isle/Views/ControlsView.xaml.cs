@@ -96,7 +96,7 @@ namespace Isle.Views
         private static void SetTile(Button tile, Border dot, Helpers.Icon icon, bool on)
         {
             if (on) tile.BorderBrush = OnBorder; else tile.ClearValue(BorderBrushProperty);
-            dot.Background = on ? On : Off;
+            if (on) dot.Background = On; else dot.SetResourceReference(Border.BackgroundProperty, "Plate"); // выключенное — плашка темы (в «Закате» не чёрный квадрат)
             var ic = icon ?? (dot.Child as Helpers.Icon);
             if (ic != null) ic.Foreground = on ? Brushes.Black : new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF1));
         }
@@ -208,7 +208,8 @@ namespace Isle.Views
             var fg = (Brush)FindResource("Fg");
             var muted = (Brush)FindResource("Muted");
             var root = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
-            var card = new Border { CornerRadius = new CornerRadius(14), Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x1A)), Padding = new Thickness(10, 8, 8, 8) };
+            var card = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(10, 8, 8, 8) };
+            card.SetResourceReference(Border.BackgroundProperty, "Plate");
             root.Children.Add(card);
             var g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -216,7 +217,8 @@ namespace Isle.Views
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             card.Child = g;
 
-            var dot = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(11), Background = connected ? On : Off, Margin = new Thickness(0, 0, 10, 0) };
+            var dot = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(11), Background = connected ? On : Brushes.Transparent, Margin = new Thickness(0, 0, 10, 0) };
+            if (!connected) dot.SetResourceReference(Border.BackgroundProperty, "Plate");
             dot.Child = SignalGlyph(n.Signal, connected ? Brushes.Black : fg);
             g.Children.Add(dot);
 
@@ -319,7 +321,7 @@ namespace Isle.Views
             b.Content = new Border
             {
                 Height = 30, CornerRadius = new CornerRadius(15), Padding = new Thickness(13, 0, 13, 0),
-                Background = primary ? On : new SolidColorBrush(Color.FromRgb(0x2C, 0x2C, 0x33)),
+                Background = primary ? On : (Brush)Application.Current.FindResource("ChipHover"),
                 Child = new TextBlock { Text = text, FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center,
                     Foreground = primary ? Brushes.Black : (Brush)FindResource("Fg") }
             };

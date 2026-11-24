@@ -29,7 +29,7 @@ namespace Isle.Views
         }
 
         private void OnDragEnter(object s, DragEventArgs e) => Zone.BorderBrush = (System.Windows.Media.Brush)FindResource("Accent");
-        private void OnDragLeave(object s, DragEventArgs e) => Zone.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x34, 0x34, 0x3C));
+        private void OnDragLeave(object s, DragEventArgs e) => Zone.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, "CardBorder");
 
         private void OnDrop(object s, DragEventArgs e)
         {

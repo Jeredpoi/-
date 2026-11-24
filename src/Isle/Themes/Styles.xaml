@@ -26,6 +26,11 @@
     <SolidColorBrush x:Key="Blue" Color="#4A4A55"/>
     <SolidColorBrush x:Key="Green" Color="#ECECF1"/>
     <SolidColorBrush x:Key="Red" Color="#B9B9C3"/>
+    <!-- ошибки и удаление — везде один красный -->
+    <SolidColorBrush x:Key="Danger" Color="#F87171"/>
+    <!-- всплывающие окошки (подсказки, списки, меню) — непрозрачные, в «Закате» лиловые; рамка поля в фокусе -->
+    <SolidColorBrush x:Key="Popup" Color="#141417"/>
+    <SolidColorBrush x:Key="FocusBorder" Color="#3A3A42"/>
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
     <!-- Цвет текста не задаём здесь: он наследуется от окна/кнопки (иначе ломаются тёмные кнопки и выпадающие списки) -->
@@ -48,7 +53,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">
-                    <Border Background="#141417" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="10,7" Margin="6" MaxWidth="360">
+                    <Border Background="{DynamicResource Popup}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10" Padding="10,7" Margin="6" MaxWidth="360">
                         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="2" Opacity="0.55"/></Border.Effect>
                         <ContentPresenter>
                             <ContentPresenter.Resources>
@@ -93,7 +98,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="{StaticResource CardHover}"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource CardHover}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Trigger.EnterActions>
@@ -229,6 +234,7 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Focusable" Value="False"/>
         <Setter Property="GroupName" Value="tabs"/>
+        <Setter Property="ToolTip" Value="{Binding Content, RelativeSource={RelativeSource Self}}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
@@ -296,7 +302,7 @@
                 <ControlTemplate TargetType="TextBox">
                     <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="12">
                         <Grid>
-                            <TextBlock x:Name="ph" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="#6F6F79" Margin="{TemplateBinding Padding}"
+                            <TextBlock x:Name="ph" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="{DynamicResource Muted}" Opacity="0.8" Margin="{TemplateBinding Padding}"
                                        Padding="2,0,0,0" FontSize="{TemplateBinding FontSize}" IsHitTestVisible="False" Visibility="Collapsed" TextWrapping="Wrap"/>
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}"/>
                         </Grid>
@@ -311,7 +317,7 @@
                             <Setter TargetName="ph" Property="Visibility" Value="Visible"/>
                         </MultiTrigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter Property="BorderBrush" Value="#3A3A42"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}"/>
                         </Trigger>
                         <!-- однострочное поле фиксированной высоты (поиск): текст и подсказка ровно по центру -->
                         <Trigger Property="VerticalContentAlignment" Value="Center">
@@ -358,15 +364,27 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <ContentPresenter VerticalAlignment="Center"/>
-                        <Border x:Name="track" Grid.Column="1" Width="38" Height="22" CornerRadius="11" Background="#26262B" Margin="12,0,0,0">
-                            <Ellipse x:Name="knob" Width="16" Height="16" Fill="#ECECF1" HorizontalAlignment="Left" Margin="3,0"/>
+                        <Border x:Name="track" Grid.Column="1" Width="38" Height="22" CornerRadius="11" Background="{DynamicResource Track}" Margin="12,0,0,0">
+                            <Ellipse x:Name="knob" Width="16" Height="16" Fill="#ECECF1" HorizontalAlignment="Left" Margin="3,0">
+                                <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+                            </Ellipse>
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="track" Property="Background" Value="{DynamicResource Accent}"/>
                             <Setter TargetName="knob" Property="Fill" Value="#000000"/>
-                            <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
+                            <!-- ручка переезжает плавно, а не прыгает -->
+                            <Trigger.EnterActions>
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="16" Duration="0:0:0.16"><DoubleAnimation.EasingFunction><QuinticEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                                </Storyboard></BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.16"><DoubleAnimation.EasingFunction><QuinticEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                                </Storyboard></BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -384,7 +402,7 @@
                 <ControlTemplate TargetType="Slider">
                     <!-- высокая прозрачная область: за ползунок легко схватиться, видна только тонкая полоска -->
                     <Grid Height="30" Background="Transparent">
-                        <Border x:Name="track" Height="4" CornerRadius="2" Background="#2A2A30" VerticalAlignment="Center"/>
+                        <Border x:Name="track" Height="4" CornerRadius="2" Background="{DynamicResource Track}" VerticalAlignment="Center"/>
                         <Track x:Name="PART_Track" VerticalAlignment="Center">
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
@@ -437,10 +455,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#1F1F24"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource ChipHover}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#26262B"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource SelBg}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -463,9 +481,9 @@
                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
-                                    <Border x:Name="bd" Background="{DynamicResource ChipBg}" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="10">
+                                    <Border x:Name="bd" Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10">
                                         <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" Data="M0 0L4 4L8 0"
-                                              Stroke="#8B8B95" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                              Stroke="{DynamicResource Muted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -478,7 +496,7 @@
                         <ContentPresenter Margin="12,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"
                                           Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
                         <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-                            <Border Background="#101012" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="3" Margin="0,4,0,0"
+                            <Border Background="{DynamicResource Popup}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10" Padding="3" Margin="0,4,0,0"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="300">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsPresenter/>
@@ -503,7 +521,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="b" Background="{DynamicResource ChipBg}" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                    <Border x:Name="b" Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="10" Padding="12,7">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -567,8 +585,8 @@
     <!-- Тёмные меню для всего приложения: без светлой «полосы» стандартной темы Windows, со скруглением -->
     <Style TargetType="ContextMenu">
         <Setter Property="Foreground" Value="{StaticResource Fg}"/>
-        <Setter Property="Background" Value="#111114"/>
-        <Setter Property="BorderBrush" Value="#26262B"/>
+        <Setter Property="Background" Value="{DynamicResource Popup}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="4"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
@@ -612,7 +630,7 @@
                             <Setter TargetName="check" Property="Visibility" Value="Visible"/>
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="itemBorder" Property="Background" Value="#1E1E23"/>
+                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ChipHover}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource Muted}"/>

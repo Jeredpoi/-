@@ -112,6 +112,8 @@
         </Style>
         <Style x:Key="RowTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="14"/>
+            <!-- строка без описания: заголовок по центру переключателя, а не прижат к верху -->
+            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="FontWeight" Value="Medium"/>
         </Style>
         <Style x:Key="RowNote" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
@@ -144,7 +146,7 @@
                 </Border>
                 <StackPanel Margin="12,0,0,0">
                     <TextBlock Text="Isle" FontSize="16" FontWeight="Bold"/>
-                    <TextBlock x:Name="VersionText" Text="Версия" FontSize="11" Foreground="#8B8B95"/>
+                    <TextBlock x:Name="VersionText" Text="Версия" FontSize="11" Foreground="{DynamicResource SNote}"/>
                 </StackPanel>
             </StackPanel>
             <Button DockPanel.Dock="Bottom" Style="{StaticResource Ghost}" Margin="14,0,14,18" HorizontalContentAlignment="Left" Click="OnExit">
@@ -153,7 +155,7 @@
                     <TextBlock Text="Выйти из Isle" Margin="10,0,0,0" Foreground="#F87171" FontSize="13"/>
                 </StackPanel>
             </Button>
-            <TextBlock DockPanel.Dock="Bottom" Text="Изменения сохраняются сразу" FontSize="11" Foreground="#6F6F79" Margin="26,0,0,10"/>
+            <TextBlock DockPanel.Dock="Bottom" Text="Изменения сохраняются сразу" FontSize="11" Foreground="{DynamicResource SNote}" Opacity="0.8" Margin="26,0,0,10"/>
             <StackPanel x:Name="NavPanel" Margin="12,0">
                 <RadioButton Style="{StaticResource Nav}" Content="Общее" Tag="{h:IconFor Sliders}" x:Name="NavGeneral" IsChecked="True" Checked="OnNav"/>
                 <RadioButton Style="{StaticResource Nav}" Content="Внешний вид" Tag="{h:IconFor Contrast}" x:Name="NavLook" Checked="OnNav"/>
@@ -246,7 +248,7 @@
                 <StackPanel x:Name="SecLook" Visibility="Collapsed">
                     <TextBlock Style="{StaticResource H1}" Text="Внешний вид"/>
                     <!-- превью свёрнутого острова -->
-                    <Border Background="#0E0E10" BorderBrush="#1C1C20" BorderThickness="1" CornerRadius="16" Height="150" Margin="0,0,0,14">
+                    <Border Background="{DynamicResource SCard}" BorderBrush="{DynamicResource SCardBorder}" BorderThickness="1" CornerRadius="16" Height="150" Margin="0,0,0,14">
                         <Grid>
                             <Border x:Name="Preview" Background="Black" CornerRadius="0,0,16,16" HorizontalAlignment="Center" VerticalAlignment="Top"
                                     Height="34" Padding="16,0" BorderBrush="#26262B" BorderThickness="1,0,1,1" MouseEnter="OnPreviewEnter" MouseLeave="OnPreviewLeave">
@@ -274,7 +276,7 @@
                                     Padding="6" BorderBrush="#26262B" BorderThickness="1">
                                 <StackPanel x:Name="PreviewTabs" Orientation="Horizontal"/>
                             </Border>
-                            <TextBlock Text="Свёрнутая чёлка и вкладки" FontSize="11" Foreground="#6F6F79" VerticalAlignment="Bottom" Margin="14,0,0,10"/>
+                            <TextBlock Text="Свёрнутая чёлка и вкладки" FontSize="11" Foreground="{DynamicResource SNote}" VerticalAlignment="Bottom" Margin="14,0,0,10"/>
                         </Grid>
                     </Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14">
@@ -695,7 +697,7 @@
                                 </StackPanel>
                             </Grid>
                             <Grid x:Name="UpdProgress" Height="6" Margin="0,14,0,0" Visibility="Collapsed">
-                                <Border CornerRadius="3" Background="#26262B"/>
+                                <Border CornerRadius="3" Background="{DynamicResource SFieldBorder}"/>
                                 <Border x:Name="UpdBar" CornerRadius="3" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
                             </Grid>
                             <TextBlock x:Name="UpdNotes" Style="{StaticResource RowNote}" Margin="0,14,0,0" Visibility="Collapsed" FontFamily="Consolas, Segoe UI"/>

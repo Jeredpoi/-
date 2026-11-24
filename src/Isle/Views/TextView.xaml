@@ -23,7 +23,7 @@
 
         <DockPanel Grid.Column="2">
             <TextBlock DockPanel.Dock="Top" Text="ИНСТРУМЕНТЫ" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="2,0,0,8"/>
-            <TextBlock x:Name="Error" DockPanel.Dock="Bottom" FontSize="11" Foreground="{StaticResource Red}" TextWrapping="Wrap" Margin="2,6,0,0"/>
+            <TextBlock x:Name="Error" DockPanel.Dock="Bottom" FontSize="11" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="2,6,0,0"/>
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <UniformGrid x:Name="ToolGrid" Columns="2" VerticalAlignment="Top"/>
             </ScrollViewer>

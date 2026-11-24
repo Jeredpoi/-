@@ -78,7 +78,7 @@
                                 <DataTrigger Binding="{Binding IsUser}" Value="True">
                                     <Setter TargetName="row" Property="HorizontalAlignment" Value="Right"/>
                                     <Setter TargetName="avatar" Property="Visibility" Value="Collapsed"/>
-                                    <Setter TargetName="bubble" Property="Background" Value="#1F1F24"/>
+                                    <Setter TargetName="bubble" Property="Background" Value="{DynamicResource ChipHover}"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
