@@ -35,7 +35,68 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                await Task.Delay(3000);
+                // движущаяся картинка: цветной квадрат ездит по окну 640×360
+                var box = new Border { Width = 80, Height = 80, Background = Brushes.OrangeRed, CornerRadius = new CornerRadius(12) };
+                var cv = new Canvas { Background = new SolidColorBrush(Color.FromRgb(30, 60, 110)), Width = 640, Height = 360 };
+                var label = new TextBlock { Foreground = Brushes.White, FontSize = 28, Text = "Isle запись" };
+                Canvas.SetLeft(label, 20); Canvas.SetTop(label, 300);
+                cv.Children.Add(box); cv.Children.Add(label);
+                var win = new Window { Content = cv, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, Left = 100, Top = 150, Topmost = true, ShowActivated = false };
+                win.Show();
+                var t0 = DateTime.Now;
+                var anim = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+                anim.Tick += (_, __) => { double t = (DateTime.Now - t0).TotalSeconds; Canvas.SetLeft(box, 280 + 240 * Math.Sin(t * 2)); Canvas.SetTop(box, 140 + 100 * Math.Cos(t * 3)); label.Text = "Isle запись " + t.ToString("0.0"); };
+                anim.Start();
+                await Task.Delay(800);
+                var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                int px(double v) => (int)Math.Round(v * dev.M11);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await RegionRecorder.StartAsync(px(100), px(150), px(640), px(360), true, false);
+                log.AppendLine("старт за " + sw.ElapsedMilliseconds + " мс");
+                await Task.Delay(1500);
+                SnapEl((FrameworkElement)w.Content, dir, "island-rec");
+                log.AppendLine("в чёлке: " + w.RecText.Text + " видно=" + w.RecChip.Visibility);
+                await Task.Delay(3500);
+                sw.Restart();
+                var file = await RegionRecorder.StopAsync();
+                log.AppendLine("стоп и сохранение за " + sw.ElapsedMilliseconds + " мс: " + file + " " + (file != null ? new FileInfo(file).Length / 1024 + " КБ" : ""));
+                anim.Stop(); win.Close();
+                if (file != null) File.Copy(file, Path.Combine(dir, "rec-region.mp4"), true);
+                log.AppendLine("процессор/память: " + Environment.WorkingSet / 1048576 + " МБ");
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
