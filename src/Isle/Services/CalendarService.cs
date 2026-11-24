@@ -39,6 +39,8 @@ namespace Isle.Services
         public DateTime? RecurrenceId { get; set; }
         /// <summary>«local» — своё событие, иначе id подключённого календаря.</summary>
         public string Source { get; set; } = "local";
+        /// <summary>Цвет события (#RRGGBB). Нет — подберётся сам (старые события получают цвет при первом запуске).</summary>
+        public string Color { get; set; }
     }
 
     /// <summary>Конкретное появление события в календаре (повторы уже развёрнуты).</summary>
@@ -71,6 +73,8 @@ namespace Isle.Services
     public static class CalendarService
     {
         public const string LocalColor = "#4ADE80";
+        /// <summary>Цвета событий: читаются и на чёрной теме, и на «Закате».</summary>
+        public static readonly string[] Palette = { "#4ADE80", "#60A5FA", "#F472B6", "#FBBF24", "#A78BFA", "#2DD4BF", "#FB923C", "#F87171" };
         private static readonly string[] FeedColors = { "#60A5FA", "#F472B6", "#FBBF24", "#A78BFA", "#2DD4BF", "#FB923C" };
 
         public static readonly List<CalEvent> Local = new();
@@ -92,13 +96,46 @@ namespace Isle.Services
             _loaded = true;
             try
             {
-                if (File.Exists(LocalPath)) Local.AddRange(JsonSerializer.Deserialize<List<CalEvent>>(File.ReadAllText(LocalPath)) ?? new());
+                if (File.Exists(LocalPath))
+                {
+                    try { Local.AddRange(JsonSerializer.Deserialize<List<CalEvent>>(File.ReadAllText(LocalPath)) ?? new()); }
+                    catch (Exception ex)
+                    {
+                        // файл не читается — не затираем его пустым списком: откладываем в сторону, события можно будет вернуть
+                        var bad = Path.Combine(Dir, "events.broken-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                        try { File.Copy(LocalPath, bad, true); } catch { }
+                        Journal.Warn("calendar", "свои события не прочитались (" + ex.Message + "), файл сохранён как " + Path.GetFileName(bad));
+                    }
+                }
+                AssignMissingColors();
                 if (File.Exists(FeedsPath)) Feeds.AddRange(JsonSerializer.Deserialize<List<CalFeed>>(File.ReadAllText(FeedsPath)) ?? new());
                 foreach (var f in Feeds)
                     if (File.Exists(FeedFile(f.Id))) FeedEvents[f.Id] = Ics.Parse(File.ReadAllText(FeedFile(f.Id)), f.Id);
                 Journal.Info("calendar", "своих событий " + Local.Count + ", подключённых календарей " + Feeds.Count);
             }
             catch (Exception ex) { Journal.Warn("calendar", "не прочитался: " + ex.Message); }
+        }
+
+        /// <summary>
+        /// События из прошлых версий были без цвета (все зелёные). Раздаём цвета так, чтобы в одном дне они различались;
+        /// перед этим — копия файла, на всякий случай.
+        /// </summary>
+        private static void AssignMissingColors()
+        {
+            var bare = Local.Where(e => string.IsNullOrEmpty(e.Color)).ToList();
+            if (bare.Count == 0) return;
+            try { File.Copy(LocalPath, Path.Combine(Dir, "events.backup-" + DateTime.Now.ToString("yyyyMMdd") + ".json"), true); } catch { }
+            foreach (var e in bare.OrderBy(e => e.Start)) e.Color = PickColor(e.Start.Date, e);
+            SaveLocal();
+            Journal.Info("calendar", "событиям без цвета раздали цвета: " + bare.Count);
+        }
+
+        /// <summary>Цвет для события в этот день: первый, которого в дне ещё нет (иначе — самый редкий).</summary>
+        public static string PickColor(DateTime day, CalEvent except = null)
+        {
+            var used = Local.Where(e => e != except && !string.IsNullOrEmpty(e.Color) && e.Start.Date <= day && e.End >= day)
+                            .GroupBy(e => e.Color).ToDictionary(g => g.Key, g => g.Count());
+            return Palette.OrderBy(c => used.TryGetValue(c, out var n) ? n : 0).ThenBy(c => Array.IndexOf(Palette, c)).First();
         }
 
         private static void SaveLocal() => Write(LocalPath, JsonSerializer.Serialize(Local));
@@ -118,6 +155,7 @@ namespace Isle.Services
         // ---------- свои события ----------
         public static void Save(CalEvent e)
         {
+            if (string.IsNullOrEmpty(e.Color)) e.Color = PickColor(e.Start.Date, e);
             if (!Local.Contains(e)) Local.Add(e);
             SaveLocal();
             Changed?.Invoke();
@@ -138,6 +176,7 @@ namespace Isle.Services
             foreach (var e in list)
             {
                 if (e.Uid != null && Local.Any(x => x.Uid == e.Uid && x.RecurrenceId == e.RecurrenceId)) continue;
+                e.Color = PickColor(e.Start.Date);
                 Local.Add(e); added++;
             }
             SaveLocal();
@@ -212,7 +251,15 @@ namespace Isle.Services
         }
 
         // ---------- выборка ----------
-        public static string ColorOf(CalEvent e) => e.Source == "local" ? LocalColor : Feeds.FirstOrDefault(f => f.Id == e.Source)?.Color ?? "#60A5FA";
+        /// <summary>Цвет события: свой, а у событий из подключённых календарей — по названию (разные дела — разные цвета).</summary>
+        public static string ColorOf(CalEvent e)
+        {
+            if (!string.IsNullOrEmpty(e.Color)) return e.Color;
+            if (e.Source == "local") return LocalColor;
+            uint h = 2166136261;
+            foreach (var ch in e.Uid ?? e.Title ?? "") h = (h ^ ch) * 16777619;
+            return Palette[h % (uint)Palette.Length];
+        }
 
         /// <summary>Все появления событий, пересекающие [from, to), по времени начала.</summary>
         public static List<CalOccurrence> Between(DateTime from, DateTime to)

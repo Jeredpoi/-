@@ -26,6 +26,8 @@ namespace Isle.Views
         private CalEvent _editing;   // null — новое событие
         private int? _remind = 10;
         private string _repeat;      // null, DAILY, WEEKLY, MONTHLY, YEARLY
+        private DateTime _formDate = DateTime.Today;
+        private string _color;
 
         public CalendarView()
         {
@@ -37,6 +39,8 @@ namespace Isle.Views
                     Foreground = (Brush)FindResource("Muted"), Margin = new Thickness(0, 0, 0, 4) });
             (_mode == "day" ? ModeDay : _mode == "week" ? ModeWeek : ModeMonth).IsChecked = true;
             BuildChips();
+            SetupTimeBox(FFrom, isStart: true);
+            SetupTimeBox(FTo, isStart: false);
             IsVisibleChanged += (_, __) => { if (IsVisible) { if (_day.Date != DateTime.Today && _shownToday != DateTime.Today) GoToday(); Render(); } };
             Render();
         }
@@ -97,6 +101,7 @@ namespace Isle.Views
                 cell.MouseLeave += (_, __) => { if (day != _day.Date) cell.Background = Brushes.Transparent; };
                 cell.MouseLeftButtonUp += (_, e) =>
                 {
+                    if (FormPane.Visibility == Visibility.Visible) { SetFormDate(day); return; } // форма открыта — клик выбирает дату
                     if (e.ClickCount >= 2) { _day = day; OpenForm(null); return; }
                     Select(day);
                 };
@@ -373,18 +378,22 @@ namespace Isle.Views
                 // новое: на выбранный день, ближайший ровный час (сегодня) или 10:00
                 var start = _day.Date == DateTime.Today ? DateTime.Today.AddHours(Math.Min(23, DateTime.Now.Hour + 1)) : _day.Date.AddHours(10);
                 FTitle.Text = ""; FPlace.Text = "";
-                FDate.Text = start.ToString("dd.MM.yyyy");
+                _formDate = start.Date;
                 FFrom.Text = start.ToString("HH:mm"); FTo.Text = start.AddHours(1).ToString("HH:mm");
                 FAllDay.IsChecked = false; _remind = 10; _repeat = null;
+                _color = CalendarService.PickColor(start.Date);
             }
             else
             {
                 FTitle.Text = ev.Title; FPlace.Text = ev.Location ?? "";
-                FDate.Text = ev.Start.ToString("dd.MM.yyyy");
+                _formDate = ev.Start.Date;
                 FFrom.Text = ev.Start.ToString("HH:mm"); FTo.Text = ev.End.ToString("HH:mm");
                 FAllDay.IsChecked = ev.AllDay; _remind = ev.Reminder; _repeat = ev.Rule?.Freq;
+                _color = CalendarService.ColorOf(ev);
             }
             DeleteBtn.Visibility = ev != null ? Visibility.Visible : Visibility.Collapsed;
+            SetFormDate(_formDate);
+            BuildColors();
             OnAllDay(null, null);
             SyncChips();
             ShowPane(FormPane);
@@ -400,8 +409,7 @@ namespace Isle.Views
 
         private void OnSave(object s, RoutedEventArgs e)
         {
-            if (!DateTime.TryParseExact(FDate.Text.Trim(), new[] { "dd.MM.yyyy", "d.M.yyyy", "dd.MM.yy", "d.M.yy", "d.M" }, Ru, DateTimeStyles.None, out var date))
-            { ShowError("Дата — в виде 24.11.2026"); return; }
+            var date = _formDate;
             bool all = FAllDay.IsChecked == true;
             DateTime start = date.Date, end = date.Date.AddDays(1);
             if (!all)
@@ -418,6 +426,7 @@ namespace Isle.Views
             ev.Start = start; ev.End = end; ev.AllDay = all;
             ev.Reminder = all && _remind is < 1440 ? null : _remind;
             ev.Rule = _repeat == null ? null : new CalRule { Freq = _repeat, Interval = 1 };
+            ev.Color = _color;
             CalendarService.Save(ev);
             Journal.Info("calendar", (_editing == null ? "добавлено" : "изменено") + " событие" + (ev.Rule != null ? ", повтор " + ev.Rule.Freq : ""));
             _day = start.Date;
@@ -425,6 +434,104 @@ namespace Isle.Views
             ShowPane(ListPane);
             Render();
         }
+
+        // ---------- дата, время и цвет в форме ----------
+        private void SetFormDate(DateTime d)
+        {
+            _formDate = d.Date;
+            FDateText.Text = Cap(_formDate.ToString(_formDate.Year == DateTime.Today.Year ? "ddd, d MMMM" : "d MMMM yyyy", Ru));
+            // день подсвечивается и в месяце слева
+            _day = _formDate;
+            if (_day.Month != _month.Month || _day.Year != _month.Year) _month = new DateTime(_day.Year, _day.Month, 1);
+            MonthTitle.Text = Ru.DateTimeFormat.MonthNames[_month.Month - 1] is var mn && mn.Length > 0 ? char.ToUpper(mn[0]) + mn[1..] + " " + _month.Year : "";
+            RenderMonth();
+        }
+
+        private void OnFormPrevDay(object s, RoutedEventArgs e) => SetFormDate(_formDate.AddDays(-1));
+        private void OnFormNextDay(object s, RoutedEventArgs e) => SetFormDate(_formDate.AddDays(1));
+
+        /// <summary>Кружки цветов: выбранный — с белым кольцом.</summary>
+        private void BuildColors()
+        {
+            FColors.Children.Clear();
+            foreach (var hex in CalendarService.Palette)
+            {
+                var c = hex;
+                bool sel = string.Equals(c, _color, StringComparison.OrdinalIgnoreCase);
+                var ring = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(13), Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand,
+                    BorderThickness = new Thickness(2), BorderBrush = sel ? (Brush)FindResource("Fg") : Brushes.Transparent, Background = Brushes.Transparent,
+                    Child = new Ellipse { Width = 16, Height = 16, Fill = Brush(c) } };
+                ring.MouseLeftButtonUp += (_, __) => { _color = c; BuildColors(); };
+                FColors.Children.Add(ring);
+            }
+        }
+
+        /// <summary>
+        /// Поле времени: принимает только цифры, двоеточие ставит само («1830» → «18:30», «930» → «9:30»),
+        /// колёсико и стрелки ↑↓ меняют на 15 минут. Сдвинул начало — конец едет следом, длительность та же.
+        /// </summary>
+        private void SetupTimeBox(TextBox tb, bool isStart)
+        {
+            tb.MaxLength = 5;
+            bool busy = false;
+            tb.PreviewTextInput += (_, e) => { if (!e.Text.All(char.IsDigit)) e.Handled = true; };
+            DataObject.AddPastingHandler(tb, (_, e) =>
+            {
+                if (e.DataObject.GetData(DataFormats.UnicodeText) is string t && TryTime(t, out var ts)) { tb.Text = Fmt(ts); tb.CaretIndex = tb.Text.Length; }
+                e.CancelCommand();
+            });
+            tb.TextChanged += (_, __) =>
+            {
+                if (busy) return;
+                var digits = new string(tb.Text.Where(char.IsDigit).Take(4).ToArray());
+                string f = digits.Length <= 2 ? digits
+                    : digits.Length == 3 ? (digits[0] > '2' ? digits[..1] + ":" + digits[1..] : digits[..2] + ":" + digits[2..])
+                    : digits[..2] + ":" + digits[2..];
+                if (f == tb.Text) return;
+                busy = true; tb.Text = f; tb.CaretIndex = f.Length; busy = false;
+            };
+            TimeSpan before = default;
+            tb.GotKeyboardFocus += (_, __) => { TryTime(FFrom.Text, out before); tb.SelectAll(); };
+            void Step(int dir)
+            {
+                if (!TryTime(tb.Text, out var t)) t = TimeSpan.FromHours(10);
+                int min = (int)t.TotalMinutes;
+                min = dir > 0 ? (min / 15 + 1) * 15 : ((min + 14) / 15 - 1) * 15; // к ближайшей четверти часа
+                min = ((min % 1440) + 1440) % 1440;
+                SetTime(tb, TimeSpan.FromMinutes(min), isStart);
+            }
+            tb.PreviewMouseWheel += (_, e) => { if (!tb.IsEnabled) return; e.Handled = true; Step(e.Delta > 0 ? 1 : -1); };
+            tb.PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Up) { Step(1); e.Handled = true; }
+                else if (e.Key == Key.Down) { Step(-1); e.Handled = true; }
+            };
+            // ввели начало руками — конец сдвигаем на ту же длительность, когда поле теряет фокус
+            tb.LostKeyboardFocus += (_, __) =>
+            {
+                if (!TryTime(tb.Text, out var t)) return;
+                tb.Text = Fmt(t);
+                if (isStart && TryTime(FTo.Text, out var end))
+                {
+                    var dur = end - before; if (dur <= TimeSpan.Zero) dur += TimeSpan.FromDays(1);
+                    if (dur > TimeSpan.Zero && dur < TimeSpan.FromDays(1)) FTo.Text = Fmt(Wrap(t + dur));
+                }
+            };
+        }
+
+        private void SetTime(TextBox tb, TimeSpan t, bool isStart)
+        {
+            if (isStart && TryTime(FFrom.Text, out var oldStart) && TryTime(FTo.Text, out var end))
+            {
+                var dur = end - oldStart; if (dur <= TimeSpan.Zero) dur += TimeSpan.FromDays(1);
+                FTo.Text = Fmt(Wrap(t + dur));
+            }
+            tb.Text = Fmt(t);
+            tb.CaretIndex = tb.Text.Length;
+        }
+
+        private static TimeSpan Wrap(TimeSpan t) => TimeSpan.FromMinutes(((int)t.TotalMinutes % 1440 + 1440) % 1440);
+        private static string Fmt(TimeSpan t) => ((int)t.TotalHours).ToString("00") + ":" + t.Minutes.ToString("00");
 
         private static bool TryTime(string t, out TimeSpan ts)
         {
