@@ -56,18 +56,19 @@
                             <TextBlock x:Name="BatteryMini" Text="" FontSize="13" Foreground="#B9B9C3" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             <Border x:Name="RecChip" Background="#3A1214" CornerRadius="8" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
                                 <StackPanel Orientation="Horizontal">
-                                    <!-- своя запись: красный квадрат «стоп» + таймер — клик по ним останавливает запись -->
-                                    <Border x:Name="RecStop" Visibility="Collapsed" Background="Transparent" Cursor="Hand" VerticalAlignment="Center" Padding="1,2,2,2">
-                                        <Border Width="8" Height="8" CornerRadius="1.5" Background="#F87171"/>
+                                    <!-- своя запись: крупные кнопки (по мелким легко промахнуться): «стоп», таймер, звук компьютера, микрофон.
+                                         Клики разбирает OnIslandMouseDown — по ближайшей кнопке, промах рядом остров не раскрывает -->
+                                    <Border x:Name="RecStop" Visibility="Collapsed" Width="30" Height="26" CornerRadius="13" Background="#5A1A1E" Cursor="Hand" VerticalAlignment="Center">
+                                        <Border Width="10" Height="10" CornerRadius="2" Background="#F87171" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <Ellipse x:Name="RecDot" Width="6" Height="6" Fill="#F87171" VerticalAlignment="Center"/>
                                     <TextBlock x:Name="RecText" Text="REC" Margin="4,0,0,0" FontSize="10" FontWeight="Bold" Foreground="#F87171" VerticalAlignment="Center"/>
-                                    <!-- звук компьютера и микрофон во время своей записи: зелёный — пишется, красный — заглушён; клик — переключить -->
-                                    <Border x:Name="RecSys" Visibility="Collapsed" Margin="6,0,0,0" Padding="2,1" Background="Transparent" Cursor="Hand" VerticalAlignment="Center">
-                                        <h:Icon x:Name="RecSysIcon" Kind="Volume" Width="11" Height="11" StrokeWidth="2" Foreground="#4ADE80"/>
+                                    <!-- зелёный — пишется, красный — заглушён; клик — переключить -->
+                                    <Border x:Name="RecSys" Visibility="Collapsed" Margin="6,0,0,0" Width="30" Height="26" CornerRadius="13" Background="#2C2C34" Cursor="Hand" VerticalAlignment="Center">
+                                        <h:Icon x:Name="RecSysIcon" Kind="Volume" Width="15" Height="15" StrokeWidth="2" Foreground="#4ADE80" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <Border x:Name="RecMic" Visibility="Collapsed" Margin="3,0,0,0" Padding="2,1" Background="Transparent" Cursor="Hand" VerticalAlignment="Center">
-                                        <h:Icon x:Name="RecMicIcon" Kind="Mic" Width="11" Height="11" StrokeWidth="2" Foreground="#F87171"/>
+                                    <Border x:Name="RecMic" Visibility="Collapsed" Margin="4,0,0,0" Width="30" Height="26" CornerRadius="13" Background="#2C2C34" Cursor="Hand" VerticalAlignment="Center">
+                                        <h:Icon x:Name="RecMicIcon" Kind="Mic" Width="15" Height="15" StrokeWidth="2" Foreground="#F87171" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                 </StackPanel>
                             </Border>
