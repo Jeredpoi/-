@@ -806,11 +806,11 @@ namespace Isle
         {
             // своя запись экрана: клик по плашке REC — стоп, по динамику/микрофону — заглушить/вернуть.
             // Обрабатываем здесь, до раскрытия острова (раньше клик раскрывал остров, и до таймера не доходил)
-            if (RegionRecorder.Current is { } rec && State != IslandState.Expanded && Within(e.OriginalSource as DependencyObject, RecChip))
+            if (RegionRecorder.Current is { } rec && State != IslandState.Expanded && RecHit(e.GetPosition(RecChip)) is { } hit)
             {
                 e.Handled = true;
-                if (Within(e.OriginalSource as DependencyObject, RecMic)) rec.SetMic(!rec.MicOn);
-                else if (Within(e.OriginalSource as DependencyObject, RecSys)) rec.SetSystemAudio(!rec.SysOn);
+                if (hit == RecMic) rec.SetMic(!rec.MicOn);
+                else if (hit == RecSys) rec.SetSystemAudio(!rec.SysOn);
                 else { Journal.Info("record", "стоп: клик по плашке в чёлке"); Tools.Record(); }
                 return;
             }
@@ -1009,8 +1009,8 @@ namespace Isle
             IdleRow.Visibility = !timer && !media && !dl ? Visibility.Visible : Visibility.Collapsed;
             RevealRow(timer ? TimerRow : media ? MediaRow : dl ? DownloadRow : (UIElement)IdleRow);
 
-            double h = 34;
-            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? (RegionRecorder.Current != null ? 104 : 60) : 0);
+            double h = RegionRecorder.Current != null && RecChip.Visibility == Visibility.Visible ? 38 : 34; // своя запись: кнопки крупнее — чёлка чуть выше
+            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? (RegionRecorder.Current != null ? 158 : 60) : 0);
             if (!AppSettings.Current.ShowClock && !timer && !media) w -= 50;
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
@@ -1632,14 +1632,42 @@ namespace Isle
         }
 
         /// <summary>Точка REC в чёлке: запись OBS или встроенная запись области (с таймером).</summary>
+        /// <summary>
+        /// Своя запись: какая кнопка плашки ближе к точке (координаты плашки). Зона шире самих кнопок —
+        /// на всю высоту чёлки и с запасом по бокам, чтобы промах рядом не раскрывал остров.
+        /// </summary>
+        private FrameworkElement RecHit(Point p)
+        {
+            if (RecChip.Visibility != Visibility.Visible || RecStop.Visibility != Visibility.Visible) return null;
+            const double pad = 14;
+            if (p.X < -pad || p.X > RecChip.ActualWidth + pad) return null;
+            if (p.Y > RecChip.ActualHeight + 12) return null; // ниже чёлки — не наше
+            double Center(FrameworkElement el) => el.TranslatePoint(new Point(el.ActualWidth / 2, 0), RecChip).X;
+            double sys = Center(RecSys), mic = Center(RecMic);
+            // таймер относится к «стопу»: всё левее середины между таймером и динамиком — стоп
+            double stopEdge = RecText.TranslatePoint(new Point(RecText.ActualWidth, 0), RecChip).X;
+            if (p.X <= (stopEdge + RecSys.TranslatePoint(new Point(0, 0), RecChip).X) / 2) return RecStop;
+            return Math.Abs(p.X - sys) <= Math.Abs(p.X - mic) ? RecSys : RecMic;
+        }
+
+        /// <summary>Курсор (экранные пиксели) над кнопками своей записи — тогда «упор в край» не раскрывает остров.</summary>
+        private bool CursorOverRecButtons(Win32.POINT sp)
+        {
+            if (RegionRecorder.Current == null || RecChip.Visibility != Visibility.Visible) return false;
+            try { return RecHit(RecChip.PointFromScreen(new Point(sp.X, sp.Y))) != null; } catch { return false; }
+        }
+
         private void UpdateRecChip()
         {
             bool own = RegionRecorder.Current != null;
             RecChip.Visibility = own || ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
             RecMic.Visibility = RecSys.Visibility = RecStop.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
             RecDot.Visibility = own ? Visibility.Collapsed : Visibility.Visible;
-            RecChip.Padding = own ? new Thickness(7, 3, 6, 3) : new Thickness(6, 1, 6, 1);
-            RecChip.ToolTip = own ? "Клик — остановить запись" : null;
+            RecChip.Padding = own ? new Thickness(2) : new Thickness(6, 1, 6, 1);
+            RecChip.CornerRadius = new CornerRadius(own ? 15 : 8);
+            RecText.Margin = new Thickness(own ? 7 : 4, 0, 0, 0);
+            RecChip.ToolTip = null;
+            RecStop.ToolTip = own ? "Остановить запись" : null;
             if (own && RegionRecorder.Current is { } rec)
             {
                 bool sys = rec.SysOn;
@@ -3055,6 +3083,7 @@ namespace Isle
             }
             catch { }
             if (!atTop) { _pushTicks = 0; return; }
+            if (CursorOverRecButtons(p)) { _pushTicks = 0; return; } // тянется к кнопкам записи — не раскрываем
             if (_oledHidden) { OledReveal(); return; }
             if (!AppSettings.Current.ExpandOnHover) return; // выключено — открывается только кликом и клавишами
             double was = _pushTicks; _pushTicks += _frameDt;
