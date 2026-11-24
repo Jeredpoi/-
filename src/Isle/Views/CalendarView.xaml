@@ -47,7 +47,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- месяц: дни с точками событий -->
-            <Border Style="{StaticResource CardBox}" Padding="10,8,10,8">
+            <Border Style="{StaticResource CardBox}" Padding="10,8,10,8" Background="{DynamicResource Card}" PreviewMouseWheel="OnMonthWheel">
                 <DockPanel>
                     <UniformGrid x:Name="WeekDays" DockPanel.Dock="Top" Columns="7" Margin="0,0,0,2"/>
                     <UniformGrid x:Name="Days" Columns="7" Rows="6"/>
