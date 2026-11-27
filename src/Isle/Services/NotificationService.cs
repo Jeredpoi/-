@@ -63,6 +63,7 @@ namespace Isle.Services
 
         private async Task Poll()
         {
+            SyncBanners();
             if (!AppSettings.Current.NotificationToasts || _polling) return; // опросы не накладываются друг на друга
             _polling = true;
             try
@@ -116,6 +117,7 @@ namespace Isle.Services
                         Duration = TimeSpan.FromSeconds(5),
                         ReplaceKey = updated ? "win-notification-" + n.Id : null
                     });
+                    if (BannersSuppressed && appId != null) SuppressBanner(appId); // следующие от этого приложения — без всплывашки Windows
                     // «только в острове»: убираем уведомление у Windows — плашка справа снизу исчезает (без дубля).
                     // В «Не беспокоить» остров уведомление не покажет — тогда оставляем его Windows, чтобы не потерялось.
                     if (AppSettings.Current.NotificationsOnlyInIsland && !AppSettings.Current.DoNotDisturb)
@@ -185,6 +187,67 @@ namespace Isle.Services
                 return true;
             }
             catch { return false; }
+        }
+
+        // ===== Всплывающие баннеры Windows =====
+        // «Только в острове»: убрать уведомление у Windows можно лишь после того, как оно пришло, — баннер справа снизу
+        // успевал мелькнуть и резко исчезнуть. Поэтому выключаем сам баннер (как переключатель «Показывать баннеры»
+        // в Параметры → Уведомления → приложение): уведомление тихо попадает в центр уведомлений, Isle его видит и показывает.
+        // Прежние значения запоминаем и возвращаем, когда настройку выключат или включат «Не беспокоить».
+        private const string NotifSettingsKey = @"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings";
+        private static bool BannersSuppressed => AppSettings.Current.NotificationsOnlyInIsland && AppSettings.Current.NotificationToasts && !AppSettings.Current.DoNotDisturb;
+        private bool? _bannersState;
+
+        /// <summary>Выход из Isle: вернуть баннеры Windows, иначе без Isle уведомления приходили бы молча.</summary>
+        public void RestoreBanners() { _bannersState = null; SyncBanners(false); }
+
+        private void SyncBanners(bool? force = null)
+        {
+            bool want = force ?? (Available && BannersSuppressed);
+            if (_bannersState == want) return;
+            _bannersState = want;
+            try
+            {
+                if (want)
+                {
+                    using var root = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(NotifSettingsKey);
+                    foreach (var id in root?.GetSubKeyNames() ?? Array.Empty<string>()) SuppressBanner(id);
+                    Journal.Info("notify", "баннеры Windows выключены: уведомления только в острове");
+                }
+                else if (AppSettings.Current.BannersOff.Count > 0)
+                {
+                    foreach (var (id, was) in AppSettings.Current.BannersOff.ToList())
+                    {
+                        try
+                        {
+                            using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(NotifSettingsKey + "\\" + id, true);
+                            if (k == null) continue;
+                            if (was < 0) k.DeleteValue("ShowBanner", false); else k.SetValue("ShowBanner", was, Microsoft.Win32.RegistryValueKind.DWord);
+                        }
+                        catch { }
+                    }
+                    AppSettings.Current.BannersOff.Clear();
+                    AppSettings.Current.Save();
+                    Journal.Info("notify", "баннеры Windows возвращены как были");
+                }
+            }
+            catch (Exception ex) { Journal.Warn("notify", "баннеры Windows: " + ex.Message); }
+        }
+
+        private static void SuppressBanner(string appId)
+        {
+            var off = AppSettings.Current.BannersOff;
+            if (off.ContainsKey(appId) || appId.Contains("Isle", StringComparison.OrdinalIgnoreCase)) return;
+            try
+            {
+                using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(NotifSettingsKey + "\\" + appId, true);
+                int was = k.GetValue("ShowBanner") is int v ? v : -1;
+                if (was == 0) return; // пользователь сам выключил — не трогаем и не «возвращаем»
+                k.SetValue("ShowBanner", 0, Microsoft.Win32.RegistryValueKind.DWord);
+                off[appId] = was;
+                AppSettings.Current.Save();
+            }
+            catch (Exception ex) { Journal.Debug("notify", "баннер не выключить: " + ex.Message); }
         }
 
         private static string Fingerprint(Notif.UserNotification n)

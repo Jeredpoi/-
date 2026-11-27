@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Isle.Helpers;
 using Isle.Services;
@@ -481,7 +482,13 @@ namespace Isle.Views
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 FrameworkElement icon;
                 if (it.IsPhoto && LoadThumb(it.Path, 72) is BitmapSource th)
-                    icon = new Border { Width = 56, Height = 40, CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = new Image { Source = th, Stretch = Stretch.UniformToFill } };
+                {
+                    var tb = new Border { Width = 56, Height = 40, CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = new Image { Source = th, Stretch = Stretch.UniformToFill },
+                        ToolTip = "Клик — увеличить" };
+                    // клик по миниатюре — фото вырастает на всю вкладку (как в буфере обмена); по остальной строке — копирует
+                    tb.MouseLeftButtonUp += (_, e) => { e.Handled = true; if (File.Exists(it.Path)) OpenPhoto(it, tb, th); };
+                    icon = tb;
+                }
                 else
                     icon = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(8), Background = (Brush)FindResource("Plate"),
                         Child = new Icon { Kind = it.Text != null ? "Text" : "File", Width = 15, Height = 15, Foreground = (Brush)FindResource("Muted") } };
@@ -500,7 +507,7 @@ namespace Isle.Views
                     Grid.SetColumn(btns, 2); g.Children.Add(btns);
                 }
                 row.Child = g;
-                row.ToolTip = it.Text != null ? "Клик — скопировать снова" : "Клик — скопировать" + (it.IsPhoto ? " (вставится и как картинка, и как файл)" : "");
+                row.ToolTip = it.Text != null ? "Клик — скопировать снова" : "Клик — скопировать" + (it.IsPhoto ? " (вставится и как картинка, и как файл) · клик по фото — увеличить" : "");
                 row.MouseLeftButtonUp += (_, __) =>
                 {
                     if (it.Text != null) { ClipboardService.SetText(it.Text); Copied(); }
@@ -620,5 +627,148 @@ namespace Isle.Views
             }
             PhoneLink.OfferText(text);
         }
+
+        // ---------- просмотр фото ----------
+        private PhoneItem _photo;
+        private FrameworkElement _photoThumb;
+        private Size _photoPx;
+        private Point? _photoPan;
+        private bool _photoPanned;
+        private int _photoVersion;
+
+        private void OpenPhoto(PhoneItem it, FrameworkElement thumb, BitmapSource preview)
+        {
+            _photo = it; _photoThumb = thumb;
+            int version = ++_photoVersion;
+            PhotoViewer.Visibility = Visibility.Visible;
+            PhotoViewer.UpdateLayout();
+            PhotoImage.Source = preview;
+            _photoPx = new Size(preview.PixelWidth, preview.PixelHeight);
+            PhotoZoom.Matrix = Matrix.Identity;
+            AnimatePhoto(ThumbRectOf(thumb), FitPhoto(), true);
+            Journal.Info("phone", "просмотр фото");
+            AppHost.Window.FocusIsland();
+            PhotoViewer.Focus();
+            var path = it.Path;
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var b = new BitmapImage();
+                    b.BeginInit(); b.CacheOption = BitmapCacheOption.OnLoad; b.UriSource = new Uri(path);
+                    b.DecodePixelWidth = 2400; // хватает для любого экрана, память не раздувается
+                    b.EndInit(); b.Freeze();
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        if (version != _photoVersion || PhotoViewer.Visibility != Visibility.Visible) return;
+                        PhotoImage.Source = b;
+                    });
+                }
+                catch (Exception ex) { Journal.Debug("phone", "фото не открылось: " + ex.Message); }
+            });
+        }
+
+        private Rect ThumbRectOf(FrameworkElement thumb)
+        {
+            try
+            {
+                var p = thumb.TranslatePoint(new Point(0, 0), PhotoCanvas);
+                return new Rect(p, new Size(thumb.ActualWidth, thumb.ActualHeight));
+            }
+            catch { return new Rect(PhotoCanvas.ActualWidth / 2 - 20, PhotoCanvas.ActualHeight / 2 - 15, 40, 30); }
+        }
+
+        private Rect FitPhoto()
+        {
+            double W = PhotoCanvas.ActualWidth - 24, H = PhotoCanvas.ActualHeight - 60; // снизу — кнопки
+            double k = Math.Min(W / Math.Max(1, _photoPx.Width), H / Math.Max(1, _photoPx.Height));
+            double w = _photoPx.Width * k, h = _photoPx.Height * k;
+            return new Rect((PhotoCanvas.ActualWidth - w) / 2, 12 + (H - h) / 2, w, h);
+        }
+
+        private void AnimatePhoto(Rect from, Rect to, bool opening)
+        {
+            var dur = TimeSpan.FromMilliseconds(opening ? 320 : 240);
+            IEasingFunction ease = opening ? new QuarticEase { EasingMode = EasingMode.EaseOut } : new CubicEase { EasingMode = EasingMode.EaseInOut };
+            void Go(DependencyProperty dp, double a, double b, EventHandler done = null)
+            {
+                var an = new DoubleAnimation(a, b, dur) { EasingFunction = ease };
+                if (done != null) an.Completed += done;
+                PhotoFrame.BeginAnimation(dp, an);
+            }
+            Go(Canvas.LeftProperty, from.X, to.X);
+            Go(Canvas.TopProperty, from.Y, to.Y);
+            Go(WidthProperty, from.Width, to.Width);
+            Go(HeightProperty, from.Height, to.Height, opening ? null : (_, __) =>
+            {
+                PhotoViewer.Visibility = Visibility.Collapsed;
+                PhotoImage.Source = null; // полное фото не держим в памяти
+            });
+            PhotoImage.Stretch = Stretch.Uniform;
+            var fade = new DoubleAnimation(opening ? 1 : 0, dur);
+            PhotoBack.BeginAnimation(OpacityProperty, fade);
+            PhotoBar.BeginAnimation(OpacityProperty, fade);
+        }
+
+        private void ClosePhoto()
+        {
+            if (PhotoViewer.Visibility != Visibility.Visible) return;
+            _photoVersion++;
+            PhotoZoom.Matrix = Matrix.Identity;
+            var cur = new Rect(Canvas.GetLeft(PhotoFrame), Canvas.GetTop(PhotoFrame), PhotoFrame.ActualWidth, PhotoFrame.ActualHeight);
+            var to = _photoThumb != null && _photoThumb.IsVisible ? ThumbRectOf(_photoThumb) : new Rect(cur.X + cur.Width / 2 - 10, cur.Y + cur.Height / 2 - 10, 20, 20);
+            AnimatePhoto(cur, to, false);
+        }
+
+        private void OnPhotoBackClick(object s, MouseButtonEventArgs e) { e.Handled = true; if (!_photoPanned) ClosePhoto(); _photoPanned = false; }
+        private void OnPhotoClose(object s, RoutedEventArgs e) => ClosePhoto();
+        private void OnPhotoKey(object s, KeyEventArgs e) { if (e.Key == Key.Escape) { e.Handled = true; ClosePhoto(); } }
+
+        private void OnPhotoImageClick(object s, MouseButtonEventArgs e)
+        {
+            // клик по самому фото не закрывает; перетаскивание — сдвиг увеличенного
+            e.Handled = true;
+            _photoPan = null;
+            PhotoImage.ReleaseMouseCapture();
+        }
+
+        private void OnPhotoWheel(object s, MouseWheelEventArgs e)
+        {
+            e.Handled = true;
+            var p = e.GetPosition(PhotoImage);
+            var m = PhotoZoom.Matrix;
+            double f = e.Delta > 0 ? 1.2 : 1 / 1.2;
+            double next = Math.Clamp(m.M11 * f, 1, 8);
+            f = next / m.M11;
+            m.ScaleAtPrepend(f, f, p.X, p.Y);
+            if (next <= 1.001) m = Matrix.Identity;
+            PhotoZoom.Matrix = m;
+        }
+
+        protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonDown(e);
+            if (PhotoViewer.Visibility == Visibility.Visible && PhotoZoom.Matrix.M11 > 1.001 && e.OriginalSource == PhotoImage)
+            {
+                _photoPan = e.GetPosition(PhotoFrame);
+                PhotoImage.CaptureMouse();
+            }
+        }
+
+        protected override void OnPreviewMouseMove(MouseEventArgs e)
+        {
+            base.OnPreviewMouseMove(e);
+            if (_photoPan is Point from && e.LeftButton == MouseButtonState.Pressed)
+            {
+                var p = e.GetPosition(PhotoFrame);
+                var m = PhotoZoom.Matrix; m.Translate(p.X - from.X, p.Y - from.Y);
+                PhotoZoom.Matrix = m;
+                _photoPan = p; _photoPanned = true;
+            }
+        }
+
+        private void OnPhotoCopy(object s, RoutedEventArgs e) { if (_photo != null && File.Exists(_photo.Path)) CopyFile(_photo); }
+        private void OnPhotoOpen(object s, RoutedEventArgs e) { if (_photo != null) OpenFile(_photo.Path); }
+        private void OnPhotoFolder(object s, RoutedEventArgs e) { if (_photo != null) ShowInFolder(_photo.Path); }
     }
 }

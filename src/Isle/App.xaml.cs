@@ -108,6 +108,7 @@ namespace Isle
 
         protected override void OnExit(ExitEventArgs e)
         {
+            try { AppHost.Notifications?.RestoreBanners(); } catch { }
             try { Helpers.NotchBar.Unregister(); } catch { } // зарезервированная полоса сверху не должна пережить Isle
             Journal.Info("session", "выход, код " + e.ApplicationExitCode);
             Journal.Flush();

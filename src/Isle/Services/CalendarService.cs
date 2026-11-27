@@ -393,7 +393,9 @@ namespace Isle.Services
                     var at = o.Start.AddMinutes(-m);
                     if (now >= at && now < o.Start) Fire(o, "before", "Через " + Minutes((int)Math.Ceiling((o.Start - now).TotalMinutes)), now);
                 }
-                if (o.Event.Reminder.HasValue && now >= o.Start && now < o.Start.AddMinutes(2)) Fire(o, "start", "Начинается сейчас", now);
+                // в момент начала — всегда, как таймер: «Нет» в напоминании отключает только предупреждение заранее
+                // (раньше при «Нет» в 23:00 не приходило ничего)
+                if (now >= o.Start && now < o.Start.AddMinutes(2)) Fire(o, "start", "Начинается сейчас", now);
             }
         }
 
@@ -404,9 +406,9 @@ namespace Isle.Services
             Journal.Info("calendar", "напоминание (" + kind + ")"); // название события в журнал не пишем
             ToastBus.Show(new Toast
             {
-                Kind = ToastKind.Info, Title = o.Event.Title, Private = true,
+                Kind = kind == "start" ? ToastKind.Reminder : ToastKind.Info, Title = o.Event.Title, Private = true,
                 Subtitle = when + " · " + o.TimeText + (string.IsNullOrWhiteSpace(o.Event.Location) ? "" : " · " + o.Event.Location),
-                Icon = Icons.Calendar, Important = true, Duration = TimeSpan.FromSeconds(kind == "start" ? 8 : 5),
+                Icon = Icons.Calendar, Important = true, Duration = TimeSpan.FromSeconds(kind == "start" ? 15 : 6), // начало — висит дольше, как плашка таймера
             });
             // в момент начала — один короткий звук (заранее — тихо, только плашка)
             if (kind == "start" && AppSettings.Current.CalendarSound) Chime();

@@ -186,7 +186,6 @@ namespace Isle.Views
             foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
-            foreach (var rb in RecEngines.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.RecordEngine ?? "isle");
             SnowWhy.Text = "Сейчас: " + (AppHost.Window?.SnowReason ?? "—");
             foreach (var rb in Themes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.Theme ?? "dark");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
@@ -404,16 +403,23 @@ namespace Isle.Views
 
         // ---------- Внешний вид ----------
 
+        /// <summary>Градиенты: «откуда>куда». Подобраны так, чтобы оба конца читались на тёмном.</summary>
+        private static readonly (string value, string name)[] AccentGradients =
+        {
+            ("#22D3EE>#A855F7", "Аврора"), ("#FB923C>#EC4899", "Закат"), ("#38BDF8>#4ADE80", "Лагуна"),
+            ("#F472B6>#818CF8", "Неон"), ("#FDE047>#F97316", "Огонь"), ("#A3E635>#22D3EE", "Мята"),
+        };
+
         private void BuildAccents()
         {
-            foreach (var hex in AccentColors)
+            var all = AccentColors.Select(h => (h, h)).Concat(AccentGradients.Select(g => (g.value, "Градиент «" + g.name + "»")));
+            foreach (var (hex, tip) in all)
             {
-                var c = (Color)ColorConverter.ConvertFromString(hex);
                 var rb = new RadioButton
                 {
                     Style = (Style)FindResource("SSegment"), GroupName = "accent", Tag = hex, Padding = new Thickness(0),
-                    Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = new SolidColorBrush(c) },
-                    IsChecked = string.Equals(hex, S.AccentHex, StringComparison.OrdinalIgnoreCase), ToolTip = hex
+                    Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = Helpers.AccentPaint.Brush(hex, 45) },
+                    IsChecked = string.Equals(hex, S.AccentHex, StringComparison.OrdinalIgnoreCase), ToolTip = tip
                 };
                 rb.Click += (_, __) =>
                 {
@@ -500,12 +506,6 @@ namespace Isle.Views
             AppHost.Window.ApplyAppearance(); // фон, акцент и полоски — сразу; Клоди переоденется на следующем кадре
             ApplyTheme();
             UpdatePreview();
-        }
-
-        private void OnRecEngine(object s, RoutedEventArgs e)
-        {
-            S.RecordEngine = (string)((FrameworkElement)s).Tag;
-            S.Save();
         }
 
         private void OnSnowMode(object s, RoutedEventArgs e)

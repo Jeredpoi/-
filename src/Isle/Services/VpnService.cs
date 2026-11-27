@@ -151,6 +151,15 @@ namespace Isle.Services
                 var nic = await Task.Run(Find);
                 bool active = nic != null;
                 if (active == _last) return;
+                // VPN-клиент при переподключении (смена сервера, обновление) на 2–5 с убирает адаптер — раньше это давало
+                // плашки «VPN отключён» и сразу «подключён». Пропажу подтверждаем повторной проверкой через 6 с
+                if (!active && _last == true)
+                {
+                    await Task.Delay(6000);
+                    nic = await Task.Run(Find);
+                    active = nic != null;
+                    if (active) { Journal.Debug("vpn", "адаптер пропадал на пару секунд — это переподключение, не отключение"); return; }
+                }
                 bool first = _last == null;
                 _last = active;
                 Active = active;

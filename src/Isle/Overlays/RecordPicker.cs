@@ -264,6 +264,10 @@ namespace Isle.Overlays
                 SetWindowPos(h, new IntPtr(-1), _x, _y, _w, _h, 0x0010 | 0x0040);
             };
         }
+        /// <summary>На паузе рамка жёлтая — видно, что запись стоит.</summary>
+        public void SetPaused(bool paused) =>
+            ((Border)Content).BorderBrush = new SolidColorBrush(paused ? Color.FromArgb(0xE0, 0xFA, 0xCC, 0x15) : Color.FromArgb(0xE0, 0xEF, 0x44, 0x44));
+
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     }
 }

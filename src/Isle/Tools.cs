@@ -220,16 +220,23 @@ namespace Isle
         }
 
         private static RecordFrame _recFrame;
+        private static bool _frameHooked;
 
         /// <summary>
-        /// Запись экрана. Встроенная (по умолчанию): выделить область → запись в MP4, повторное нажатие — стоп.
-        /// В настройках можно выбрать OBS — тогда старт/стоп записи в нём.
+        /// Запись экрана: выделить область → запись в MP4, повторное нажатие — стоп.
+        /// OBS — основной: если он запущен, старт/стоп записи в нём; иначе Isle пишет выбранную область сам.
         /// </summary>
         public static async void Record()
         {
             AppHost.Window.Collapse();
-            if (RegionRecorder.Current != null) { await StopOwnRecording(); return; }
-            if ((AppSettings.Current.RecordEngine ?? "isle") != "obs") { await StartOwnRecording(); return; }
+            // своя запись: первое нажатие — пауза, второе — стоп (чтобы не оборвать запись случайно)
+            if (RegionRecorder.Current is { } rec)
+            {
+                if (!rec.Paused && !rec.Saving) { rec.Pause(); return; }
+                await StopOwnRecording();
+                return;
+            }
+            // OBS — основной: запущен — пишем в нём. Не запущен (или не отвечает) — пишем сами выбранную область
             if (ObsService.IsObsRunning())
             {
                 try
@@ -242,29 +249,18 @@ namespace Isle
                             Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(3)
                         });
                     else ObsService.ShowSaved(file); // с кнопкой «папка» — откроет Проводник с выделенным видео
+                    return;
                 }
                 catch (Exception ex)
                 {
+                    Journal.Warn("record", "OBS не ответил, пишу сам: " + ex.Message);
                     ToastBus.Show(new Toast
                     {
-                        Kind = ToastKind.Error, Title = "OBS не отвечает", Subtitle = "Включи в OBS: Инструменты → Настройки сервера WebSocket. " + ex.Message,
-                        Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(6)
+                        Warning = true, Title = "OBS не отвечает — пишу сам", Subtitle = "Чтобы писать в OBS: Инструменты → Настройки сервера WebSocket",
+                        Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(4)
                     });
                 }
-                return;
             }
-            // OBS установлен, но закрыт — запускаем его свёрнутым и сразу начинаем запись
-            if (AppLauncher.Find("obs") is string obs && obs.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            {
-                AppLauncher.Launch(obs, "--startrecording --minimize-to-tray --disable-shutdown-check");
-                ToastBus.Show(new Toast
-                {
-                    Title = "Запускаю OBS и начинаю запись", Subtitle = "Нажми «Запись экрана» ещё раз, чтобы остановить",
-                    Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(4)
-                });
-                return;
-            }
-            ToastBus.Show(new Toast { Warning = true, Title = "OBS не установлен — пишу сам", Subtitle = "Выдели область для записи", Icon = Icons.Record, Important = true, Duration = TimeSpan.FromSeconds(3) });
             await StartOwnRecording();
         }
 
@@ -277,6 +273,11 @@ namespace Isle
             if (picker.Result is not { } r) return;
             _recFrame = new RecordFrame(r.x, r.y, r.w, r.h);
             _recFrame.Show();
+            if (!_frameHooked)
+            {
+                _frameHooked = true; // рамка жёлтая на паузе, красная во время записи
+                RegionRecorder.StateChanged += () => Application.Current.Dispatcher.InvokeAsync(() => _recFrame?.SetPaused(RegionRecorder.Current?.Paused == true));
+            }
             try
             {
                 await RegionRecorder.StartAsync(r.x, r.y, r.w, r.h, r.sys, r.mic);

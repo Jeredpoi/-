@@ -354,7 +354,7 @@
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Акцент"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет кнопок, таймера и полосок музыки. По умолчанию — белый."/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет кнопок, таймера и полосок музыки — один цвет или градиент. По умолчанию — белый."/>
                                     <WrapPanel x:Name="Accents" Margin="0,10,0,0"/>
                                 </StackPanel>
                             </Grid>
@@ -577,17 +577,13 @@
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,12">
                             <TextBlock Style="{StaticResource RowTitle}" Text="Чем записывать"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Isle: выдели область — она пишется в MP4 (папка «Видео\Isle») со звуком компьютера и, если включишь, микрофоном. Остановить — клик по REC в чёлке, плитка «Запись экрана» или сочетание из раздела «Клавиши». OBS: кнопка начинает и останавливает запись в OBS."/>
-                            <WrapPanel x:Name="RecEngines" Margin="0,10,0,0">
-                                <RadioButton Style="{StaticResource SSegment}" GroupName="recengine" Content="Isle — выбранная область" Click="OnRecEngine" Tag="isle"/>
-                                <RadioButton Style="{StaticResource SSegment}" GroupName="recengine" Content="OBS" Click="OnRecEngine" Tag="obs"/>
-                            </WrapPanel>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Основной — OBS: если он запущен, кнопка «Запись экрана» начинает и останавливает запись в нём. Если OBS не запущен — пишет сам Isle: выдели область, и она запишется в MP4 (папка «Видео\Isle») со звуком компьютера и, если включишь, микрофоном. Остановить — клик по «стопу» в чёлке, плитка «Запись экрана» или сочетание клавиш."/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">
                         <StackPanel Margin="0,12">
                             <TextBlock Style="{StaticResource RowTitle}" Text="Через OBS"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Если выбран OBS и он запущен, кнопка «Запись экрана» начинает и останавливает запись прямо в нём. В OBS включи: Инструменты → Настройки сервера WebSocket → «Включить сервер WebSocket»."/>
+                            <TextBlock Style="{StaticResource RowNote}" Text="Если OBS запущен, кнопка «Запись экрана» начинает и останавливает запись прямо в нём. В OBS включи: Инструменты → Настройки сервера WebSocket → «Включить сервер WebSocket»."/>
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBox x:Name="ObsPort" Tag="порт" LostFocus="OnObsFields"/>

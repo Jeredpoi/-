@@ -192,5 +192,31 @@
                 </StackPanel>
             </Border>
         </Grid>
+        <!-- просмотр фото с телефона: клик по миниатюре — фото вырастает из неё (как в буфере обмена) -->
+        <Grid x:Name="PhotoViewer" Grid.ColumnSpan="2" Visibility="Collapsed" Focusable="True" Background="Transparent"
+              MouseLeftButtonUp="OnPhotoBackClick" MouseWheel="OnPhotoWheel" KeyDown="OnPhotoKey">
+            <Border x:Name="PhotoBack" Background="#E6000000" CornerRadius="14" Opacity="0"/>
+            <Canvas x:Name="PhotoCanvas" ClipToBounds="True">
+                <Border x:Name="PhotoFrame" CornerRadius="10" ClipToBounds="True">
+                    <Image x:Name="PhotoImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" MouseLeftButtonUp="OnPhotoImageClick">
+                        <Image.RenderTransform><MatrixTransform x:Name="PhotoZoom"/></Image.RenderTransform>
+                    </Image>
+                </Border>
+            </Canvas>
+            <StackPanel x:Name="PhotoBar" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10" Opacity="0">
+                <Button Style="{StaticResource Ghost}" Padding="10,5" Margin="0,0,6,0" Click="OnPhotoCopy">
+                    <StackPanel Orientation="Horizontal"><h:Icon Kind="Copy" Width="12" Height="12"/><TextBlock Text="Копировать" FontSize="11" Margin="6,0,0,0"/></StackPanel>
+                </Button>
+                <Button Style="{StaticResource Ghost}" Padding="10,5" Margin="0,0,6,0" Click="OnPhotoOpen">
+                    <StackPanel Orientation="Horizontal"><h:Icon Kind="External" Width="12" Height="12"/><TextBlock Text="Открыть" FontSize="11" Margin="6,0,0,0"/></StackPanel>
+                </Button>
+                <Button Style="{StaticResource Ghost}" Padding="10,5" Margin="0,0,6,0" Click="OnPhotoFolder">
+                    <StackPanel Orientation="Horizontal"><h:Icon Kind="Folder" Width="12" Height="12"/><TextBlock Text="В папке" FontSize="11" Margin="6,0,0,0"/></StackPanel>
+                </Button>
+                <Button Style="{StaticResource Ghost}" Padding="10,5" Click="OnPhotoClose">
+                    <StackPanel Orientation="Horizontal"><h:Icon Kind="Close" Width="12" Height="12"/><TextBlock Text="Esc" FontSize="11" Margin="6,0,0,0"/></StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

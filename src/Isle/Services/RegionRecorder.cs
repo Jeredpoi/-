@@ -37,7 +37,45 @@ namespace Isle.Services
 
         public DateTime StartedAt { get; private set; }
         public bool Saving { get; private set; }
-        public TimeSpan Elapsed => Saving ? _final : DateTime.Now - StartedAt;
+        public TimeSpan Elapsed => Saving ? _final : (Paused ? _pausedAtWall : DateTime.Now) - StartedAt - _pausedWall;
+
+        // ---------- пауза ----------
+        // На паузе кадры и звук не пишутся; после продолжения отметки времени сдвигаются на длину паузы —
+        // в файле пауза просто вырезана, без замершего кадра и тишины
+        public bool Paused { get; private set; }
+        private DateTime _pausedAtWall;
+        private TimeSpan _pausedWall;          // сумма пауз по часам (для таймера в чёлке)
+        private long _pauseQpc;
+        private TimeSpan _pausedMedia;         // сумма пауз в шкале кадров (вычитается из отметок времени)
+        private static TimeSpan QpcNow => TimeSpan.FromTicks((long)(Stopwatch.GetTimestamp() * (TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency)));
+
+        public void Pause()
+        {
+            if (_stopping || Paused) return;
+            lock (_lock)
+            {
+                Paused = true;
+                _pausedAtWall = DateTime.Now;
+                _pauseQpc = Stopwatch.GetTimestamp();
+                _audioClock?.Stop(); // часы звука стоят — тишина за паузу не дописывается
+            }
+            Journal.Info("record", "пауза");
+            StateChanged?.Invoke();
+        }
+
+        public void Resume()
+        {
+            if (_stopping || !Paused) return;
+            lock (_lock)
+            {
+                _pausedWall += DateTime.Now - _pausedAtWall;
+                _pausedMedia += TimeSpan.FromTicks((long)((Stopwatch.GetTimestamp() - _pauseQpc) * (TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency)));
+                Paused = false;
+                _audioClock?.Start();
+            }
+            Journal.Info("record", "продолжение после паузы");
+            StateChanged?.Invoke();
+        }
 
         private readonly IntPtr _monitor;
         private readonly int _x, _y, _w, _h; // область в пикселях относительно монитора, размеры чётные
@@ -181,7 +219,7 @@ namespace Isle.Services
             {
                 lock (_lock)
                 {
-                    if (_stopping) return;
+                    if (_stopping || Paused) return; // на паузе звук не пишется
                     // микрофон выключили на ходу — вместо голоса тишина той же длины (дорожка не сдвигается)
                     if (isMic && _micMuted) Array.Clear(e.Buffer, 0, e.BytesRecorded);
                     if (!isMic && _sysMuted) Array.Clear(e.Buffer, 0, e.BytesRecorded);
@@ -240,10 +278,11 @@ namespace Isle.Services
             try
             {
                 using var frame = sender.TryGetNextFrame();
-                if (frame == null || _stopping) return;
+                if (frame == null || _stopping || Paused) return;
                 var ts = frame.SystemRelativeTime;
                 _t0 ??= ts;
-                var rel = ts - _t0.Value;
+                var rel = ts - _t0.Value - _pausedMedia;
+                if (rel <= _lastTs) return; // кадр, снятый ещё до продолжения после паузы
                 // не чаще заданной частоты кадров: монитор 144 Гц не должен раздувать файл и нагрузку
                 if (_lastTs != TimeSpan.MinValue && rel - _lastTs < TimeSpan.FromSeconds(0.9 / Fps)) return;
                 _lastTs = rel;
@@ -302,8 +341,8 @@ namespace Isle.Services
             var r = Current;
             if (r == null || r._stopping) return null;
             r._stopping = true;
+            r._final = r.Elapsed; // до Saving: Elapsed на сохранении уже отдаёт _final
             r.Saving = true;
-            r._final = DateTime.Now - r.StartedAt;
             StateChanged?.Invoke();
             try { return await r.StopCoreAsync(); }
             finally
@@ -319,7 +358,9 @@ namespace Isle.Services
             try { _session?.Dispose(); } catch { }
             try { _pool?.Dispose(); } catch { }
             // экран мог стоять без изменений — последний кадр дублируем на момент остановки, чтобы видео не было короче звука
-            var end = _t0.HasValue ? TimeSpan.FromTicks((long)((Stopwatch.GetTimestamp() - 0) * (TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency))) - _t0.Value : TimeSpan.Zero;
+            // остановили на паузе — конец видео там, где пауза началась
+            var endQpc = Paused ? TimeSpan.FromTicks((long)(_pauseQpc * (TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency))) : QpcNow;
+            var end = _t0.HasValue ? endQpc - _t0.Value - _pausedMedia : TimeSpan.Zero;
             if (_lastTex != null && end > _lastTs + TimeSpan.FromSeconds(0.2))
             {
                 try
