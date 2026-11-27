@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,113 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
+        private static object Call(object o, string name, params object[] args) =>
+            o.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)?.Invoke(o, args);
+
+        private static object Field(object o, string name) => o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(o);
+        private static void SetField(object o, string name, object v) => o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(o, v);
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                AppSettings.Current.AiPreset = "polza"; AppSettings.Current.AiModel = "openai/gpt-4o-mini"; AppSettings.Current.AiKey = "test";
+                await Task.Delay(3000);
+                w.SuppressAutoCollapse = true;
+                // картинка для вложений
+                var png = Path.Combine(Path.GetTempPath(), "chat-test.png");
+                {
+                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(900, 600, 96, 96, PixelFormats.Pbgra32);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new LinearGradientBrush(Colors.MediumPurple, Colors.Orange, 30), null, new Rect(0, 0, 900, 600)); dc.DrawEllipse(Brushes.White, null, new Point(450, 300), 120, 120); }
+                    rtb.Render(dv);
+                    var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                    using var fs = File.Create(png); enc.Save(fs);
+                }
+                var txt = Path.Combine(Path.GetTempPath(), "заметки.txt");
+                File.WriteAllText(txt, "Список покупок: молоко, хлеб");
+                ChatHistory.Save(new ChatSession { Title = "VPN простыми словами", Messages = { new ChatMessage { Role = "user", Text = "Объясни VPN" } } });
+                ChatHistory.Save(new ChatSession { Title = "Письмо о переносе встречи", Messages = { new ChatMessage { Role = "user", Text = "Письмо" } } });
+                ChatHistory.Save(new ChatSession { Title = "Идеи на выходные", Messages = { new ChatMessage { Role = "user", Text = "Идеи" } } });
+
+                w.Expand("chat"); w.SelectTab("chat"); await Task.Delay(2000);
+                var cv = (Isle.Views.ChatView)w.GetView("chat");
+                SnapEl((FrameworkElement)w.Content, dir, "chat-empty");
+                Call(cv, "AddAttachment", png);
+                Call(cv, "AddAttachment", txt);
+                ((TextBox)cv.FindName("Input")).Text = "Что на этой картинке?";
+                await Task.Delay(800);
+                SnapEl((FrameworkElement)w.Content, dir, "chat-attach");
+                log.AppendLine("вложений: " + ((System.Collections.IList)Field(cv, "_attach")).Count + ", видит картинки: " + ChatFiles.Vision());
+                // модель без зрения — подсказка
+                AppSettings.Current.AiModel = "llama-3.3-70b-versatile";
+                Call(cv, "RenderAttachments"); await Task.Delay(500);
+                SnapEl((FrameworkElement)w.Content, dir, "chat-novision");
+                AppSettings.Current.AiModel = "openai/gpt-4o-mini";
+                // разговор с картинкой
+                var files = new System.Collections.Generic.List<string>((System.Collections.Generic.IEnumerable<string>)Field(cv, "_attach"));
+                var msgs = (System.Collections.ObjectModel.ObservableCollection<ChatMessage>)Field(cv, "_msgs");
+                msgs.Add(new ChatMessage { Role = "user", Text = "Что на этой картинке?\n📎 заметки.txt", Attachments = files });
+                msgs.Add(new ChatMessage { Role = "assistant", Text = "Фиолетово-оранжевый градиент и белый круг по центру — похоже на закатное солнце." });
+                ((FrameworkElement)cv.FindName("Welcome")).Visibility = Visibility.Collapsed;
+                ((FrameworkElement)cv.FindName("Scroll")).Visibility = Visibility.Visible;
+                ((System.Collections.IList)Field(cv, "_attach")).Clear(); Call(cv, "RenderAttachments");
+                ((TextBox)cv.FindName("Input")).Text = "";
+                var sess = (ChatSession)Field(cv, "_session"); sess.Title = "Закатное солнце";
+                Call(cv, "UpdateBadge");
+                await Task.Delay(1200);
+                SnapEl((FrameworkElement)w.Content, dir, "chat-convo");
+                // запрос: как выглядит содержимое для OpenAI
+                var content = ChatFiles.OpenAiContent(msgs[0], true);
+                log.AppendLine("в запросе: " + (content is string ? "только текст" : "текст + картинка (" + System.Text.Json.JsonSerializer.Serialize(content).Length / 1024 + " КБ)"));
+                // панель истории
+                var badge = (FrameworkElement)cv.FindName("HistoryBadge");
+                var q = badge.PointToScreen(new Point(20, 20));
+                SetCursorPos((int)q.X, (int)q.Y); await Task.Delay(200);
+                mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                await Task.Delay(900);
+                var pop = (System.Windows.Controls.Primitives.Popup)cv.FindName("HistoryPopup");
+                log.AppendLine("панель истории открыта: " + pop.IsOpen);
+                if (pop.Child is FrameworkElement pc) SnapEl(pc, dir, "chat-history");
+                pop.IsOpen = false; await Task.Delay(400);
+                // полоса записи голоса (микрофона на стенде нет — показываем вручную)
+                SetField(cv, "_recMine", true);
+                Call(cv, "SetMicState", true);
+                var wave = (Isle.Helpers.VoiceWave)cv.FindName("ChatWave");
+                var rnd = new Random(1);
+                for (int i = 0; i < 40; i++) { wave.Push((float)(0.004 + 0.03 * Math.Abs(Math.Sin(i * 0.5)) * rnd.NextDouble())); await Task.Delay(60); }
+                SnapEl((FrameworkElement)w.Content, dir, "chat-rec");
+                Call(cv, "SetMicState", false);
+                log.AppendLine("память: " + Environment.WorkingSet / 1048576 + " МБ");
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
