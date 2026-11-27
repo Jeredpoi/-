@@ -46,6 +46,8 @@ namespace Isle
         private readonly DispatcherTimer _topmost = new() { Interval = TimeSpan.FromSeconds(2) };
         private bool _pinned;
         private string _currentTab = "home";
+        /// <summary>Какая вкладка панели выбрана (id: home, clip, …) — знакомство по ней понимает, что открыт буфер.</summary>
+        public string CurrentTab => _currentTab;
         /// <summary>Вкладки нельзя строить, пока не созданы сервисы (RadioButton шлёт Checked прямо из InitializeComponent).</summary>
         private bool _ready;
 
@@ -893,10 +895,14 @@ namespace Isle
             open.Click += (_, __) => Expand(null);
             var settings = new MenuItem { Header = "Настройки" };
             settings.Click += (_, __) => OpenSettings();
+            // знакомство можно пройти снова в любой момент
+            var welcome = new MenuItem { Header = "Знакомство" };
+            welcome.Click += (_, __) => { Journal.Info("welcome", "открыто из меню чёлки"); try { Views.WelcomeWindow.ShowOnce(); } catch (Exception ex) { App.Log("welcome: " + ex); } };
             var exit = new MenuItem { Header = "Выйти из Isle" };
             exit.Click += (_, __) => Application.Current.Shutdown();
             menu.Items.Add(open);
             menu.Items.Add(settings);
+            menu.Items.Add(welcome);
             menu.Items.Add(new Separator());
             menu.Items.Add(exit);
             menu.IsOpen = true;
