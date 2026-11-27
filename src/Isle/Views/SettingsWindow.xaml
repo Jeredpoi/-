@@ -713,7 +713,7 @@
                         <StackPanel>
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Проверять обновления автоматически"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="При запуске и раз в 6 часов. О новой версии скажет всплывашка — обновляешься сам, одной кнопкой."/></StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="При запуске и раз в полчаса. О новой версии скажет всплывашка — обновляешься сам, одной кнопкой."/></StackPanel>
                                 <CheckBox x:Name="AutoUpdate" HorizontalAlignment="Right" Click="OnToggle"/>
                             </Grid>
                             <Border Style="{StaticResource Sep}"/>

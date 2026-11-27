@@ -21,7 +21,7 @@ namespace Isle.Services
     }
 
     /// <summary>
-    /// Обновления из GitHub Releases репозитория Jeredpoi/-: проверка при запуске и раз в 6 часов,
+    /// Обновления из GitHub Releases репозитория Jeredpoi/-: проверка при запуске и раз в полчаса,
     /// скачивание Isle-Setup.exe и тихая установка поверх с перезапуском.
     /// </summary>
     public static class UpdateService
@@ -30,8 +30,8 @@ namespace Isle.Services
         private static readonly HttpClient Http = CreateClient();
         /// <summary>Отдельный клиент для скачивания файла: заголовок GitHub API тут мешает.</summary>
         private static readonly HttpClient Download = Helpers.Net.Client(TimeSpan.FromMinutes(10));
-        private static readonly DispatcherTimer Timer = new() { Interval = TimeSpan.FromHours(6) };
-        private static bool _notified;
+        private static readonly DispatcherTimer Timer = new() { Interval = TimeSpan.FromMinutes(30) }; // GitHub без ключа даёт 60 запросов в час — 2 в час с запасом
+        private static string _notified;
 
         public static UpdateInfo Available { get; private set; }
         public static DateTime? LastCheck { get; private set; }
@@ -92,9 +92,10 @@ namespace Isle.Services
                     Published = r.TryGetProperty("published_at", out var p) && p.ValueKind == JsonValueKind.String ? p.GetDateTime().ToLocalTime() : DateTime.Now
                 };
                 Changed?.Invoke();
-                if (quiet && !_notified)
+                // проверка теперь раз в полчаса: про одну и ту же версию напоминаем один раз, про более новую — снова
+                if (quiet && _notified != Available.Version?.ToString())
                 {
-                    _notified = true;
+                    _notified = Available.Version?.ToString();
                     ShowAvailableToast();
                 }
                 return Available;
