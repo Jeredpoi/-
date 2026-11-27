@@ -1455,6 +1455,19 @@ namespace Isle
             bool changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
             // 2) окно проигнорировало просьбу (консоли, некоторые игры) — жмём сочетание пользователя, но только если
             //    это окно и правда активно: сочетание приходит в активное окно
+            // Раньше этот шаг работал только если окно уже было активным. А при клике по кнопке в раскрытой панели
+            // активна сама панель — и раскладка «не переключалась». Теперь сначала делаем окно активным (панель не
+            // закроется: курсор над ней), жмём сочетание пользователя
+            bool activated = false;
+            if (!changed && target != IntPtr.Zero && target != fg && Win32.IsWindow(target))
+            {
+                activated = Win32.SetForegroundWindow(target);
+                await Task.Delay(120);
+                fg = Win32.GetForegroundWindow();
+                fgReal = fg == target;
+            }
+            Journal.Info("layout", "кнопка раскладки: окно «" + WindowClass(target) + "», запрос " + (changed ? "сработал" : "не сработал")
+                + (activated ? ", окно сделано активным" : "") + (fgReal && target == fg ? ", жмём сочетание" : ""));
             if (!changed && fgReal && target == fg)
             {
                 await WaitModifiersUp();
@@ -1467,6 +1480,7 @@ namespace Isle
             }
             int now = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
             int shown = changed ? now : next;
+            Journal.Info("layout", "кнопка раскладки: итог — " + (changed ? "переключилась на " + Services.SystemWatchers.LangCode(now) : "окно не подтвердило смену"));
             if (shown != 0 && shown != before)
             {
                 AppHost.Watchers.ForceLanguage(shown);
@@ -1483,6 +1497,11 @@ namespace Isle
                     Kind = ToastKind.Error, Title = "Раскладка не переключилась", Icon = Icons.Keyboard, ReplaceKey = "layout", Important = true, Duration = TimeSpan.FromSeconds(5),
                     Subtitle = "Включи Alt+Shift: Параметры → Время и язык → Ввод → Дополнительные параметры клавиатуры → Сочетания клавиш"
                 });
+        }
+
+        private static string WindowClass(IntPtr h)
+        {
+            try { var sb = new System.Text.StringBuilder(64); Win32.GetClassName(h, sb, sb.Capacity); return sb.ToString(); } catch { return "?"; }
         }
 
         /// <summary>Значок раскладки в панели: короткий «переворот», чтобы смена была заметна.</summary>

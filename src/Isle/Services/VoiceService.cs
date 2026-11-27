@@ -76,7 +76,7 @@ namespace Isle.Services
             for (double i = 0; i < frames; i += step)
             {
                 int idx = (int)i * frame;
-                float sum = 0;
+                float sum = 0, loud = 0;
                 for (int c = 0; c < ch; c++)
                 {
                     int o = idx + c * bytesPerSample;
@@ -86,9 +86,11 @@ namespace Isle.Services
                         : bytesPerSample == 3 ? ((e.Buffer[o] | e.Buffer[o + 1] << 8 | (sbyte)e.Buffer[o + 2] << 16) / 8388608f) // 24-битные микрофоны
                         : 0;
                     sum += v;
+                    loud = Math.Max(loud, Math.Abs(v));
                 }
                 float m = Math.Clamp(sum / ch, -1f, 1f);
-                peak = Math.Max(peak, Math.Abs(m));
+                // для волны — самый громкий канал: у стерео-микрофона с голосом в одном канале среднее было вдвое тише
+                peak = Math.Max(peak, Math.Min(1f, loud));
                 short sv = (short)(m * 32767);
                 buf.WriteByte((byte)(sv & 0xFF));
                 buf.WriteByte((byte)((sv >> 8) & 0xFF));

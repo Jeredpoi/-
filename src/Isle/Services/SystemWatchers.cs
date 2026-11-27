@@ -350,7 +350,7 @@ namespace Isle.Services
             catch { return ""; }
         }
 
-        private static string LangCode(int langId)
+        public static string LangCode(int langId)
         {
             try
             {
