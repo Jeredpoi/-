@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -14,6 +15,12 @@ namespace Isle.Services
         public string Role { get; set; } // user | assistant
         public string Text { get; set; }
         public bool IsUser => Role == "user";
+        /// <summary>Вложения: картинки (копии в папке чата) и файлы — путями.</summary>
+        public List<string> Attachments { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public List<System.Windows.Media.ImageSource> Thumbs => Attachments?.Where(ChatFiles.IsImage).Select(ChatFiles.Thumb).Where(t => t != null).ToList();
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasThumbs => Attachments?.Any(ChatFiles.IsImage) == true;
         /// <summary>Действие, которое ждёт подтверждения пользователя (кнопка «Выполнить»).</summary>
         public AiAction Pending { get; set; }
         public bool HasPending => Pending != null;
@@ -213,7 +220,12 @@ namespace Isle.Services
             var list = new List<string>();
             if (doc.RootElement.TryGetProperty("data", out var data))
                 foreach (var m in data.EnumerateArray())
-                    if (m.TryGetProperty("id", out var id)) list.Add(id.GetString());
+                    if (m.TryGetProperty("id", out var id))
+                    {
+                        list.Add(id.GetString());
+                        // видит ли модель картинки — если сервис это сообщает (OpenRouter, Polza: architecture.input_modalities)
+                        if (ChatFiles.VisionFromModel(m) is bool v) ChatFiles.RememberVision(preset, (id.GetString() ?? "").Replace("models/", ""), v);
+                    }
             return list.Where(x => !string.IsNullOrEmpty(x)).Select(x => x.StartsWith("models/") ? x.Substring(7) : x).OrderBy(x => x).ToList();
         }
 
@@ -235,7 +247,7 @@ namespace Isle.Services
                 model = string.IsNullOrWhiteSpace(model) ? "claude-haiku-5-5" : model,
                 max_tokens = 2048,
                 system = SystemPrompt,
-                messages = history.Select(m => new { role = m.Role, content = m.Text }).ToArray()
+                messages = history.Select((m, i) => new { role = m.Role, content = ChatFiles.AnthropicContent(m, ChatFiles.SendImages(history, i)) }).ToArray()
             };
             using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
             AddAuth(req, "anthropic", key);
@@ -257,7 +269,8 @@ namespace Isle.Services
             var msgs = new List<object> { new { role = "system", content = SystemPrompt } };
             // весь разговор, пока он помещается в ~14 тыс. символов (бесплатным тарифам вроде Groq важен размер запроса);
             // если сервис всё равно скажет «слишком много» — ниже история укоротится автоматически
-            msgs.AddRange(Fit(history, 14000).Select(m => (object)new { role = m.Role, content = m.Text }));
+            var fitted = Fit(history, 14000);
+            msgs.AddRange(fitted.Select((m, i) => (object)new { role = m.Role, content = ChatFiles.OpenAiContent(m, ChatFiles.SendImages(fitted, i)) }));
             int maxTokens = 800;
             string json = null;
             for (int attempt = 0; attempt < 3; attempt++)
@@ -489,5 +502,162 @@ namespace Isle.Services
 
         /// <summary>История изменилась (очистка, удаление) — список «Недавние разговоры» перерисовывается сразу.</summary>
         public static event System.Action Changed;
+    }
+
+    /// <summary>
+    /// Вложения в чате: копии картинок (уменьшенные) в %AppData%\Isle\chat-files, текст файлов в запрос,
+    /// и понимает ли текущая модель картинки.
+    /// </summary>
+    public static class ChatFiles
+    {
+        public static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Isle", "chat-files");
+        private static readonly HashSet<string> ImageExt = new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+        private static readonly HashSet<string> TextExt = new(StringComparer.OrdinalIgnoreCase)
+        { ".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm", ".css", ".js", ".ts", ".py", ".cs", ".cpp", ".c", ".h", ".java", ".kt", ".go", ".rs", ".php", ".rb", ".sql", ".yml", ".yaml", ".ini", ".log", ".bat", ".ps1", ".sh", ".xaml", ".tsx", ".jsx", ".toml", ".srt" };
+
+        public static bool IsImage(string path) => path != null && ImageExt.Contains(Path.GetExtension(path));
+        public static bool IsText(string path) => path != null && TextExt.Contains(Path.GetExtension(path));
+
+        private static readonly Dictionary<string, System.Windows.Media.ImageSource> Thumbs = new();
+
+        public static System.Windows.Media.ImageSource Thumb(string path)
+        {
+            if (path == null) return null;
+            if (Thumbs.TryGetValue(path, out var t)) return t;
+            try
+            {
+                var b = new System.Windows.Media.Imaging.BitmapImage();
+                b.BeginInit(); b.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; b.UriSource = new Uri(path); b.DecodePixelHeight = 240; b.EndInit(); b.Freeze();
+                t = b;
+            }
+            catch { t = null; }
+            return Thumbs[path] = t;
+        }
+
+        /// <summary>Картинка для чата: уменьшаем до 1568 px по большей стороне (больше модели всё равно не смотрят) и сохраняем JPEG.</summary>
+        public static string SaveImage(System.Windows.Media.Imaging.BitmapSource src)
+        {
+            Directory.CreateDirectory(Dir);
+            double k = Math.Min(1, 1568.0 / Math.Max(src.PixelWidth, src.PixelHeight));
+            System.Windows.Media.Imaging.BitmapSource img = k < 1 ? new System.Windows.Media.Imaging.TransformedBitmap(src, new System.Windows.Media.ScaleTransform(k, k)) : src;
+            if (img.Format != System.Windows.Media.PixelFormats.Bgr24 && img.Format != System.Windows.Media.PixelFormats.Bgra32 && img.Format != System.Windows.Media.PixelFormats.Bgr32)
+                img = new System.Windows.Media.Imaging.FormatConvertedBitmap(img, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+            // прозрачное — на белом (JPEG без прозрачности, иначе фон станет чёрным)
+            var dv = new System.Windows.Media.DrawingVisual();
+            using (var dc = dv.RenderOpen())
+            {
+                dc.DrawRectangle(System.Windows.Media.Brushes.White, null, new System.Windows.Rect(0, 0, img.PixelWidth, img.PixelHeight));
+                dc.DrawImage(img, new System.Windows.Rect(0, 0, img.PixelWidth, img.PixelHeight));
+            }
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(img.PixelWidth, img.PixelHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            rtb.Render(dv);
+            var path = Path.Combine(Dir, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6] + ".jpg");
+            var enc = new System.Windows.Media.Imaging.JpegBitmapEncoder { QualityLevel = 85 };
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using (var fs = File.Create(path)) enc.Save(fs);
+            return path;
+        }
+
+        public static string SaveImageFile(string file)
+        {
+            var b = new System.Windows.Media.Imaging.BitmapImage();
+            b.BeginInit(); b.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; b.UriSource = new Uri(file); b.EndInit(); b.Freeze();
+            return SaveImage(b);
+        }
+
+        /// <summary>Картинки шлём только в двух последних сообщениях пользователя — дальше по истории они лишь «[картинка]» (меньше токенов).</summary>
+        public static bool SendImages(IReadOnlyList<ChatMessage> list, int index)
+        {
+            int userAfter = 0;
+            for (int j = index + 1; j < list.Count; j++) if (list[j].IsUser) userAfter++;
+            return userAfter < 2 && Vision();
+        }
+
+        /// <summary>Текст сообщения вместе с содержимым текстовых файлов и пометками о прочих вложениях.</summary>
+        public static string TextWithFiles(ChatMessage m, bool images)
+        {
+            if (m.Attachments == null || m.Attachments.Count == 0) return m.Text;
+            var sb = new StringBuilder(m.Text ?? "");
+            foreach (var a in m.Attachments)
+            {
+                var name = Path.GetFileName(a);
+                if (IsImage(a)) { if (!images) sb.Append("\n[картинка: " + name + "]"); continue; }
+                if (IsText(a) && File.Exists(a))
+                {
+                    string body;
+                    try { body = File.ReadAllText(a); } catch { body = ""; }
+                    if (body.Length > 20000) body = body[..20000] + "\n… (файл обрезан)";
+                    sb.Append("\n\nФайл «" + name + "»:\n```\n" + body + "\n```");
+                }
+                else sb.Append("\n[файл: " + name + " — его содержимое модели недоступно]");
+            }
+            return sb.ToString();
+        }
+
+        private static IEnumerable<string> ImagesOf(ChatMessage m) => m.Attachments?.Where(a => IsImage(a) && File.Exists(a)) ?? Enumerable.Empty<string>();
+        private static string Mime(string p) => Path.GetExtension(p).ToLowerInvariant() switch { ".png" => "image/png", ".gif" => "image/gif", ".webp" => "image/webp", _ => "image/jpeg" };
+
+        public static object OpenAiContent(ChatMessage m, bool images)
+        {
+            var text = TextWithFiles(m, images);
+            var imgs = images && m.IsUser ? ImagesOf(m).ToList() : new List<string>();
+            if (imgs.Count == 0) return text;
+            var parts = new List<object> { new { type = "text", text = string.IsNullOrWhiteSpace(text) ? "Что на картинке?" : text } };
+            foreach (var i in imgs) parts.Add(new { type = "image_url", image_url = new { url = "data:" + Mime(i) + ";base64," + Convert.ToBase64String(File.ReadAllBytes(i)) } });
+            return parts;
+        }
+
+        public static object AnthropicContent(ChatMessage m, bool images)
+        {
+            var text = TextWithFiles(m, images);
+            var imgs = images && m.IsUser ? ImagesOf(m).ToList() : new List<string>();
+            if (imgs.Count == 0) return text;
+            var parts = new List<object>();
+            foreach (var i in imgs) parts.Add(new { type = "image", source = new { type = "base64", media_type = Mime(i), data = Convert.ToBase64String(File.ReadAllBytes(i)) } });
+            parts.Add(new { type = "text", text = string.IsNullOrWhiteSpace(text) ? "Что на картинке?" : text });
+            return parts;
+        }
+
+        // ---------- видит ли модель картинки ----------
+        private static readonly Dictionary<string, bool> Known = new();
+        public static void RememberVision(string preset, string model, bool v) { lock (Known) Known[preset + "|" + model] = v; }
+
+        /// <summary>По описанию модели от сервиса (OpenRouter, Polza.ai, другие с input_modalities). null — сервис не сообщил.</summary>
+        public static bool? VisionFromModel(JsonElement m)
+        {
+            static bool? Has(JsonElement el)
+            {
+                if (!el.TryGetProperty("input_modalities", out var a) || a.ValueKind != JsonValueKind.Array) return null;
+                return a.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && (x.GetString() ?? "").Contains("image", StringComparison.OrdinalIgnoreCase));
+            }
+            if (m.TryGetProperty("architecture", out var arch) && arch.ValueKind == JsonValueKind.Object && Has(arch) is bool v1) return v1;
+            if (Has(m) is bool v2) return v2;
+            if (m.TryGetProperty("capabilities", out var cap) && cap.ValueKind == JsonValueKind.Object && cap.TryGetProperty("vision", out var vis)
+                && (vis.ValueKind == JsonValueKind.True || vis.ValueKind == JsonValueKind.False)) return vis.GetBoolean();
+            return null;
+        }
+
+        /// <summary>Понимает ли текущая модель картинки: что сказал сервис, иначе — по имени модели.</summary>
+        public static bool Vision()
+        {
+            var s = AppSettings.Current;
+            var model = s.AiModel ?? "";
+            lock (Known) if (Known.TryGetValue(s.AiPreset + "|" + model, out var v)) return v;
+            if (s.AiProvider == "anthropic") return true; // все современные Claude видят картинки
+            var low = model.ToLowerInvariant();
+            string[] yes = { "gpt-4o", "gpt-4.1", "gpt-5", "o3", "o4", "claude", "gemini", "gemma-3", "llava", "vision", "-vl", "vl-", "pixtral", "llama-4", "qwen2.5-vl", "qwen-vl", "grok-4", "grok-2-vision", "mistral-small-3", "mistral-medium", "minicpm-v", "internvl", "glm-4v", "kimi-vl" };
+            return yes.Any(low.Contains);
+        }
+
+        /// <summary>Узнать у сервиса список моделей с их модальностями (один раз за запуск, в фоне).</summary>
+        private static bool _asked;
+        public static async Task WarmAsync()
+        {
+            if (_asked) return;
+            var s = AppSettings.Current;
+            if (string.IsNullOrWhiteSpace(s.AiKey) && s.AiPreset != "ollama") return;
+            _asked = true;
+            try { await AiService.ModelsAsync(s.AiPreset, s.AiBaseUrl, s.AiKey); } catch { _asked = false; }
+        }
     }
 }

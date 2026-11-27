@@ -100,6 +100,20 @@ namespace Isle.Services
                 System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => _ = StopAsync(null));
         }
 
+        /// <summary>Отменить запись без распознавания (✕ в чате, Esc).</summary>
+        public void Cancel()
+        {
+            if (!Recording) return;
+            Journal.Info("voice", "запись голоса: отменена");
+            var cap = _capture;
+            _capture = null;
+            try { cap.StopRecording(); } catch { }
+            try { cap.DataAvailable -= OnData; cap.Dispose(); } catch { }
+            _pcm = null;
+            RecordingChanged?.Invoke(false);
+            ToastBus.Show(new Toast { Title = "Запись отменена", Icon = Icons.Mic, ReplaceKey = "voice", Duration = TimeSpan.FromSeconds(1) });
+        }
+
         /// <param name="command">Голосовая команда ИИ (Ctrl+Alt+A): распознаём бесплатным Groq, если есть его ключ.</param>
         public async Task StopAsync(Action<string> onText, bool command = false)
         {
