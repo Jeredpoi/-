@@ -1786,7 +1786,11 @@ namespace Isle
                 else
                 {
                     foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder", "Plate", "Well", "Pane", "PaneBorder", "PanePad", "Muted", "CardHover", "Track", "Popup", "FocusBorder" }) res.Remove(k);
-                    TabIndicator.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x31));
+                    // градиентный акцент виден и в пилюле выбранной вкладки (приглушённо — текст на ней белый)
+                    var (ga, gb) = Helpers.AccentPaint.Parse(s.AccentHex);
+                    TabIndicator.Background = gb is Color g2
+                        ? new LinearGradientBrush(Color.FromArgb(0x66, ga.R, ga.G, ga.B), Color.FromArgb(0x66, g2.R, g2.G, g2.B), 0)
+                        : new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x31));
                 }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;
             }
