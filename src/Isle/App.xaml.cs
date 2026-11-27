@@ -56,7 +56,9 @@ namespace Isle
             catch (Exception ex) { Log("autostart repair: " + ex.Message); }
 
             DispatcherUnhandledException += OnError;
-            AppDomain.CurrentDomain.UnhandledException += (_, a) => { Log(a.ExceptionObject?.ToString()); Journal.Flush(); };
+            // падение — вернуть баннеры уведомлений Windows, иначе без Isle они остались бы выключенными
+            AppDomain.CurrentDomain.UnhandledException += (_, a) => { Log(a.ExceptionObject?.ToString()); try { AppHost.Notifications?.RestoreBanners(); } catch { } Journal.Flush(); };
+            SessionEnding += (_, __) => { try { AppHost.Notifications?.RestoreBanners(); } catch { } };
             System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, a) => { Journal.Error("task", a.Exception); a.SetObserved(); };
             Journal.Verbose = AppSettings.Current.DebugLog;
             LogSession();

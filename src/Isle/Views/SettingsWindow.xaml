@@ -7,20 +7,20 @@
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="pack://application:,,,/Isle;component/app.ico">
     <Window.Resources>
         <!-- цвета окна: в теме «Закат» подменяются (SettingsWindow.ApplyTheme) — фото пальм под тёмной вуалью и стекло -->
-        <SolidColorBrush x:Key="SBg" Color="#0A0A0C"/>
-        <SolidColorBrush x:Key="SSide" Color="#060607"/>
-        <SolidColorBrush x:Key="SCard" Color="#111114"/>
-        <SolidColorBrush x:Key="SCardBorder" Color="#1E1E23"/>
-        <SolidColorBrush x:Key="SField" Color="#18181B"/>
-        <SolidColorBrush x:Key="SFieldBorder" Color="#26262B"/>
+        <SolidColorBrush x:Key="SBg" Color="#0C0C0E"/>
+        <SolidColorBrush x:Key="SSide" Color="#000000"/>
+        <SolidColorBrush x:Key="SCard" Color="#141417"/>
+        <SolidColorBrush x:Key="SCardBorder" Color="#12FFFFFF"/>
+        <SolidColorBrush x:Key="SField" Color="#1A1A1F"/>
+        <SolidColorBrush x:Key="SFieldBorder" Color="#17FFFFFF"/>
         <SolidColorBrush x:Key="SBtn" Color="#1F1F24"/>
         <SolidColorBrush x:Key="SBtnBorder" Color="#2A2A30"/>
         <SolidColorBrush x:Key="SSeg" Color="#1A1A1E"/>
         <SolidColorBrush x:Key="SSegHover" Color="#232328"/>
         <SolidColorBrush x:Key="SNavHover" Color="#141417"/>
-        <SolidColorBrush x:Key="SNavSel" Color="#1C1C20"/>
-        <SolidColorBrush x:Key="SSep" Color="#1C1C20"/>
-        <SolidColorBrush x:Key="SNote" Color="#8B8B95"/>
+        <SolidColorBrush x:Key="SNavSel" Color="#222228"/>
+        <SolidColorBrush x:Key="SSep" Color="#0FFFFFFF"/>
+        <SolidColorBrush x:Key="SNote" Color="#8A8A96"/>
         <!-- В настройках поля и кнопки светлее карточек, а выбранный вариант — белый: всё читается с первого взгляда -->
         <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Background" Value="{DynamicResource SField}"/>

@@ -50,7 +50,12 @@ namespace Isle.Services
         public DateTime Start { get; init; }
         public DateTime End { get; init; }
         public string Color { get; init; }
-        public string Key => Event.Id + "|" + Start.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture);
+        /// <summary>
+        /// Ключ вхождения (для «уже напоминали»). У событий из подключённых календарей Id новый при каждом обновлении
+        /// (раз в 30 мин) — для них ключ из календаря, UID и времени, иначе напоминание приходило снова каждые полчаса.
+        /// </summary>
+        public string Key => (Event.Source == "local" ? Event.Id : Event.Source + "|" + (Event.Uid ?? Event.Title) + "|" + Event.RecurrenceId?.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture))
+            + "|" + Start.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture);
         public string TimeText => Event.AllDay ? "Весь день" : Start.ToString("HH:mm") + "–" + End.ToString("HH:mm");
     }
 
@@ -234,8 +239,9 @@ namespace Isle.Services
                 var text = await Http.GetStringAsync(f.Url);
                 if (!text.Contains("BEGIN:VCALENDAR")) throw new InvalidDataException("по ссылке не календарь — нужна ссылка iCal (.ics)");
                 var list = Ics.Parse(text, f.Id);
-                FeedEvents[f.Id] = list;
+                if (!throwOnError && !Feeds.Contains(f)) return; // календарь убрали, пока он скачивался — не возвращаем его
                 Directory.CreateDirectory(Dir);
+                FeedEvents[f.Id] = list;
                 await File.WriteAllTextAsync(FeedFile(f.Id), text);
                 f.LastSync = DateTime.Now; f.Error = null; f.Count = list.Count;
                 Journal.Info("calendar", "«" + f.Name + "» обновлён: " + list.Count + " событий");
@@ -328,7 +334,9 @@ namespace Isle.Services
             int first = 0;
             if (!r.Count.HasValue && from > e.Start)
             {
-                double step = r.Freq switch { "DAILY" => 1, "WEEKLY" => 7, "MONTHLY" => 28, "YEARLY" => 365, _ => 0 } * interval;
+                double step = r.Freq switch { "DAILY" => 1, "WEEKLY" => 7, "MONTHLY" => 31, "YEARLY" => 366, _ => 0 } * interval;
+                // шаг берём с запасом (месяц 31 день, год 366): номер повтора только занижается — раньше с шагом 28
+                // через ~4 года пропускались месяцы
                 if (step > 0) first = Math.Max(0, (int)((from - e.Start - len).TotalDays / step) - 2);
                 if (r.Freq is "MONTHLY" or "YEARLY") first = Math.Max(0, first - 2);
             }

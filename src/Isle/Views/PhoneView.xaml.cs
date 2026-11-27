@@ -576,7 +576,7 @@ namespace Isle.Views
                 ? "Перетащи сюда файлы — на телефоне появится «Скачать»"
                 : "Ждут на страничке телефона:";
             if (PhoneLink.OutgoingText.Length > 0) OutList.Children.Add(OutChip("Text", "Текст из буфера", () => PhoneLink.OfferText("")));
-            foreach (var f in PhoneLink.Outgoing.ToList()) OutList.Children.Add(OutChip("File", f.Name, () => PhoneLink.Unoffer(f)));
+            foreach (var f in PhoneLink.OutgoingSnapshot()) OutList.Children.Add(OutChip("File", f.Name, () => PhoneLink.Unoffer(f)));
         }
 
         private FrameworkElement OutChip(string icon, string name, Action remove)
@@ -654,9 +654,20 @@ namespace Isle.Views
             {
                 try
                 {
+                    // уменьшаем только большие: по большей стороне до 2400 (длинный скриншот 1080×10000 раньше
+                    // растягивался до 2400×22222 — сотни мегабайт)
+                    int pw = 0, ph = 0;
+                    try
+                    {
+                        using var fs = File.OpenRead(path);
+                        var fr = BitmapDecoder.Create(fs, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None).Frames[0];
+                        pw = fr.PixelWidth; ph = fr.PixelHeight;
+                    }
+                    catch { }
                     var b = new BitmapImage();
                     b.BeginInit(); b.CacheOption = BitmapCacheOption.OnLoad; b.UriSource = new Uri(path);
-                    b.DecodePixelWidth = 2400; // хватает для любого экрана, память не раздувается
+                    if (pw >= ph && pw > 2400) b.DecodePixelWidth = 2400;
+                    else if (ph > pw && ph > 2400) b.DecodePixelHeight = 2400;
                     b.EndInit(); b.Freeze();
                     Dispatcher.InvokeAsync(() =>
                     {
@@ -729,6 +740,7 @@ namespace Isle.Views
             // клик по самому фото не закрывает; перетаскивание — сдвиг увеличенного
             e.Handled = true;
             _photoPan = null;
+            _photoPanned = false; // иначе следующий клик по фону после перетаскивания не закрывал просмотр
             PhotoImage.ReleaseMouseCapture();
         }
 

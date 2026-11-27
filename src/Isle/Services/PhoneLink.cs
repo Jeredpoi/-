@@ -257,13 +257,17 @@ namespace Isle.Services
         // ---------- что компьютер отдаёт телефону ----------
         public static void Offer(IEnumerable<string> paths)
         {
-            foreach (var p in paths.Where(File.Exists))
-                if (Outgoing.All(o => !string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
-                    Outgoing.Insert(0, new OutgoingFile { Id = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant(), Path = p });
+            // список читает и поток сервера (телефон запрашивает его) — меняем под замком
+            lock (Outgoing)
+                foreach (var p in paths.Where(File.Exists))
+                    if (Outgoing.All(o => !string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
+                        Outgoing.Insert(0, new OutgoingFile { Id = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant(), Path = p });
             Changed?.Invoke();
         }
 
-        public static void Unoffer(OutgoingFile f) { Outgoing.Remove(f); Changed?.Invoke(); }
+        public static void Unoffer(OutgoingFile f) { lock (Outgoing) Outgoing.Remove(f); Changed?.Invoke(); }
+
+        public static List<OutgoingFile> OutgoingSnapshot() { lock (Outgoing) return Outgoing.ToList(); }
 
         public static void OfferText(string text) { OutgoingText = text ?? ""; Changed?.Invoke(); }
 
@@ -299,7 +303,11 @@ namespace Isle.Services
                         await ssl.AuthenticateAsServerAsync(new System.Net.Security.SslServerAuthenticationOptions { ServerCertificateContext = PhoneTls.Context }, hs.Token);
                         stream = ssl;
                     }
+                    // ReceiveTimeout на ReadAsync не действует: соединение, которое молчит, закрываем через 30 с само
+                    bool gotHead = false;
+                    _ = Task.Delay(30000).ContinueWith(_ => { if (!gotHead) try { client.Close(); } catch { } });
                     var (method, target, headers, leftover) = await ReadHead(stream);
+                    gotHead = true;
                     if (method == null) return;
                     string path = target, query = "";
                     int qi = target.IndexOf('?');
@@ -329,10 +337,10 @@ namespace Isle.Services
                     }
                     else if (method == "GET" && route == "list") await Send(stream, 200, "application/json", JsonSerializer.SerializeToUtf8Bytes(new
                     {
-                        files = Outgoing.ToList().Select(o => new { id = o.Id, name = o.Name, size = o.Size, img = ImageType(o.Name) != null }),
+                        files = OutgoingSnapshot().Select(o => new { id = o.Id, name = o.Name, size = o.Size, img = ImageType(o.Name) != null }),
                         text = OutgoingText,
                     }));
-                    else if (method == "GET" && route == "f" && parts.Length > 2) await SendFile(stream, Outgoing.FirstOrDefault(o => o.Id == parts[2]), Query(query, "view") == "1");
+                    else if (method == "GET" && route == "f" && parts.Length > 2) await SendFile(stream, OutgoingSnapshot().FirstOrDefault(o => o.Id == parts[2]), Query(query, "view") == "1");
                     else if (method == "POST" && route == "up") await Receive(stream, headers, leftover, Query(query, "name"));
                     else if (method == "POST" && route == "text") await ReceiveText(stream, headers, leftover);
                     else await Send(stream, 404, "text/plain", Encoding.UTF8.GetBytes("Not found"));

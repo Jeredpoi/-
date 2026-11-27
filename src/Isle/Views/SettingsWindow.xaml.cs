@@ -19,7 +19,7 @@ namespace Isle.Views
     {
         private bool _loading = true;
         private AppSettings S => AppSettings.Current;
-        private static readonly string[] AccentColors = { "#ECECF1", "#FFB547", "#D97757", "#F87171", "#4ADE80", "#7DB5FF", "#C084FC" };
+        private static readonly string[] AccentColors = { "#ECECF1", "#F5B544", "#D97757", "#FB7185", "#2DD4BF", "#6EA8FE", "#A78BFA" };
 
         public SettingsWindow()
         {
@@ -406,8 +406,8 @@ namespace Isle.Views
         /// <summary>Градиенты: «откуда>куда». Подобраны так, чтобы оба конца читались на тёмном.</summary>
         private static readonly (string value, string name)[] AccentGradients =
         {
-            ("#22D3EE>#A855F7", "Аврора"), ("#FB923C>#EC4899", "Закат"), ("#38BDF8>#4ADE80", "Лагуна"),
-            ("#F472B6>#818CF8", "Неон"), ("#FDE047>#F97316", "Огонь"), ("#A3E635>#22D3EE", "Мята"),
+            ("#22D3EE>#A855F7", "Аврора"), ("#FB923C>#F43F5E", "Персик"), ("#38BDF8>#34D399", "Лагуна"),
+            ("#F472B6>#818CF8", "Неон"), ("#FBBF24>#F97316", "Огонь"), ("#A3E635>#2DD4BF", "Мята"),
         };
 
         private void BuildAccents()
@@ -483,19 +483,19 @@ namespace Isle.Views
             }
             catch { back = A(0xFF, 0x14, 0x0C, 0x22); }
             Resources["SBg"] = back;
-            Resources["SSide"] = A(0x99, 0x1E, 0x12, 0x33);
-            Resources["SCard"] = A(0x8C, 0x24, 0x16, 0x3A);
+            Resources["SSide"] = A(0xB3, 0x0D, 0x0A, 0x14);
+            Resources["SCard"] = A(0x14, 0xFF, 0xFF, 0xFF);
             Resources["SCardBorder"] = A(0x2E, 0xFF, 0xFF, 0xFF);
-            Resources["SField"] = A(0x80, 0x12, 0x09, 0x1E);
+            Resources["SField"] = A(0x80, 0x0D, 0x0A, 0x14);
             Resources["SFieldBorder"] = A(0x33, 0xFF, 0xFF, 0xFF);
             Resources["SBtn"] = A(0x24, 0xFF, 0xFF, 0xFF);
             Resources["SBtnBorder"] = A(0x2E, 0xFF, 0xFF, 0xFF);
             Resources["SSeg"] = A(0x1A, 0xFF, 0xFF, 0xFF);
             Resources["SSegHover"] = A(0x2E, 0xFF, 0xFF, 0xFF);
             Resources["SNavHover"] = A(0x1A, 0xFF, 0xFF, 0xFF);
-            Resources["SNavSel"] = A(0x40, 0xFF, 0x4F, 0xA3);
+            Resources["SNavSel"] = A(0x40, 0xF2, 0x67, 0x9F);
             Resources["SSep"] = A(0x1F, 0xFF, 0xFF, 0xFF);
-            Resources["SNote"] = A(0xFF, 0xC4, 0xB8, 0xD8);
+            Resources["SNote"] = A(0xFF, 0xCF, 0xC7, 0xDA);
         }
         private readonly System.Collections.Generic.Dictionary<string, object> _darkRes = new();
 

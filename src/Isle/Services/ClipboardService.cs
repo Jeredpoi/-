@@ -124,6 +124,9 @@ namespace Isle.Services
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     var t = LoadThumb(path);
+                    // не открылась (HEIC без кодека, битый файл) — больше не пытаемся: иначе привязка перечитывала
+                    // свойство и загрузка шла по кругу, нагружая процессор
+                    if (t == null) return;
                     dispatcher?.InvokeAsync(() => { _thumb = t; _thumbLoading = false; Changed(nameof(Thumb)); });
                 });
                 return null;
