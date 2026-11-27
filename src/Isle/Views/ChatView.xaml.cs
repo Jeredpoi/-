@@ -539,7 +539,7 @@ namespace Isle.Views
                 var dot = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(12), Margin = new Thickness(8, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center,
                     Child = new TextBlock { Text = letter == default ? "•" : char.ToUpper(letter).ToString(), FontSize = 11, FontWeight = FontWeights.SemiBold,
                         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-                dot.SetResourceReference(Border.BackgroundProperty, "ChipBg");
+                dot.SetResourceReference(Border.BackgroundProperty, "SelBg");
                 row.Children.Add(dot);
                 var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
                 names.Children.Add(new TextBlock { Text = c.Title, FontSize = 12.5, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal });
