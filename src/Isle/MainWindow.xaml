@@ -58,8 +58,18 @@
                                 <StackPanel Orientation="Horizontal">
                                     <!-- своя запись: крупные кнопки (по мелким легко промахнуться): «стоп», таймер, звук компьютера, микрофон.
                                          Клики разбирает OnIslandMouseDown — по ближайшей кнопке, промах рядом остров не раскрывает -->
+                                    <!-- идёт запись — «пауза» (две полоски); на паузе — «стоп» (квадрат) и рядом «продолжить» -->
                                     <Border x:Name="RecStop" Visibility="Collapsed" Width="30" Height="26" CornerRadius="13" Background="#5A1A1E" Cursor="Hand" VerticalAlignment="Center">
-                                        <Border Width="10" Height="10" CornerRadius="2" Background="#F87171" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Grid>
+                                            <StackPanel x:Name="RecPauseGlyph" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Border Width="3.5" Height="11" CornerRadius="1.2" Background="#F87171"/>
+                                                <Border Width="3.5" Height="11" CornerRadius="1.2" Background="#F87171" Margin="3,0,0,0"/>
+                                            </StackPanel>
+                                            <Border x:Name="RecStopGlyph" Visibility="Collapsed" Width="10" Height="10" CornerRadius="2" Background="#F87171" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                    <Border x:Name="RecResume" Visibility="Collapsed" Margin="4,0,0,0" Width="30" Height="26" CornerRadius="13" Background="#1D3A2A" Cursor="Hand" VerticalAlignment="Center">
+                                        <h:Icon Kind="Play" Width="13" Height="13" Foreground="#4ADE80" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <Ellipse x:Name="RecDot" Width="6" Height="6" Fill="#F87171" VerticalAlignment="Center"/>
                                     <TextBlock x:Name="RecText" Text="REC" Margin="4,0,0,0" FontSize="10" FontWeight="Bold" Foreground="#F87171" VerticalAlignment="Center"/>

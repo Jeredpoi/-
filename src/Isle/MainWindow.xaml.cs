@@ -826,7 +826,8 @@ namespace Isle
                 e.Handled = true;
                 if (hit == RecMic) rec.SetMic(!rec.MicOn);
                 else if (hit == RecSys) rec.SetSystemAudio(!rec.SysOn);
-                else { Journal.Info("record", "стоп: клик по плашке в чёлке"); Tools.Record(); }
+                else if (hit == RecResume) rec.Resume();
+                else { Journal.Info("record", (rec.Paused ? "стоп" : "пауза") + ": клик по плашке в чёлке"); Tools.Record(); } // сначала пауза, второй клик — стоп
                 return;
             }
             // у плашки своё действие по клику (обновление и т. п.)
@@ -1025,7 +1026,7 @@ namespace Isle
             RevealRow(timer ? TimerRow : media ? MediaRow : dl ? DownloadRow : (UIElement)IdleRow);
 
             double h = RegionRecorder.Current != null && RecChip.Visibility == Visibility.Visible ? 38 : 34; // своя запись: кнопки крупнее — чёлка чуть выше
-            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? (RegionRecorder.Current != null ? 158 : 60) : 0);
+            double w = timer ? 240 : (string.IsNullOrEmpty(WeatherMini.Text) ? 176 : 216) + (BatteryMini.Visibility == Visibility.Visible ? 52 : 0) + (RecChip.Visibility == Visibility.Visible ? (RegionRecorder.Current != null ? (RegionRecorder.Current.Paused ? 192 : 158) : 60) : 0);
             if (!AppSettings.Current.ShowClock && !timer && !media) w -= 50;
             else if (AppSettings.Current.ClockSeconds && !timer && !media) w += 24;
             if (media) (w, h) = ApplyPillMode();
@@ -1659,6 +1660,14 @@ namespace Isle
             if (p.Y > RecChip.ActualHeight + 12) return null; // ниже чёлки — не наше
             double Center(FrameworkElement el) => el.TranslatePoint(new Point(el.ActualWidth / 2, 0), RecChip).X;
             double sys = Center(RecSys), mic = Center(RecMic);
+            if (RecResume.Visibility == Visibility.Visible)
+            {
+                // на паузе: «стоп» | «продолжить» | таймер (таймер — тоже «продолжить»)
+                double resumeL = RecResume.TranslatePoint(new Point(0, 0), RecChip).X;
+                if (p.X < resumeL - 2) return RecStop;
+                if (p.X <= (RecText.TranslatePoint(new Point(RecText.ActualWidth, 0), RecChip).X + RecSys.TranslatePoint(new Point(0, 0), RecChip).X) / 2) return RecResume;
+                return Math.Abs(p.X - sys) <= Math.Abs(p.X - mic) ? RecSys : RecMic;
+            }
             // таймер относится к «стопу»: всё левее середины между таймером и динамиком — стоп
             double stopEdge = RecText.TranslatePoint(new Point(RecText.ActualWidth, 0), RecChip).X;
             if (p.X <= (stopEdge + RecSys.TranslatePoint(new Point(0, 0), RecChip).X) / 2) return RecStop;
@@ -1677,12 +1686,17 @@ namespace Isle
             bool own = RegionRecorder.Current != null;
             RecChip.Visibility = own || ObsService.Recording || ObsService.Streaming ? Visibility.Visible : Visibility.Collapsed;
             RecMic.Visibility = RecSys.Visibility = RecStop.Visibility = own ? Visibility.Visible : Visibility.Collapsed;
+            bool paused = RegionRecorder.Current?.Paused == true;
+            RecResume.Visibility = own && paused ? Visibility.Visible : Visibility.Collapsed;
+            RecPauseGlyph.Visibility = paused ? Visibility.Collapsed : Visibility.Visible;
+            RecStopGlyph.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+            RecStop.ToolTip = own ? (paused ? "Остановить и сохранить" : "Пауза (ещё раз — стоп)") : null;
+            RecResume.ToolTip = "Продолжить запись";
             RecDot.Visibility = own ? Visibility.Collapsed : Visibility.Visible;
             RecChip.Padding = own ? new Thickness(2) : new Thickness(6, 1, 6, 1);
             RecChip.CornerRadius = new CornerRadius(own ? 15 : 8);
             RecText.Margin = new Thickness(own ? 7 : 4, 0, 0, 0);
             RecChip.ToolTip = null;
-            RecStop.ToolTip = own ? "Остановить запись" : null;
             if (own && RegionRecorder.Current is { } rec)
             {
                 bool sys = rec.SysOn;
@@ -3166,6 +3180,8 @@ namespace Isle
                     var t = rr.Elapsed;
                     var txt = rr.Saving ? "СОХРАНЯЮ" : (t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss"));
                     if (RecText.Text != txt) RecText.Text = txt;
+                    // на паузе таймер мигает — видно, что запись стоит
+                    RecText.Opacity = rr.Paused ? ((DateTime.Now.Millisecond / 500) % 2 == 0 ? 1 : 0.35) : 1;
                 }
             }
             if (Buddy.Visibility == Visibility.Visible)

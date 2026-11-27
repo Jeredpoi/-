@@ -220,6 +220,7 @@ namespace Isle
         }
 
         private static RecordFrame _recFrame;
+        private static bool _frameHooked;
 
         /// <summary>
         /// Запись экрана: выделить область → запись в MP4, повторное нажатие — стоп.
@@ -228,7 +229,13 @@ namespace Isle
         public static async void Record()
         {
             AppHost.Window.Collapse();
-            if (RegionRecorder.Current != null) { await StopOwnRecording(); return; }
+            // своя запись: первое нажатие — пауза, второе — стоп (чтобы не оборвать запись случайно)
+            if (RegionRecorder.Current is { } rec)
+            {
+                if (!rec.Paused && !rec.Saving) { rec.Pause(); return; }
+                await StopOwnRecording();
+                return;
+            }
             // OBS — основной: запущен — пишем в нём. Не запущен (или не отвечает) — пишем сами выбранную область
             if (ObsService.IsObsRunning())
             {
@@ -266,6 +273,11 @@ namespace Isle
             if (picker.Result is not { } r) return;
             _recFrame = new RecordFrame(r.x, r.y, r.w, r.h);
             _recFrame.Show();
+            if (!_frameHooked)
+            {
+                _frameHooked = true; // рамка жёлтая на паузе, красная во время записи
+                RegionRecorder.StateChanged += () => Application.Current.Dispatcher.InvokeAsync(() => _recFrame?.SetPaused(RegionRecorder.Current?.Paused == true));
+            }
             try
             {
                 await RegionRecorder.StartAsync(r.x, r.y, r.w, r.h, r.sys, r.mic);
