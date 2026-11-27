@@ -186,7 +186,6 @@ namespace Isle.Views
             foreach (var rb in NotchModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.NotchMode ?? "off");
             BuildTabsList();
             foreach (var rb in SnowModes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.WinterSnow ?? "auto");
-            foreach (var rb in RecEngines.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.RecordEngine ?? "isle");
             SnowWhy.Text = "Сейчас: " + (AppHost.Window?.SnowReason ?? "—");
             foreach (var rb in Themes.Children.OfType<RadioButton>()) rb.IsChecked = (string)rb.Tag == (S.Theme ?? "dark");
             ScaleSlider.Value = Math.Round(S.Scale * 100);
@@ -500,12 +499,6 @@ namespace Isle.Views
             AppHost.Window.ApplyAppearance(); // фон, акцент и полоски — сразу; Клоди переоденется на следующем кадре
             ApplyTheme();
             UpdatePreview();
-        }
-
-        private void OnRecEngine(object s, RoutedEventArgs e)
-        {
-            S.RecordEngine = (string)((FrameworkElement)s).Tag;
-            S.Save();
         }
 
         private void OnSnowMode(object s, RoutedEventArgs e)
