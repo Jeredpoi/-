@@ -66,6 +66,10 @@ namespace Isle.Services
             LanguageChanged?.Invoke();
         }
 
+        /// <summary>Когда (UtcNow.Ticks) нажали сочетание смены раскладки — пишет перехват клавиатуры в MainWindow.</summary>
+        public static long LayoutKeysAt;
+        private static bool LayoutKeysRecently => DateTime.UtcNow.Ticks - System.Threading.Interlocked.Read(ref LayoutKeysAt) < TimeSpan.FromSeconds(3).Ticks;
+
         public string LanguageCode { get; private set; } = LangCode((int)((long)Win32.GetKeyboardLayout(0) & 0xFFFF));
         public int BatteryPercent { get; private set; } = -1;
         public bool Charging { get; private set; }
@@ -110,7 +114,10 @@ namespace Isle.Services
                     LanguageChanged?.Invoke();
                     // плашку показываем только если раскладка сменилась в том же окне (её переключили),
                     // а не потому, что перешли в другое окно со своей раскладкой
-                    if (!first && sameWindow && toasts)
+                    // и только после сочетания клавиш смены раскладки: иначе плашка «Русский» приходила сама, без переключения
+                    if (!first && sameWindow && toasts && !LayoutKeysRecently)
+                        Journal.Debug("layout", "раскладка сменилась без сочетания клавиш — плашку не показываем: " + LanguageCode);
+                    else if (!first && sameWindow && toasts)
                         ToastBus.Show(new Toast
                         {
                             Kind = ToastKind.Layout, Title = LangName(langId), Badge = LanguageCode, Icon = Icons.Keyboard,

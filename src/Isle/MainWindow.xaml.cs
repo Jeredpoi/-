@@ -447,6 +447,21 @@ namespace Isle
                 }
                 bool alt = (k.flags & 0x20) != 0;                                             // LLKHF_ALTDOWN
                 bool win = (Win32.GetAsyncKeyState(0x5B) & 0x8000) != 0 || (Win32.GetAsyncKeyState(0x5C) & 0x8000) != 0;
+                {
+                    // сочетание смены раскладки (Alt+Shift, Ctrl+Shift, Win+Пробел): без него плашку раскладки не показываем —
+                    // раньше она выскакивала сама, когда окно меняло раскладку без участия пользователя
+                    int km = wParam.ToInt32();
+                    if (km == 0x0100 || km == 0x0104)
+                    {
+                        uint v = k.vkCode;
+                        bool shiftK = v == 0x10 || v == 0xA0 || v == 0xA1, ctrlK = v == 0x11 || v == 0xA2 || v == 0xA3, altK = v == 0x12 || v == 0xA4 || v == 0xA5;
+                        bool shift = shiftK || (Win32.GetAsyncKeyState(0x10) & 0x8000) != 0;
+                        bool ctrl = ctrlK || (Win32.GetAsyncKeyState(0x11) & 0x8000) != 0;
+                        bool altNow = alt || altK;
+                        if ((shift && (altNow || ctrl) && (shiftK || ctrlK || altK)) || (win && v == 0x20))
+                            Services.SystemWatchers.LayoutKeysAt = DateTime.UtcNow.Ticks;
+                    }
+                }
                 if (k.vkCode == 0x2C && !alt && !win && AppSettings.Current.PrintScreenIsle)  // VK_SNAPSHOT
                 {
                     int msg = wParam.ToInt32();
@@ -1971,7 +1986,29 @@ namespace Isle
                 _toasts.Clear();
                 foreach (var x in rest) _toasts.Enqueue(x);
             }
-            _toasts.Enqueue(t);
+            // Caps Lock и раскладка — мгновенные: не ждут в очереди за уведомлением (раньше приходили с задержкой в секунды).
+            // Текущая плашка уступает место и показывается снова сразу после
+            if ((t.Kind == ToastKind.Caps || t.Kind == ToastKind.Layout) && State == IslandState.Toast && _currentToast is { } cur
+                && cur.Kind != ToastKind.Caps && cur.Kind != ToastKind.Layout && cur.Kind != ToastKind.Alarm && cur.Kind != ToastKind.Download)
+            {
+                var rest = _toasts.ToList();
+                _toasts.Clear();
+                _toasts.Enqueue(t);
+                _toasts.Enqueue(cur);
+                foreach (var x in rest) _toasts.Enqueue(x);
+                _toastTimer.Stop();
+                NextToast();
+                return;
+            }
+            if (t.Kind == ToastKind.Caps || t.Kind == ToastKind.Layout)
+            {
+                // впереди очереди — сразу после текущей плашки
+                var rest = _toasts.ToList();
+                _toasts.Clear();
+                _toasts.Enqueue(t);
+                foreach (var x in rest) _toasts.Enqueue(x);
+            }
+            else _toasts.Enqueue(t);
             if (State == IslandState.Collapsed) NextToast();
         }
 
@@ -2359,7 +2396,15 @@ namespace Isle
                 StatusGlow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new SineEase() });
                 return;
             }
-            StatusGlow.BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, col.R, col.G, col.B));
+            // рамка только по внешнему контуру (бока и низ): сверху остров «выезжает» из края экрана, там линии быть не должно —
+            // иначе казалось, что остров обрезан. Бока у верха плавно гаснут
+            StatusGlow.BorderThickness = new Thickness(1.5, 0, 1.5, 1.5);
+            StatusGlow.BorderBrush = new LinearGradientBrush(new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(0x00, col.R, col.G, col.B), 0.0),
+                new GradientStop(Color.FromArgb(0xB0, col.R, col.G, col.B), 0.6),
+                new GradientStop(Color.FromArgb(0xB0, col.R, col.G, col.B), 1.0),
+            }, 90);
             StatusGlow.Background = new LinearGradientBrush(new GradientStopCollection
             {
                 new GradientStop(Color.FromArgb(0x00, col.R, col.G, col.B), 0.0),

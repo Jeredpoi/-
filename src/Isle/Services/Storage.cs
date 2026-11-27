@@ -58,6 +58,11 @@ namespace Isle.Services
         public bool NotificationToasts { get; set; } = true;
         /// <summary>Убирать плашку Windows: уведомление видно только в острове (без дублей справа снизу).</summary>
         public bool NotificationsOnlyInIsland { get; set; }
+        /// <summary>
+        /// Какие всплывающие баннеры Windows Isle выключил (AppUserModelId → прежнее значение ShowBanner, −1 — не было).
+        /// Нужно, чтобы вернуть всё как было, когда «только в острове» выключат.
+        /// </summary>
+        public Dictionary<string, int> BannersOff { get; set; } = new();
         public bool ClipboardHistory { get; set; } = true;
         public int ClipboardLimit { get; set; } = 50;
         public bool HideInFullscreen { get; set; } = true;
