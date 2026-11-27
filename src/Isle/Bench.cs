@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,137 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
+        private static object Call(object o, string name, params object[] args) =>
+            o.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)?.Invoke(o, args);
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                await Task.Delay(3000);
+                var box = new Border { Width = 80, Height = 80, Background = Brushes.OrangeRed, CornerRadius = new CornerRadius(12) };
+                var cv = new Canvas { Background = new SolidColorBrush(Color.FromRgb(30, 60, 110)), Width = 640, Height = 360 };
+                cv.Children.Add(box);
+                var win = new Window { Content = cv, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, Left = 100, Top = 150, Topmost = true, ShowActivated = false };
+                win.Show();
+                var t0 = DateTime.Now;
+                var anim = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+                anim.Tick += (_, __) => { double t = (DateTime.Now - t0).TotalSeconds; Canvas.SetLeft(box, 280 + 240 * Math.Sin(t * 2)); Canvas.SetTop(box, 140 + 100 * Math.Cos(t * 3)); };
+                anim.Start();
+                await Task.Delay(800);
+                var dev = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+                int px(double v) => (int)Math.Round(v * dev.M11);
+                await RegionRecorder.StartAsync(px(100), px(150), px(640), px(360), true, false);
+                async Task ClickAt(FrameworkElement el, double x, double y, string what)
+                {
+                    var q = el.PointToScreen(new Point(x, y));
+                    SetCursorPos((int)q.X, (int)q.Y); await Task.Delay(200);
+                    mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(60); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                    await Task.Delay(500);
+                    var r = RegionRecorder.Current;
+                    log.AppendLine(what + ": " + (r == null ? "запись остановлена" : (r.Paused ? "пауза" : "идёт") + " " + w.RecText.Text) + ", остров " + w.State);
+                }
+                await Task.Delay(3000);
+                SnapEl((FrameworkElement)w.Content, dir, "chip-run");
+                await ClickAt(w.RecStop, w.RecStop.ActualWidth / 2, w.RecStop.ActualHeight / 2, "клик 1 по кнопке (ждём паузу)");
+                await Task.Delay(3000);
+                SnapEl((FrameworkElement)w.Content, dir, "chip-paused");
+                log.AppendLine("через 3 с паузы таймер: " + w.RecText.Text);
+                await ClickAt(w.RecResume, w.RecResume.ActualWidth / 2, w.RecResume.ActualHeight / 2, "клик «продолжить»");
+                await Task.Delay(2000);
+                await ClickAt(w.RecStop, w.RecStop.ActualWidth / 2, w.RecStop.ActualHeight / 2, "клик 2 (пауза)");
+                await ClickAt(w.RecStop, w.RecStop.ActualWidth / 2, w.RecStop.ActualHeight / 2, "клик 3 (стоп)");
+                for (int k = 0; k < 60 && RegionRecorder.Current != null; k++) await Task.Delay(100);
+                log.AppendLine("после: " + (RegionRecorder.Current == null ? "остановлена" : "ИДЁТ"));
+                string file = null;
+                var dirV = RegionRecorder.Folder;
+                if (Directory.Exists(dirV)) { var fs = new DirectoryInfo(dirV).GetFiles("*.mp4"); if (fs.Length > 0) file = fs.OrderBy(f => f.LastWriteTime).Last().FullName; }
+                if (file != null)
+                {
+                    File.Copy(file, Path.Combine(dir, "rec-paused.mp4"), true);
+                    try
+                    {
+                        var sf = await Windows.Storage.StorageFile.GetFileFromPathAsync(file);
+                        var vp = await sf.Properties.GetVideoPropertiesAsync();
+                        log.AppendLine("длина видео: " + vp.Duration.TotalSeconds.ToString("0.0") + " с (запись ~5,7 с без пауз, пауза 3+ с вырезана)");
+                    }
+                    catch (Exception ex) { log.AppendLine("длина: " + ex.Message); }
+                }
+                anim.Stop(); win.Close();
+
+                // телефон: клик по миниатюре фото — увеличение
+                var jpg = Path.Combine(Path.GetTempPath(), "phone-test.jpg");
+                {
+                    var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(1200, 900, 96, 96, PixelFormats.Pbgra32);
+                    var dv = new DrawingVisual();
+                    using (var dc = dv.RenderOpen())
+                    {
+                        dc.DrawRectangle(new LinearGradientBrush(Colors.SkyBlue, Colors.OrangeRed, 45), null, new Rect(0, 0, 1200, 900));
+                        dc.DrawEllipse(Brushes.Gold, null, new Point(600, 450), 200, 200);
+                    }
+                    rtb.Render(dv);
+                    var enc = new System.Windows.Media.Imaging.JpegBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                    using var fs = File.Create(jpg); enc.Save(fs);
+                }
+                PhoneLink.Received.Insert(0, new PhoneItem { Name = "photo.jpg", Path = jpg, Size = new FileInfo(jpg).Length });
+                var pv = new Isle.Views.PhoneView();
+                var pw = new Window { Content = pv, Width = 900, Height = 440, Left = 60, Top = 120, WindowStyle = WindowStyle.None, Topmost = true };
+                pw.SetResourceReference(Window.BackgroundProperty, "Bg");
+                pw.Show();
+                await Task.Delay(1500);
+                Call(pv, "BuildIn");
+                await Task.Delay(500);
+                SnapEl(pv, dir, "phone-list");
+                var inList = (Panel)pv.FindName("InList");
+                FrameworkElement thumb = null;
+                if (inList.Children.Count > 0)
+                {
+                    var g = (Grid)((Border)inList.Children[0]).Child;
+                    thumb = (FrameworkElement)g.Children[0];
+                }
+                log.AppendLine("строк: " + inList.Children.Count + ", миниатюра: " + (thumb != null));
+                if (thumb != null)
+                {
+                    await ClickAt(thumb, thumb.ActualWidth / 2, thumb.ActualHeight / 2, "клик по миниатюре");
+                    await Task.Delay(600);
+                    var viewer = (FrameworkElement)pv.FindName("PhotoViewer");
+                    log.AppendLine("просмотр открыт: " + viewer.Visibility);
+                    SnapEl(pv, dir, "phone-viewer");
+                    keybd_event(0x1B, 0, 0, UIntPtr.Zero); keybd_event(0x1B, 0, KeyUp, UIntPtr.Zero);
+                    await Task.Delay(700);
+                    log.AppendLine("после Esc: " + viewer.Visibility);
+                }
+                pw.Close();
+                log.AppendLine("память: " + Environment.WorkingSet / 1048576 + " МБ");
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
