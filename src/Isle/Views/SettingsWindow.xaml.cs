@@ -19,7 +19,7 @@ namespace Isle.Views
     {
         private bool _loading = true;
         private AppSettings S => AppSettings.Current;
-        private static readonly string[] AccentColors = { "#ECECF1", "#F5B544", "#D97757", "#FB7185", "#2DD4BF", "#6EA8FE", "#A78BFA" };
+        internal static readonly string[] AccentColors = { "#ECECF1", "#F5B544", "#D97757", "#FB7185", "#2DD4BF", "#6EA8FE", "#A78BFA" };
 
         public SettingsWindow()
         {
@@ -404,7 +404,7 @@ namespace Isle.Views
         // ---------- Внешний вид ----------
 
         /// <summary>Градиенты: «откуда>куда». Подобраны так, чтобы оба конца читались на тёмном.</summary>
-        private static readonly (string value, string name)[] AccentGradients =
+        internal static readonly (string value, string name)[] AccentGradients =
         {
             ("#22D3EE>#A855F7", "Аврора"), ("#FB923C>#F43F5E", "Персик"), ("#38BDF8>#34D399", "Лагуна"),
             ("#F472B6>#818CF8", "Неон"), ("#FBBF24>#F97316", "Огонь"), ("#A3E635>#2DD4BF", "Мята"),
