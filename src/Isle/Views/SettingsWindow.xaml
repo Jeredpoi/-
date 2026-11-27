@@ -354,7 +354,7 @@
                             <Border Style="{StaticResource Sep}"/>
                             <Grid Style="{StaticResource Row}">
                                 <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Акцент"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет кнопок, таймера и полосок музыки. По умолчанию — белый."/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет кнопок, таймера и полосок музыки — один цвет или градиент. По умолчанию — белый."/>
                                     <WrapPanel x:Name="Accents" Margin="0,10,0,0"/>
                                 </StackPanel>
                             </Grid>

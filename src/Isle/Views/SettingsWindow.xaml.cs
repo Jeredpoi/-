@@ -403,16 +403,23 @@ namespace Isle.Views
 
         // ---------- Внешний вид ----------
 
+        /// <summary>Градиенты: «откуда>куда». Подобраны так, чтобы оба конца читались на тёмном.</summary>
+        private static readonly (string value, string name)[] AccentGradients =
+        {
+            ("#22D3EE>#A855F7", "Аврора"), ("#FB923C>#EC4899", "Закат"), ("#38BDF8>#4ADE80", "Лагуна"),
+            ("#F472B6>#818CF8", "Неон"), ("#FDE047>#F97316", "Огонь"), ("#A3E635>#22D3EE", "Мята"),
+        };
+
         private void BuildAccents()
         {
-            foreach (var hex in AccentColors)
+            var all = AccentColors.Select(h => (h, h)).Concat(AccentGradients.Select(g => (g.value, "Градиент «" + g.name + "»")));
+            foreach (var (hex, tip) in all)
             {
-                var c = (Color)ColorConverter.ConvertFromString(hex);
                 var rb = new RadioButton
                 {
                     Style = (Style)FindResource("SSegment"), GroupName = "accent", Tag = hex, Padding = new Thickness(0),
-                    Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = new SolidColorBrush(c) },
-                    IsChecked = string.Equals(hex, S.AccentHex, StringComparison.OrdinalIgnoreCase), ToolTip = hex
+                    Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = Helpers.AccentPaint.Brush(hex, 45) },
+                    IsChecked = string.Equals(hex, S.AccentHex, StringComparison.OrdinalIgnoreCase), ToolTip = tip
                 };
                 rb.Click += (_, __) =>
                 {

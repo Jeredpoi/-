@@ -1730,10 +1730,11 @@ namespace Isle
             try
             {
                 bool sunset = Helpers.SunsetTheme.On;
-                var c = sunset ? Helpers.SunsetTheme.Pink : (Color)ColorConverter.ConvertFromString(s.AccentHex);
-                Application.Current.Resources["Accent"] = new SolidColorBrush(c); // все {DynamicResource Accent} обновятся сразу
-                // в «Закате» полоски эквалайзера переливаются снизу вверх: бирюза → розовый
-                Brush barBrush = sunset ? new LinearGradientBrush(Helpers.SunsetTheme.Pink, Helpers.SunsetTheme.Teal, 90) : new SolidColorBrush(c);
+                var c = sunset ? Helpers.SunsetTheme.Pink : Helpers.AccentPaint.Main(s.AccentHex);
+                // все {DynamicResource Accent} обновятся сразу; градиентный акцент — переливается слева направо
+                Application.Current.Resources["Accent"] = sunset ? new SolidColorBrush(c) : Helpers.AccentPaint.Brush(s.AccentHex);
+                // в «Закате» полоски эквалайзера переливаются снизу вверх: бирюза → розовый; с градиентным акцентом — его цветами
+                Brush barBrush = sunset ? new LinearGradientBrush(Helpers.SunsetTheme.Pink, Helpers.SunsetTheme.Teal, 90) : Helpers.AccentPaint.Brush(s.AccentHex, 90);
                 foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Background = barBrush;
                 ThemeBack.Visibility = sunset ? Visibility.Visible : Visibility.Collapsed;
                 // «матовое стекло»: в «Закате» карточки полупрозрачные — сквозь них просвечивают размытые пальмы и солнце
@@ -3048,7 +3049,7 @@ namespace Isle
 
         private Color AccentColor()
         {
-            try { return (Color)ColorConverter.ConvertFromString(AppSettings.Current.AccentHex); } catch { return Colors.White; }
+            return Helpers.AccentPaint.Main(AppSettings.Current.AccentHex);
         }
 
         /// <summary>Самый «живой» цвет обложки — им светятся всплески музыки на краю.</summary>
