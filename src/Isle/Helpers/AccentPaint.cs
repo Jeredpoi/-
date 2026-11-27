@@ -20,11 +20,16 @@ namespace Isle.Helpers
             catch { return (Color.FromRgb(0xEC, 0xEC, 0xF1), null); }
         }
 
-        /// <summary>Основной цвет (для мест, где нужен один цвет): у градиента — середина.</summary>
+        /// <summary>
+        /// Основной цвет (текст, контурные значки, точки): у градиента — более светлый из концов.
+        /// Середина по RGB выходила тусклее обоих концов («Аврора» давала серо-синий).
+        /// </summary>
         public static Color Main(string s)
         {
             var (a, b) = Parse(s);
-            return b is Color c ? Color.FromRgb((byte)((a.R + c.R) / 2), (byte)((a.G + c.G) / 2), (byte)((a.B + c.B) / 2)) : a;
+            if (b is not Color c) return a;
+            static double L(Color x) => 0.2126 * x.R + 0.7152 * x.G + 0.0722 * x.B;
+            return L(a) >= L(c) ? a : c;
         }
 
         /// <summary>Кисть: градиент слева направо (angle 0) или снизу вверх (angle 90, для полосок музыки).</summary>

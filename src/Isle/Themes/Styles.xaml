@@ -3,34 +3,34 @@
 
     <Color x:Key="BgColor">#000000</Color>
     <SolidColorBrush x:Key="Bg" Color="#000000"/>
-    <SolidColorBrush x:Key="Card" Color="#0E0E10"/>
-    <SolidColorBrush x:Key="CardHover" Color="#18181B"/>
-    <SolidColorBrush x:Key="CardBorder" Color="#1C1C20"/>
-    <SolidColorBrush x:Key="Track" Color="#26262B"/>
+    <SolidColorBrush x:Key="Card" Color="#131316"/>
+    <SolidColorBrush x:Key="CardHover" Color="#1B1B20"/>
+    <SolidColorBrush x:Key="CardBorder" Color="#12FFFFFF"/>
+    <SolidColorBrush x:Key="Track" Color="#2A2A31"/>
     <!-- плашки под иконками, «колодцы» (зоны перетаскивания) и подложка вкладок без своих карточек:
          в «Закате» подменяются на стекло (MainWindow.ApplyAppearance) -->
-    <SolidColorBrush x:Key="Plate" Color="#1C1C21"/>
-    <SolidColorBrush x:Key="Well" Color="#050506"/>
-    <SolidColorBrush x:Key="Pane" Color="Transparent"/>
-    <SolidColorBrush x:Key="PaneBorder" Color="Transparent"/>
-    <Thickness x:Key="PanePad">0</Thickness>
+    <SolidColorBrush x:Key="Plate" Color="#202026"/>
+    <SolidColorBrush x:Key="Well" Color="#0A0A0C"/>
+    <SolidColorBrush x:Key="Pane" Color="#0B0B0D"/>
+    <SolidColorBrush x:Key="PaneBorder" Color="#0DFFFFFF"/>
+    <Thickness x:Key="PanePad">8</Thickness>
     <!-- цвета чипов, сегментов и выбора: в теме «Закат» подменяются (MainWindow.ApplyAppearance) -->
-    <SolidColorBrush x:Key="ChipBg" Color="#141417"/>
-    <SolidColorBrush x:Key="ChipHover" Color="#1B1B1F"/>
-    <SolidColorBrush x:Key="SelBg" Color="#26262B"/>
-    <SolidColorBrush x:Key="SelBorder" Color="#8B8B95"/>
-    <SolidColorBrush x:Key="Fg" Color="#ECECF1"/>
-    <SolidColorBrush x:Key="Muted" Color="#8B8B95"/>
+    <SolidColorBrush x:Key="ChipBg" Color="#1A1A1F"/>
+    <SolidColorBrush x:Key="ChipHover" Color="#24242A"/>
+    <SolidColorBrush x:Key="SelBg" Color="#2A2A31"/>
+    <SolidColorBrush x:Key="SelBorder" Color="#1AFFFFFF"/>
+    <SolidColorBrush x:Key="Fg" Color="#EDEDF2"/>
+    <SolidColorBrush x:Key="Muted" Color="#8A8A96"/>
     <!-- Монохром: единственный акцент — белый -->
     <SolidColorBrush x:Key="Accent" Color="#ECECF1"/>
-    <SolidColorBrush x:Key="Blue" Color="#4A4A55"/>
+    <SolidColorBrush x:Key="Blue" Color="#3B5B8F"/>
     <SolidColorBrush x:Key="Green" Color="#ECECF1"/>
     <SolidColorBrush x:Key="Red" Color="#B9B9C3"/>
     <!-- ошибки и удаление — везде один красный -->
     <SolidColorBrush x:Key="Danger" Color="#F87171"/>
     <!-- всплывающие окошки (подсказки, списки, меню) — непрозрачные, в «Закате» лиловые; рамка поля в фокусе -->
-    <SolidColorBrush x:Key="Popup" Color="#141417"/>
-    <SolidColorBrush x:Key="FocusBorder" Color="#3A3A42"/>
+    <SolidColorBrush x:Key="Popup" Color="#1A1A1F"/>
+    <SolidColorBrush x:Key="FocusBorder" Color="#4A4A55"/>
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
     <!-- Цвет текста не задаём здесь: он наследуется от окна/кнопки (иначе ломаются тёмные кнопки и выпадающие списки) -->
@@ -365,7 +365,7 @@
                         </Grid.ColumnDefinitions>
                         <ContentPresenter VerticalAlignment="Center"/>
                         <Border x:Name="track" Grid.Column="1" Width="38" Height="22" CornerRadius="11" Background="{DynamicResource Track}" Margin="12,0,0,0">
-                            <Ellipse x:Name="knob" Width="16" Height="16" Fill="#ECECF1" HorizontalAlignment="Left" Margin="3,0">
+                            <Ellipse x:Name="knob" Width="16" Height="16" Fill="#8A8A96" HorizontalAlignment="Left" Margin="3,0">
                                 <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
                             </Ellipse>
                         </Border>
@@ -373,7 +373,7 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="track" Property="Background" Value="{DynamicResource Accent}"/>
-                            <Setter TargetName="knob" Property="Fill" Value="#000000"/>
+                            <Setter TargetName="knob" Property="Fill" Value="#0B0B0E"/>
                             <!-- ручка переезжает плавно, а не прыгает -->
                             <Trigger.EnterActions>
                                 <BeginStoryboard><Storyboard>

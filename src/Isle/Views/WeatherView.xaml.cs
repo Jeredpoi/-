@@ -177,7 +177,7 @@ namespace Isle.Views
             WeatherFx.Children.Clear();
             var (top, bottom) = Palette(weather.Code, weather.IsDay);
             // в «Закате» — сумеречный лилово-розовый, чтобы карточка не спорила с фиолетовым небом темы
-            if (Isle.Helpers.SunsetTheme.On) { top = Color.FromRgb(0x3A, 0x1F, 0x5C); bottom = Color.FromRgb(0x7A, 0x2E, 0x6E); }
+            if (Isle.Helpers.SunsetTheme.On) { top = Color.FromRgb(0x24, 0x1C, 0x2C); bottom = Color.FromRgb(0x4A, 0x2A, 0x34); }
             HeroBackground.Background = new LinearGradientBrush(top, bottom, 90);
 
             bool snow = IsSnow(weather.Code);

@@ -1752,7 +1752,7 @@ namespace Isle
                 // все {DynamicResource Accent} обновятся сразу; градиентный акцент — переливается слева направо
                 Application.Current.Resources["Accent"] = sunset ? new SolidColorBrush(c) : Helpers.AccentPaint.Brush(s.AccentHex);
                 // в «Закате» полоски эквалайзера переливаются снизу вверх: бирюза → розовый; с градиентным акцентом — его цветами
-                Brush barBrush = sunset ? new LinearGradientBrush(Helpers.SunsetTheme.Pink, Helpers.SunsetTheme.Teal, 90) : Helpers.AccentPaint.Brush(s.AccentHex, 90);
+                Brush barBrush = sunset ? new LinearGradientBrush(Helpers.SunsetTheme.Orange, Helpers.SunsetTheme.Pink, new Point(0, 1), new Point(0, 0)) : Helpers.AccentPaint.Brush(s.AccentHex, 90);
                 foreach (var bar in new[] { Bar0, Bar1, Bar2, Bar3, Bar4, Bar5 }) bar.Background = barBrush;
                 ThemeBack.Visibility = sunset ? Visibility.Visible : Visibility.Collapsed;
                 // «матовое стекло»: в «Закате» карточки полупрозрачные — сквозь них просвечивают размытые пальмы и солнце
@@ -1762,10 +1762,11 @@ namespace Isle
                     res["Card"] = Helpers.SunsetTheme.GlassCard();
                     res["CardBorder"] = Helpers.SunsetTheme.GlassBorder();
                     // чипы, сегменты и выбранное — в цветах заката: лиловое стекло, выбранное — неоново-розовое
-                    res["ChipBg"] = new SolidColorBrush(Color.FromArgb(110, 0x2A, 0x14, 0x40));
-                    res["ChipHover"] = new SolidColorBrush(Color.FromArgb(150, 0x45, 0x1E, 0x5E));
-                    res["SelBg"] = new SolidColorBrush(Color.FromArgb(120, 0xFF, 0x4F, 0xA3));
-                    res["SelBorder"] = new SolidColorBrush(Helpers.SunsetTheme.Pink);
+                    // нейтральное стекло; розовый — только тонировкой выбранного, не заливкой
+                    res["ChipBg"] = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF));
+                    res["ChipHover"] = new SolidColorBrush(Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF));
+                    res["SelBg"] = new SolidColorBrush(Color.FromArgb(0x38, 0xF2, 0x67, 0x9F));
+                    res["SelBorder"] = new SolidColorBrush(Color.FromArgb(0x99, 0xF2, 0x67, 0x9F));
                     // плашки иконок — светлое стекло, «колодцы» и подложка вкладок без карточек — то же стекло, что у карточек
                     res["Plate"] = new SolidColorBrush(Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF));
                     res["Well"] = Helpers.SunsetTheme.GlassCard();
@@ -1773,18 +1774,19 @@ namespace Isle
                     res["PaneBorder"] = Helpers.SunsetTheme.GlassBorder();
                     res["PanePad"] = new Thickness(12);
                     // наведение и дорожки — тоже стеклом, а не серым #18181B
-                    res["CardHover"] = new SolidColorBrush(Color.FromArgb(150, 0x45, 0x1E, 0x5E));
-                    res["Track"] = new SolidColorBrush(Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF));
-                    res["Popup"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x12, 0x33));
-                    res["FocusBorder"] = new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0x4F, 0xA3));
+                    res["CardHover"] = new SolidColorBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF));
+                    res["Track"] = new SolidColorBrush(Color.FromArgb(0x52, 0xFF, 0xFF, 0xFF));
+                    res["Popup"] = new SolidColorBrush(Color.FromRgb(0x1C, 0x16, 0x22));
+                    res["FocusBorder"] = new SolidColorBrush(Color.FromArgb(0xB0, 0xF2, 0x67, 0x9F));
                     // подписи светлее: на фото серый #8B8B95 тонет
-                    res["Muted"] = new SolidColorBrush(Color.FromRgb(0xC4, 0xB8, 0xD8));
-                    TabIndicator.Background = new LinearGradientBrush(Color.FromArgb(170, 0xFF, 0x4F, 0xA3), Color.FromArgb(170, 0x9B, 0x3C, 0xFF), 0);
+                    res["Muted"] = new SolidColorBrush(Color.FromRgb(0xCF, 0xC7, 0xDA));
+                    // градиент заката (розовый → оранжевый) вместо холодного фиолетового
+                    TabIndicator.Background = new LinearGradientBrush(Color.FromArgb(0xE0, 0xFF, 0x6F, 0xA8), Color.FromArgb(0xE0, 0xFF, 0x8A, 0x5B), 0);
                 }
                 else
                 {
                     foreach (var k in new[] { "Card", "CardBorder", "ChipBg", "ChipHover", "SelBg", "SelBorder", "Plate", "Well", "Pane", "PaneBorder", "PanePad", "Muted", "CardHover", "Track", "Popup", "FocusBorder" }) res.Remove(k);
-                    TabIndicator.Background = new SolidColorBrush(Color.FromRgb(0x24, 0x24, 0x2B));
+                    TabIndicator.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x31));
                 }
                 ThemeBack.Background = sunset ? new ImageBrush(Helpers.SunsetTheme.Background(ExpandedSize.Width, ExpandedSize.Height)) { Stretch = Stretch.UniformToFill } : null;
             }
