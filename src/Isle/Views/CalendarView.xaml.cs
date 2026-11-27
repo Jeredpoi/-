@@ -426,7 +426,9 @@ namespace Isle.Views
         {
             var date = _formDate;
             bool all = FAllDay.IsChecked == true;
-            DateTime start = date.Date, end = date.Date.AddDays(1);
+            // многодневное «весь день» (отпуск на 5 дней) при правке сохраняет свою длину — раньше становилось однодневным
+            int days = _editing is { AllDay: true } old && old.End > old.Start ? Math.Max(1, (int)Math.Round((old.End - old.Start).TotalDays)) : 1;
+            DateTime start = date.Date, end = date.Date.AddDays(days);
             if (!all)
             {
                 if (!TryTime(FFrom.Text, out var a)) { ShowError("Время начала — в виде 18:00"); return; }
@@ -440,7 +442,8 @@ namespace Isle.Views
             ev.Location = string.IsNullOrWhiteSpace(FPlace.Text) ? null : FPlace.Text.Trim();
             ev.Start = start; ev.End = end; ev.AllDay = all;
             ev.Reminder = all && _remind is < 1440 ? null : _remind;
-            ev.Rule = _repeat == null ? null : new CalRule { Freq = _repeat, Interval = 1 };
+            // повтор не меняли — прежнее правило целиком (дни недели, «до», число раз, интервал); раньше всё это стиралось
+            ev.Rule = _repeat == null ? null : ev.Rule?.Freq == _repeat ? ev.Rule : new CalRule { Freq = _repeat, Interval = 1 };
             // цвет — сам: у нового — которого в этот день ещё нет; у изменённого — прежний, если дата не сменилась
             ev.Color = _editing != null && _editing.Start.Date == start.Date ? _color : CalendarService.PickColor(start.Date, ev);
             CalendarService.Save(ev);

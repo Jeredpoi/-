@@ -221,6 +221,7 @@ namespace Isle
 
         private static RecordFrame _recFrame;
         private static bool _frameHooked;
+        private static bool _picking;
 
         /// <summary>
         /// Запись экрана: выделить область → запись в MP4, повторное нажатие — стоп.
@@ -230,8 +231,10 @@ namespace Isle
         {
             AppHost.Window.Collapse();
             // своя запись: первое нажатие — пауза, второе — стоп (чтобы не оборвать запись случайно)
+            if (_picking) return; // окно выбора области уже открыто — второе внутри первого оставляло рамку навсегда
             if (RegionRecorder.Current is { } rec)
             {
+                if (rec.Starting) return; // запись ещё запускается
                 if (!rec.Paused && !rec.Saving) { rec.Pause(); return; }
                 await StopOwnRecording();
                 return;
@@ -266,10 +269,16 @@ namespace Isle
 
         private static async Task StartOwnRecording(VideoRegion preset = null)
         {
-            if (RegionRecorder.Current != null) return;
-            await Task.Delay(200); // чёлка успевает свернуться — не мешает выделению
-            var picker = preset != null ? new RecordPicker(preset.X, preset.Y, preset.W, preset.H) : new RecordPicker();
-            picker.ShowDialog();
+            if (RegionRecorder.Current != null || _picking) return;
+            RecordPicker picker;
+            _picking = true;
+            try
+            {
+                await Task.Delay(200); // чёлка успевает свернуться — не мешает выделению
+                picker = preset != null ? new RecordPicker(preset.X, preset.Y, preset.W, preset.H) : new RecordPicker();
+                picker.ShowDialog();
+            }
+            finally { _picking = false; }
             if (picker.Result is not { } r) return;
             _recFrame = new RecordFrame(r.x, r.y, r.w, r.h);
             _recFrame.Show();
@@ -281,7 +290,7 @@ namespace Isle
             try
             {
                 await RegionRecorder.StartAsync(r.x, r.y, r.w, r.h, r.sys, r.mic);
-                ToastBus.Show(new Toast { Title = "Запись идёт", Subtitle = "Остановить — клик по REC в чёлке или " + (AppSettings.Current.HotkeyRecord ?? "Ctrl+Alt+R"),
+                ToastBus.Show(new Toast { Title = "Запись идёт", Subtitle = "Пауза и стоп — кнопка в чёлке или " + (AppSettings.Current.HotkeyRecord ?? "Ctrl+Alt+R"),
                     Icon = Icons.Record, Accent = Color.FromRgb(0xF8, 0x71, 0x71), Important = true, Duration = TimeSpan.FromSeconds(2.5) });
             }
             catch (Exception ex)

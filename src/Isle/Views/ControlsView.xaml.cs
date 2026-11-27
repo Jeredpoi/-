@@ -173,7 +173,8 @@ namespace Isle.Views
                 var (nets, error) = await SystemControls.WifiNetworksAsync();
                 var current = SystemControls.Network().status;
                 // подключённая — первой
-                nets.Sort((a, b) => a.Ssid == current ? -1 : b.Ssid == current ? 1 : b.Signal.CompareTo(a.Signal));
+                // согласованное сравнение: прежнее (x, x) → −1 при 17+ сетях роняло Sort, и список застревал на «ищу сети…»
+                nets = nets.OrderByDescending(n => n.Ssid == current).ThenByDescending(n => n.Signal).ToList();
                 WifiList.Children.Clear();
                 WifiHint.Text = error == null ? (nets.Count == 0 ? "сетей рядом не видно" : nets.Count + " " + Plural(nets.Count, "сеть", "сети", "сетей")) : "";
                 if (error != null)

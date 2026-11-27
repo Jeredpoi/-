@@ -1011,12 +1011,14 @@ namespace Isle
             var m = AppHost.Media?.Current;
             bool timerRunning = AppHost.Timer != null && AppHost.Timer.Running;
             bool timerPaused = AppHost.Timer != null && AppHost.Timer.Paused;
-            bool media = AppSettings.Current.MediaEnabled && m != null && m.HasSession && m.IsPlaying && !string.IsNullOrEmpty(m.Title);
+            // своя запись важнее музыки, таймера и загрузки: её кнопки (пауза/стоп, звук, микрофон) должны оставаться в чёлке
+            bool ownRec = RegionRecorder.Current != null;
+            bool media = !ownRec && AppSettings.Current.MediaEnabled && m != null && m.HasSession && m.IsPlaying && !string.IsNullOrEmpty(m.Title);
             // музыка важнее: таймер тогда показывается маленьким рядом с треком
-            bool timer = !media && (timerRunning || timerPaused);
+            bool timer = !ownRec && !media && (timerRunning || timerPaused);
             MediaTimer.Visibility = media && (timerRunning || timerPaused) ? Visibility.Visible : Visibility.Collapsed;
             // загрузка: своя пилюля, а под музыку — маленькая метка «↓ 45%» рядом с треком
-            bool dl = _download != null && !media && !timer;
+            bool dl = !ownRec && _download != null && !media && !timer;
             MediaDownload.Visibility = _download != null && media ? Visibility.Visible : Visibility.Collapsed;
 
             TimerRow.Visibility = timer ? Visibility.Visible : Visibility.Collapsed;
@@ -1654,9 +1656,11 @@ namespace Isle
         /// </summary>
         private FrameworkElement RecHit(Point p)
         {
-            if (RecChip.Visibility != Visibility.Visible || RecStop.Visibility != Visibility.Visible) return null;
+            // IsVisible, а не Visibility: плашка лежит в строке покоя, и когда играет музыка или висит плашка, её не видно —
+            // раньше невидимые кнопки всё равно ловили клики
+            if (!RecChip.IsVisible || RecStop.Visibility != Visibility.Visible) return null;
             const double pad = 14;
-            if (p.X < -pad || p.X > RecChip.ActualWidth + pad) return null;
+            if (p.X < -pad || p.X > RecChip.ActualWidth + pad || p.Y < -12) return null;
             if (p.Y > RecChip.ActualHeight + 12) return null; // ниже чёлки — не наше
             double Center(FrameworkElement el) => el.TranslatePoint(new Point(el.ActualWidth / 2, 0), RecChip).X;
             double sys = Center(RecSys), mic = Center(RecMic);
@@ -1967,6 +1971,9 @@ namespace Isle
         }
 
         // ===================== Всплывашки =====================
+
+        /// <summary>Чужое уведомление сейчас будет видно в острове (панель не открыта, чёлка не спрятана над полноэкранным).</summary>
+        public bool CanShowNotifications => State != IslandState.Expanded && !_fullscreenHidden;
 
         private void EnqueueToast(Toast t)
         {

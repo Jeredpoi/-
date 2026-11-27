@@ -120,7 +120,9 @@ namespace Isle.Services
                     if (BannersSuppressed && appId != null) SuppressBanner(appId); // следующие от этого приложения — без всплывашки Windows
                     // «только в острове»: убираем уведомление у Windows — плашка справа снизу исчезает (без дубля).
                     // В «Не беспокоить» остров уведомление не покажет — тогда оставляем его Windows, чтобы не потерялось.
-                    if (AppSettings.Current.NotificationsOnlyInIsland && !AppSettings.Current.DoNotDisturb)
+                    // Остров может его не показать (панель открыта, чёлка спрятана над полноэкранным) — тогда тоже оставляем
+                    // в центре уведомлений Windows: раньше такое уведомление терялось совсем
+                    if (AppSettings.Current.NotificationsOnlyInIsland && !AppSettings.Current.DoNotDisturb && AppHost.Window?.CanShowNotifications == true)
                     {
                         try { _listener.RemoveNotification(n.Id); Journal.Debug("notify", "убрано у Windows (только в острове): " + Journal.Short(app, 40)); }
                         catch (Exception ex) { Journal.Debug("notify", "не удалось убрать у Windows: " + ex.Message); }
@@ -211,7 +213,8 @@ namespace Isle.Services
                 if (want)
                 {
                     using var root = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(NotifSettingsKey);
-                    foreach (var id in root?.GetSubKeyNames() ?? Array.Empty<string>()) SuppressBanner(id);
+                    foreach (var id in root?.GetSubKeyNames() ?? Array.Empty<string>()) SuppressBanner(id, save: false);
+                    AppSettings.Current.Save(); // один раз, а не на каждое приложение
                     Journal.Info("notify", "баннеры Windows выключены: уведомления только в острове");
                 }
                 else if (AppSettings.Current.BannersOff.Count > 0)
@@ -234,7 +237,7 @@ namespace Isle.Services
             catch (Exception ex) { Journal.Warn("notify", "баннеры Windows: " + ex.Message); }
         }
 
-        private static void SuppressBanner(string appId)
+        private static void SuppressBanner(string appId, bool save = true)
         {
             var off = AppSettings.Current.BannersOff;
             if (off.ContainsKey(appId) || appId.Contains("Isle", StringComparison.OrdinalIgnoreCase)) return;
@@ -245,7 +248,7 @@ namespace Isle.Services
                 if (was == 0) return; // пользователь сам выключил — не трогаем и не «возвращаем»
                 k.SetValue("ShowBanner", 0, Microsoft.Win32.RegistryValueKind.DWord);
                 off[appId] = was;
-                AppSettings.Current.Save();
+                if (save) AppSettings.Current.Save();
             }
             catch (Exception ex) { Journal.Debug("notify", "баннер не выключить: " + ex.Message); }
         }

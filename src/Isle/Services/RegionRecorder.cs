@@ -49,9 +49,12 @@ namespace Isle.Services
         private TimeSpan _pausedMedia;         // сумма пауз в шкале кадров (вычитается из отметок времени)
         private static TimeSpan QpcNow => TimeSpan.FromTicks((long)(Stopwatch.GetTimestamp() * (TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency)));
 
+        /// <summary>Запись ещё запускается (кодировщик готовится): пауза и стоп в это время игнорируются.</summary>
+        public bool Starting { get; private set; }
+
         public void Pause()
         {
-            if (_stopping || Paused) return;
+            if (_stopping || Paused || Starting) return;
             lock (_lock)
             {
                 Paused = true;
@@ -136,8 +139,10 @@ namespace Isle.Services
             w = Math.Min(w, mw - x); h = Math.Min(h, mh - y);
             var r = new RegionRecorder(mon, x, y, w, h, sysAudio, mic);
             Current = r;
+            r.Starting = true;
             try { await r.StartCoreAsync(); }
             catch { Current = null; r.Cleanup(); throw; }
+            finally { r.Starting = false; }
             Journal.Info("record", "запись области " + r._w + "×" + r._h + " (" + Fps + " к/с)" + (sysAudio ? ", звук ПК" : "") + (mic ? ", микрофон" : ""));
             StateChanged?.Invoke();
         }
@@ -339,7 +344,7 @@ namespace Isle.Services
         public static async Task<string> StopAsync()
         {
             var r = Current;
-            if (r == null || r._stopping) return null;
+            if (r == null || r._stopping || r.Starting) return null;
             r._stopping = true;
             r._final = r.Elapsed; // до Saving: Elapsed на сохранении уже отдаёт _final
             r.Saving = true;
@@ -437,6 +442,7 @@ namespace Isle.Services
 
         private void Cleanup()
         {
+            try { _frames.CompleteAdding(); } catch { } // кодировщик ждёт кадры — без этого его поток висел вечно после ошибки старта
             try { _session?.Dispose(); } catch { }
             try { _pool?.Dispose(); } catch { }
             foreach (var f in _frames) { try { f.s.Dispose(); f.t.Dispose(); } catch { } }

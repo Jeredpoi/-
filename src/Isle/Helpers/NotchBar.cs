@@ -33,6 +33,7 @@ namespace Isle.Helpers
         private static IntPtr _hwnd;
         private static uint _callback;
         private static bool _registered;
+        private static uint _taskbarCreated;
         /// <summary>Полоса сейчас зарезервирована (чёлка не «тянется» к курсору — под ней вкладки браузера).</summary>
         public static bool Active => _registered;
         private static Win32.WinEventProc _fgProc;
@@ -148,6 +149,15 @@ namespace Isle.Helpers
         {
             // Windows просит пересчитать место (сменилось разрешение, панель задач, другая полоса)
             if (_callback != 0 && msg == _callback && w.ToInt32() == (int)ABN_POSCHANGED) Place();
+            // Проводник перезапустился (упал, обновился) — он забыл нашу полосу: регистрируемся заново,
+            // иначе развёрнутые окна заходили под чёлку до перезапуска Isle
+            _taskbarCreated = _taskbarCreated == 0 ? RegisterWindowMessage("TaskbarCreated") : _taskbarCreated;
+            if (msg == _taskbarCreated && _registered)
+            {
+                _registered = false;
+                Journal.Info("notch", "Проводник перезапущен — полоса выреза заново");
+                Register();
+            }
             return IntPtr.Zero;
         }
     }

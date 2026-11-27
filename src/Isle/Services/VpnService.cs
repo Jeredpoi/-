@@ -76,9 +76,17 @@ namespace Isle.Services
                 }
             }
             catch (Exception ex) { return "Не получилось: " + ex.Message; }
-            await Task.Delay(1200);
-            _last = null;
-            await Check();
+            // отключили сами — пропажу адаптера подтверждать 6 с не нужно; ждём текущую проверку (она прервёт ожидание)
+            _confirmFast = true;
+            try
+            {
+                await Task.Delay(1200);
+                for (int i = 0; i < 80 && _checking; i++) await Task.Delay(100);
+                _last = null;
+                await Check();
+                for (int i = 0; i < 80 && _checking; i++) await Task.Delay(100); // повторная проверка могла запуститься параллельно
+            }
+            finally { _confirmFast = false; }
             return Active ? "VPN всё ещё подключён — отключи его в самом клиенте" : "VPN отключён";
         }
 
@@ -139,6 +147,7 @@ namespace Isle.Services
 
         private int _changeVersion;
         private bool _checking;
+        private volatile bool _confirmFast;
 
         private async Task Check()
         {
@@ -153,9 +162,10 @@ namespace Isle.Services
                 if (active == _last) return;
                 // VPN-клиент при переподключении (смена сервера, обновление) на 2–5 с убирает адаптер — раньше это давало
                 // плашки «VPN отключён» и сразу «подключён». Пропажу подтверждаем повторной проверкой через 6 с
-                if (!active && _last == true)
+                if (!active && _last == true && !_confirmFast)
                 {
-                    await Task.Delay(6000);
+                    for (int i = 0; i < 60 && !_confirmFast; i++) await Task.Delay(100);
+                    if (_confirmFast) return; // пользователь сам отключает VPN — проверит DisconnectAsync
                     nic = await Task.Run(Find);
                     active = nic != null;
                     if (active) { Journal.Debug("vpn", "адаптер пропадал на пару секунд — это переподключение, не отключение"); return; }
