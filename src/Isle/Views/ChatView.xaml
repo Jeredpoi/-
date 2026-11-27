@@ -1,4 +1,4 @@
-<UserControl x:Class="Isle.Views.ChatView"
+<UserControl x:Class="Isle.Views.ChatView" AllowDrop="True"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:h="clr-namespace:Isle.Helpers">
@@ -6,26 +6,90 @@
         <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Style="{StaticResource Flat}" Width="40" Height="40" Padding="0" Click="OnNew" ToolTip="Новый разговор">
-                <h:Icon Kind="Plus" Width="15" Height="15"/>
-            </Button>
-            <Button x:Name="HistoryBtn" Grid.Column="1" Style="{StaticResource Flat}" Height="40" Padding="12,0" Margin="8,0,0,0" Click="OnHistory" ToolTip="История разговоров">
-                <StackPanel Orientation="Horizontal">
-                    <h:Icon Kind="History" Width="15" Height="15"/>
-                    <TextBlock Text="История" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                </StackPanel>
-            </Button>
-            <TextBox x:Name="Input" Grid.Column="2" Margin="8,0" Tag="Напиши сообщение" AcceptsReturn="True" TextWrapping="Wrap"
-                     MaxHeight="90" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey"/>
-            <Button x:Name="MicBtn" Grid.Column="3" Style="{StaticResource Flat}" Height="40" Width="40" Padding="0" Margin="0,0,8,0" Click="OnMic" ToolTip="Надиктовать голосом">
-                <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
-            </Button>
-            <Button x:Name="SendBtn" Grid.Column="4" Height="40" Style="{StaticResource Primary}" Width="40" Click="OnSend" ToolTip="Отправить (Enter)">
+            <!-- история разговоров — один кружок: буква текущего разговора (у нового — значок часов); клик — панель над ним -->
+            <Border x:Name="HistoryBadge" Width="40" Height="40" CornerRadius="20" VerticalAlignment="Bottom" Cursor="Hand"
+                    Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1"
+                    MouseLeftButtonUp="OnHistory" ToolTip="Разговоры · Ctrl+N — новый">
+                <Grid>
+                    <TextBlock x:Name="BadgeLetter" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    <h:Icon x:Name="BadgeIcon" Kind="History" Width="15" Height="15" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+            <Popup x:Name="HistoryPopup" PlacementTarget="{Binding ElementName=HistoryBadge}" Placement="Top" VerticalOffset="-8" StaysOpen="False"
+                   AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Width="330" Background="{DynamicResource Popup}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1" CornerRadius="14" Padding="8" Margin="8">
+                    <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5" Color="Black"/></Border.Effect>
+                    <DockPanel>
+                        <TextBox x:Name="HistorySearch" DockPanel.Dock="Top" Tag="Поиск по разговорам" Height="34" VerticalContentAlignment="Center" Padding="10,0" TextChanged="OnHistorySearch"/>
+                        <Button DockPanel.Dock="Top" Style="{StaticResource Ghost}" Margin="0,6,0,4" Padding="8,7" HorizontalContentAlignment="Stretch" Click="OnNew">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="Ctrl+N" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
+                                <h:Icon Kind="Plus" Width="13" Height="13" Foreground="{DynamicResource Accent}"/>
+                                <TextBlock Text="Новый разговор" Margin="10,0,0,0" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                        <Button x:Name="ClearHistoryBtn" DockPanel.Dock="Bottom" Style="{StaticResource Ghost}" Margin="0,4,0,0" Padding="8,6" HorizontalAlignment="Left" Click="OnClearHistory">
+                            <TextBlock Text="Очистить историю" FontSize="12" Foreground="{DynamicResource Muted}"/>
+                        </Button>
+                        <ScrollViewer x:Name="HistoryScroll" VerticalScrollBarVisibility="Auto" MaxHeight="300">
+                            <StackPanel x:Name="HistoryList"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Popup>
+
+            <!-- поле ввода с вложениями: сверху карточки файлов и картинок, ниже «+», текст и микрофон -->
+            <Border x:Name="Composer" Grid.Column="1" Margin="8,0" CornerRadius="14" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="VisionHint" Grid.Row="0" Visibility="Collapsed" Margin="12,8,12,0" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
+                    <WrapPanel x:Name="AttachStrip" Grid.Row="1" Margin="8,8,8,0" Visibility="Collapsed"/>
+                    <Grid Grid.Row="2" MinHeight="38">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="AttachBtn" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="4,0,0,3" VerticalAlignment="Bottom" Click="OnAttach" ToolTip="Прикрепить файл или картинку (или перетащи сюда, Ctrl+V — из буфера)">
+                            <h:Icon Kind="Plus" Width="15" Height="15"/>
+                        </Button>
+                        <TextBox x:Name="Input" Grid.Column="1" Tag="Напиши сообщение" AcceptsReturn="True" TextWrapping="Wrap" Background="Transparent" BorderBrush="Transparent"
+                                 MaxHeight="110" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey" Padding="6,9"/>
+                        <Button x:Name="MicBtn" Grid.Column="2" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="0,0,4,3" VerticalAlignment="Bottom" Click="OnMic" ToolTip="Надиктовать голосом">
+                            <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
+                        </Button>
+                        <!-- запись голоса: ✕ отмена · красная точка · таймер · волна под голос · ✓ готово -->
+                        <Grid x:Name="RecordBar" Grid.ColumnSpan="3" Visibility="Collapsed" Background="{DynamicResource Card}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="OnRecCancel" ToolTip="Отменить запись (Esc)">
+                                <h:Icon Kind="Close" Width="13" Height="13"/>
+                            </Button>
+                            <Ellipse x:Name="RecDotChat" Grid.Column="1" Width="8" Height="8" Fill="{DynamicResource Danger}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="RecTimer" Grid.Column="2" Text="0:00" FontSize="12" Foreground="{DynamicResource Muted}" Margin="8,0,10,0" VerticalAlignment="Center"
+                                       Typography.NumeralAlignment="Tabular"/>
+                            <h:VoiceWave x:Name="ChatWave" Grid.Column="3" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="RecBusy" Grid.Column="3" Text="Распознаю…" FontSize="12" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <Button x:Name="RecDone" Grid.Column="4" Style="{StaticResource Primary}" Width="32" Height="32" Padding="0" Margin="0,0,4,0" Click="OnRecDone" ToolTip="Готово — вставить текст">
+                                <h:Icon Kind="Check" Width="14" Height="14" Foreground="#08080A"/>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+            <Button x:Name="SendBtn" Grid.Column="2" Height="40" Style="{StaticResource Primary}" Width="40" VerticalAlignment="Bottom" Click="OnSend" ToolTip="Отправить (Enter)">
                 <h:Icon Kind="Send" Width="15" Height="15" Foreground="#08080A"/>
             </Button>
         </Grid>
@@ -51,6 +115,16 @@
                             <Border x:Name="bubble" CornerRadius="14" Padding="12,9" MaxWidth="680"
                                     HorizontalAlignment="Left" Background="{DynamicResource Card}">
                                 <StackPanel>
+                                <ItemsControl x:Name="msgImages" ItemsSource="{Binding Thumbs}" Margin="0,0,0,6" Visibility="Collapsed">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="10" ClipToBounds="True" Margin="0,0,6,0" MaxHeight="120" MaxWidth="180">
+                                                <Image Source="{Binding}" Stretch="Uniform"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                                 <TextBox x:Name="msgText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Background="Transparent"
                                          BorderThickness="0" Padding="0" FontSize="13">
                                     <TextBox.Template>
@@ -70,6 +144,9 @@
                             </Border>
                             </DockPanel>
                             <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding HasThumbs}" Value="True">
+                                    <Setter TargetName="msgImages" Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding HasPending}" Value="True">
                                     <Setter TargetName="actionRow" Property="Visibility" Value="Visible"/>
                                     <Setter TargetName="bubble" Property="BorderBrush" Value="#F87171"/>
@@ -85,6 +162,16 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+            <!-- перетаскивание файла на чат: штриховая рамка и подсказка -->
+            <Border x:Name="DropOverlay" Visibility="Collapsed" CornerRadius="14" Background="#14FFFFFF" IsHitTestVisible="False">
+                <Grid>
+                    <Rectangle RadiusX="14" RadiusY="14" Stroke="{DynamicResource Accent}" StrokeThickness="2" StrokeDashArray="6 4"/>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <h:Icon Kind="Download" Width="28" Height="28" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Отпусти, чтобы прикрепить" FontSize="13" FontWeight="SemiBold" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
         </Border>
     </DockPanel>
