@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using System.ComponentModel;
 using System.Windows.Threading;
 using System.Windows;
@@ -15,9 +16,10 @@ using Isle.Services;
 namespace Isle.Views
 {
     /// <summary>
-    /// Знакомство при самом первом запуске (и снова — из меню чёлки). Десять шагов и финал:
-    /// «Знакомство» — привет, открыть чёлку по-настоящему, буфер, снимки, музыка, таймер и календарь,
-    /// телефон и полка, ИИ и голос; «Настройка» — город, акцент и Клоди, разрешения (автозапуск, уведомления,
+    /// Знакомство при самом первом запуске (и снова — из меню чёлки). Одиннадцать шагов и финал:
+    /// «Знакомство» — привет, открыть чёлку по-настоящему, буфер, снимки, музыка (ждём настоящую песню),
+    /// таймер (сценка с курсором), телефон (настоящий QR-код), ИИ и голос (воображаемая переписка), мелочи
+    /// (раскладка, полка, заметки); «Настройка» — город, акцент и Клоди, разрешения (автозапуск, уведомления,
     /// точная скорость Steam). В конце карточка сжимается в чёрную пилюлю и улетает на место чёлки.
     /// Цвета — из общих ресурсов (Card, ChipBg, SelBg, Accent, Muted, Fg), главная кнопка — цветом акцента.
     /// </summary>
@@ -28,14 +30,14 @@ namespace Isle.Views
         private static readonly Brush Amber = Frz(Color.FromRgb(0xFB, 0xBF, 0x24));
         private static SolidColorBrush Frz(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
-        // шаги: 0 привет · 1 открыть чёлку · 2 буфер · 3 снимки · 4 музыка · 5 таймер и календарь · 6 телефон и полка · 7 ИИ и голос
-        //       | 8 под себя · 9 разрешения | 10 финал
-        private const int StepHello = 0, StepOpen = 1, StepClip = 2, StepShot = 3, StepMusic = 4, StepTime = 5, StepFiles = 6, StepAi = 7,
-                          StepSetup = 8, StepPerms = 9, StepDone = 10;
-        private const int Steps = 11;
+        // шаги: 0 привет · 1 открыть чёлку · 2 буфер · 3 снимки · 4 музыка · 5 таймер и календарь · 6 телефон · 7 ИИ и голос · 8 мелочи
+        //       | 9 под себя · 10 разрешения | 11 финал
+        private const int StepHello = 0, StepOpen = 1, StepClip = 2, StepShot = 3, StepMusic = 4, StepTime = 5, StepFiles = 6, StepAi = 7, StepTools = 8,
+                          StepSetup = 9, StepPerms = 10, StepDone = 11;
+        private const int Steps = 12;
 
         /// <summary>Шаги-рассказы без заданий: листаются стрелками и Enter.</summary>
-        private static bool IsInfo(int step) => step is StepHello or StepShot or StepMusic or StepTime or StepFiles or StepAi;
+        private static bool IsInfo(int step) => step is StepHello or StepShot or StepMusic or StepTime or StepFiles or StepAi or StepTools;
 
         private readonly Grid _host = new();
         private readonly List<Border> _dotEls = new();
@@ -200,6 +202,7 @@ namespace Isle.Views
                 StepTime => TimeStep(),
                 StepFiles => FilesStep(),
                 StepAi => AiStep(),
+                StepTools => ToolsStep(),
                 StepSetup => SetupStep(),
                 StepPerms => PermsStep(),
                 _ => Done(),
@@ -276,7 +279,7 @@ namespace Isle.Views
                 }
                 return g;
             }
-            row.Children.Add(Group("Знакомство", StepHello, StepAi, out _grpIntro));
+            row.Children.Add(Group("Знакомство", StepHello, StepTools, out _grpIntro));
             row.Children.Add(Group("Настройка", StepSetup, StepPerms, out _grpSetup));
             return row;
         }
@@ -1062,16 +1065,90 @@ namespace Isle.Views
         private static Brush AccentNow(double angle = 0) => AccentPaint.Brush(AppSettings.Current.AccentHex, angle);
         private static readonly Brush IslandMuted = Frz(Color.FromRgb(0x8B, 0x8B, 0x95));
 
-        // ---------- 5) Музыка ----------
+        // ---------- сценки: общие кирпичики ----------
+
+        /// <summary>Добавить отписку/остановку при уходе с текущего шага (к уже записанным).</summary>
+        private void OnLeave(Action a) => _cleanup += a;
+
+        /// <summary>
+        /// Сценка по кругу: run() раскладывает действия через At (отсчёт от начала круга), через periodMs — снова.
+        /// Всё привязано к шагу: сменили шаг — отложенные действия молча отменяются (After сверяет _token).
+        /// </summary>
+        private void Scene(FrameworkElement owner, int firstMs, int periodMs, Action run)
+        {
+            int token = _token;
+            bool started = false;
+            void Cycle()
+            {
+                if (token != _token || _flying) return;
+                run();
+                After(periodMs, Cycle);
+            }
+            owner.Loaded += (_, __) => { if (started) return; started = true; After(firstMs, Cycle); };
+        }
+
+        /// <summary>Сделать через ms от начала круга сценки (0 — сразу).</summary>
+        private void At(int ms, Action a) { if (ms <= 0) a(); else After(ms, a); }
+
+        /// <summary>Стрелка-курсор для сценок (кончик — в точке 0,0).</summary>
+        private static Path ArrowCursor() => new()
+        {
+            Data = Geometry.Parse("M0,0 L0,17 L4.6,12.6 L7.6,19.4 L10.4,18.2 L7.4,11.6 L13,11.6 Z"),
+            Fill = Brushes.White, Stroke = Brushes.Black, StrokeThickness = 1.2, IsHitTestVisible = false
+        };
+
+        /// <summary>Круг от клика: расходится и тает.</summary>
+        private static void Ripple(Canvas layer, Point at, Brush stroke, double size = 44)
+        {
+            var e = new Ellipse { Width = size, Height = size, Stroke = stroke, StrokeThickness = 2, IsHitTestVisible = false, RenderTransformOrigin = new Point(0.5, 0.5) };
+            Canvas.SetLeft(e, at.X - size / 2); Canvas.SetTop(e, at.Y - size / 2);
+            var st = new ScaleTransform(0.2, 0.2);
+            e.RenderTransform = st;
+            layer.Children.Add(e);
+            var d = TimeSpan.FromMilliseconds(520);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.2, 1.4, d) { EasingFunction = ease });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.2, 1.4, d) { EasingFunction = ease });
+            var fade = new DoubleAnimation(0.9, 0, d);
+            fade.Completed += (_, __) => layer.Children.Remove(e);
+            e.BeginAnimation(OpacityProperty, fade);
+        }
+
+        /// <summary>Короткое «нажатие»: сжаться (или чуть вырасти) и вернуться.</summary>
+        private static void Bump(ScaleTransform st, double to, int ms = 110)
+        {
+            var a = new DoubleAnimation(1, to, TimeSpan.FromMilliseconds(ms)) { AutoReverse = true, EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, a);
+        }
+
+        /// <summary>Появление пузыря/элемента с лёгкой пружинкой.</summary>
+        private static void PopIn(UIElement el, double from = 0.85)
+        {
+            el.Visibility = Visibility.Visible;
+            var st = new ScaleTransform(from, from);
+            el.RenderTransform = st;
+            var ease = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(from, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(from, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+            el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
+        }
+
+        private static void FadeTo(UIElement el, double to, int ms = 220) => el.BeginAnimation(OpacityProperty, new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)));
+
+        // ---------- 5) Музыка: включи песню — чёлка её услышит ----------
 
         private FrameworkElement MusicStep()
         {
-            var sp = Page("Музыка в чёлке", "Spotify, браузер, Яндекс Музыка — в чёлке обложка и полоски в такт, а Клоди танцует.");
+            var sp = Page("Музыка в чёлке", "Включи любую песню — в Spotify, браузере или Яндекс Музыке.");
             var (screen, area) = MiniScreen(420, 136);
             sp.Children.Add(screen);
 
-            // модель плеера: обложка, название, полоски спектра и строка песни
+            // модель плеера: обложка, название, Клоди, полоски спектра и строка песни
             var island = MiniIsland(372, 108, 22);
+            var islandScale = new ScaleTransform();
+            island.RenderTransformOrigin = new Point(0.5, 0);
+            island.RenderTransform = islandScale;
             area.Children.Add(island);
             var body = new StackPanel { Margin = new Thickness(14, 10, 14, 0) };
             island.Child = body;
@@ -1079,16 +1156,21 @@ namespace Isle.Views
             top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             top.ColumnDefinitions.Add(new ColumnDefinition());
             top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            top.Children.Add(new Border
-            {
-                Width = 38, Height = 38, CornerRadius = new CornerRadius(9), Background = AccentNow(45),
-                Child = new Icon { Data = Icons.Wave, Width = 18, Height = 18, Foreground = Brushes.White }
-            });
-            var names = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            names.Children.Add(new TextBlock { Text = "Песенка из чёлки", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
-            names.Children.Add(new TextBlock { Text = "Клоди", FontSize = 10.5, Foreground = IslandMuted });
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var coverIcon = new Icon { Data = Icons.Wave, Width = 18, Height = 18, Foreground = Brushes.White };
+            var cover = new Border { Width = 38, Height = 38, CornerRadius = new CornerRadius(9), Background = AccentNow(45), Child = coverIcon };
+            top.Children.Add(cover);
+            var names = new StackPanel { Margin = new Thickness(10, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+            var titleTb = new TextBlock { Text = "Песенка из чёлки", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextTrimming = TextTrimming.CharacterEllipsis };
+            var artistTb = new TextBlock { Text = "Клоди", FontSize = 10.5, Foreground = IslandMuted, TextTrimming = TextTrimming.CharacterEllipsis };
+            names.Children.Add(titleTb);
+            names.Children.Add(artistTb);
             Grid.SetColumn(names, 1);
             top.Children.Add(names);
+            // Клоди в мини-чёлке: ждёт, а когда заиграет настоящая музыка — танцует
+            var pet = new Character { Width = 34, Height = 25, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Mood = Mood.Idle };
+            Grid.SetColumn(pet, 2);
+            top.Children.Add(pet);
             // полоски спектра «играют» цветом акцента
             var bars = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Height = 22 };
             double[] hs = { 10, 18, 13, 21, 9, 15 };
@@ -1099,31 +1181,104 @@ namespace Isle.Views
                 bar.BeginAnimation(HeightProperty, new DoubleAnimation(3, hs[i], TimeSpan.FromMilliseconds(280 + i * 70)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
                 bars.Children.Add(bar);
             }
-            Grid.SetColumn(bars, 2);
+            Grid.SetColumn(bars, 3);
             top.Children.Add(bars);
             body.Children.Add(top);
 
-            // строка песни: слова загораются по очереди, как в караоке
+            // строка песни: слова загораются по очереди, как в караоке (с настоящей музыкой — слова из названия)
             var line = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
-            var words = "Я живу в чёлке и пою для тебя".Split(' ');
-            var els = new List<TextBlock>();
-            foreach (var w in words)
-            {
-                var tb = new TextBlock { Text = w, FontSize = 17, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Opacity = 0.28, Margin = new Thickness(0, 0, 6, 0) };
-                els.Add(tb);
-                line.Children.Add(tb);
-            }
             body.Children.Add(line);
+            var els = new List<TextBlock>();
+            void SetWords(string text, double size)
+            {
+                line.Children.Clear();
+                els.Clear();
+                foreach (var w in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (els.Count == 6) break;
+                    var tb = new TextBlock { Text = w, FontSize = size, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Opacity = 0.28, Margin = new Thickness(0, 0, 6, 0) };
+                    els.Add(tb);
+                    line.Children.Add(tb);
+                }
+            }
+            SetWords("Я живу в чёлке и пою для тебя", 17);
             int at = -2;
             Loop(sp, TimeSpan.FromMilliseconds(400), () =>
             {
-                if (++at > words.Length + 2) at = -1; // пауза на конце строки — и сначала
+                if (++at > els.Count + 2) at = -1; // пауза на конце строки — и сначала
                 for (int i = 0; i < els.Count; i++)
                 {
                     els[i].Foreground = i == at ? accent : Brushes.White;
                     els[i].BeginAnimation(OpacityProperty, new DoubleAnimation(at < 0 ? 0.28 : i < at ? 0.85 : i == at ? 1 : 0.28, TimeSpan.FromMilliseconds(180)));
                 }
             });
+
+            // под «экраном»: ждём музыку (пульсирующая точка) → галочка и «Слышу: …»
+            var status = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 2) };
+            var holder = new Grid { Width = 20, Height = 20, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+            var wait = new Ellipse { Width = 8, Height = 8, Fill = AccentNow(), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            wait.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.25, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            var badge = DoneBadge(20);
+            holder.Children.Add(wait);
+            holder.Children.Add(badge);
+            status.Children.Add(holder);
+            var statusTb = Txt("Жду, когда заиграет…", 13, "Muted");
+            statusTb.TextWrapping = TextWrapping.NoWrap;
+            statusTb.TextTrimming = TextTrimming.CharacterEllipsis;
+            statusTb.MaxWidth = 420;
+            statusTb.VerticalAlignment = VerticalAlignment.Center;
+            status.Children.Add(statusTb);
+            sp.Children.Add(status);
+
+            // настоящая музыка: MediaService сообщает о каждом изменении (на потоке интерфейса)
+            var media = AppHost.Media;
+            int mine = _token;
+            string shown = null;
+            void Check()
+            {
+                if (mine != _token || media == null) return;
+                var m = media.Current;
+                if (m == null || !m.IsPlaying || string.IsNullOrWhiteSpace(m.Title)) return;
+                string key = m.Title + "|" + m.Artist;
+                // обложка часто приходит вторым сообщением — подхватываем, когда появится
+                if (m.Cover != null && !ReferenceEquals(cover.Tag, m.Cover))
+                {
+                    cover.Tag = m.Cover;
+                    cover.Background = new ImageBrush(m.Cover) { Stretch = Stretch.UniformToFill };
+                    coverIcon.Visibility = Visibility.Collapsed;
+                }
+                else if (m.Cover == null && key != shown)
+                {
+                    cover.Tag = null;
+                    cover.Background = AccentNow(45);
+                    coverIcon.Visibility = Visibility.Visible;
+                }
+                if (key == shown) return;
+                bool first = shown == null;
+                shown = key;
+                titleTb.Text = m.Title;
+                artistTb.Text = string.IsNullOrWhiteSpace(m.Artist) ? m.SourceApp : m.Artist;
+                statusTb.Text = "Слышу: " + m.Title;
+                SetWords(m.Title, 15);
+                at = -1;
+                if (!first) return;
+                Journal.Info("welcome", "музыка: услышали трек, плеер " + m.SourceApp); // название в журнал не пишем
+                statusTb.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+                wait.BeginAnimation(OpacityProperty, null);
+                wait.Visibility = Visibility.Collapsed;
+                Pop(badge);
+                // радость: Клоди пускается в пляс, мини-чёлка «подпрыгивает»
+                pet.Mood = Mood.Music;
+                pet.Cheer();
+                Bump(islandScale, 1.05, 170);
+            }
+            if (media != null)
+            {
+                Action onMedia = Check;
+                media.Changed += onMedia;
+                OnLeave(() => media.Changed -= onMedia);
+            }
+            sp.Loaded += (_, __) => Check();
 
             sp.Children.Add(Facts(
                 Fact(Icons.Text, "Текст песни", "Кликни по треку — слова поедут в такт, как в караоке"),
@@ -1132,200 +1287,305 @@ namespace Isle.Views
             return sp;
         }
 
-        // ---------- 6) Таймер, будильник, календарь ----------
+        // ---------- 6) Таймер: отсчёт → звонок → курсор кликает по чёлке → «Готово» ----------
 
         private FrameworkElement TimeStep()
         {
             var sp = Page("Таймер и календарь", "Чёлка следит за временем, пока ты занят.");
-            var (screen, area) = MiniScreen(420, 96);
+            var (screen, area) = MiniScreen(420, 112);
             sp.Children.Add(screen);
             var bg = new SolidColorBrush(Colors.Black);
             var island = MiniIsland(200, 34, 17);
             island.Background = bg;
+            var islandScale = new ScaleTransform();
+            island.RenderTransformOrigin = new Point(0.5, 0);
+            island.RenderTransform = islandScale;
             area.Children.Add(island);
             var layers = new Grid();
             island.Child = layers;
-            var red = Frz(Color.FromRgb(0xF8, 0x71, 0x71));
 
             // а) идёт таймер: красные часики и обратный отсчёт
-            var timer = new Grid { Margin = new Thickness(14, 0, 14, 0) };
+            var timer = new Grid { Margin = new Thickness(14, 0, 14, 0), Opacity = 0 };
             timer.Children.Add(new StackPanel
             {
                 Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center,
-                Children = { new Icon { Data = Icons.Timer, Width = 14, Height = 14, Foreground = red }, new TextBlock { Text = "Таймер", FontSize = 12, Foreground = Brushes.White, Margin = new Thickness(8, 0, 0, 0) } }
+                Children = { new Icon { Data = Icons.Timer, Width = 14, Height = 14, Foreground = Red }, new TextBlock { Text = "Таймер", FontSize = 12, Foreground = Brushes.White, Margin = new Thickness(8, 0, 0, 0) } }
             });
-            var count = new TextBlock { Text = "0:03", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = red, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            var count = new TextBlock { Text = "0:03", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Red, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             timer.Children.Add(count);
 
             // б) время вышло: колокольчик качается, чёлка переливается красным
-            var bell = new Icon { Data = Icons.Bell, Width = 16, Height = 16, Foreground = Brushes.White, RenderTransformOrigin = new Point(0.5, 0.1), RenderTransform = new RotateTransform() };
+            var bellRot = new RotateTransform();
+            var bell = new Icon { Data = Icons.Bell, Width = 16, Height = 16, Foreground = Brushes.White, RenderTransformOrigin = new Point(0.5, 0.1), RenderTransform = bellRot };
             var alarm = new StackPanel
             {
                 Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0,
-                Children = { bell, new TextBlock { Text = "Время вышло! Нажми, чтобы выключить", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Margin = new Thickness(9, 0, 0, 0) } }
+                Children = { bell, new TextBlock { Text = "Время вышло!", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Margin = new Thickness(9, 0, 0, 0) } }
             };
 
-            // в) событие календаря начинается
-            var ev = new Grid { Margin = new Thickness(10, 0, 14, 0), Opacity = 0 };
-            ev.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            ev.ColumnDefinitions.Add(new ColumnDefinition());
-            ev.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            ev.Children.Add(new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(8), Background = AccentNow(45), VerticalAlignment = VerticalAlignment.Center, Child = new Icon { Data = Icons.Calendar, Width = 15, Height = 15, Foreground = Brushes.White } });
-            var evText = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            evText.Children.Add(new TextBlock { Text = "Созвон с командой", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
-            evText.Children.Add(new TextBlock { Text = "Начинается · " + DateTime.Now.ToString("HH:mm"), FontSize = 10.5, Foreground = IslandMuted });
-            Grid.SetColumn(evText, 1);
-            ev.Children.Add(evText);
-            var evBell = new Icon { Data = Icons.Bell, Width = 14, Height = 14, Foreground = IslandMuted, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(evBell, 2);
-            ev.Children.Add(evBell);
-
-            FrameworkElement[] all = { timer, alarm, ev };
+            // в) звонок выключили: зелёная галочка и «Готово»
+            var done = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0,
+                Children = { new Icon { Data = Icons.Check, Width = 14, Height = 14, Foreground = Green, StrokeWidth = 2.4 }, new TextBlock { Text = "Готово", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Margin = new Thickness(8, 0, 0, 0) } }
+            };
+            FrameworkElement[] all = { timer, alarm, done };
             foreach (var l in all) layers.Children.Add(l);
 
-            // сценарий по секундам: 3…2…1 → звенит (2 с) → напоминание календаря (3 с) → сначала
-            int sec = -1;
-            void Tick()
+            // курсор и круги от клика — поверх «экрана»
+            var overlay = new Canvas { IsHitTestVisible = false };
+            area.Children.Add(overlay);
+            var cursor = ArrowCursor();
+            var cScale = new ScaleTransform();
+            var cPos = new TranslateTransform(372, 118);
+            var cg = new TransformGroup();
+            cg.Children.Add(cScale); cg.Children.Add(cPos);
+            cursor.RenderTransform = cg;
+            cursor.Opacity = 0;
+            overlay.Children.Add(cursor);
+            var click = new Point(214, 22); // куда «кликают»: середина звенящей чёлки
+
+            void Calm()
             {
-                sec = (sec + 1) % 8;
-                if (sec <= 2)
-                {
-                    if (sec == 0)
-                    {
-                        Resize(island, 200, 34);
-                        ShowLayer(all, 0);
-                        bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(250)));
-                    }
-                    count.Text = "0:0" + (3 - sec);
-                }
-                else if (sec == 3)
+                bellRot.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(160)));
+                bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(260)));
+            }
+            // бесконечные анимации не должны жить после ухода с шага
+            OnLeave(() => { bellRot.BeginAnimation(RotateTransform.AngleProperty, null); bg.BeginAnimation(SolidColorBrush.ColorProperty, null); });
+
+            // сценарий круга (~9,4 с): 3…2…1 → звенит → курсор едет к чёлке → клик → «Готово» → пауза
+            Scene(sp, 300, 9400, () =>
+            {
+                Calm();
+                Resize(island, 200, 34);
+                ShowLayer(all, 0);
+                for (int i = 0; i < 3; i++) { string left = "0:0" + (3 - i); At(i * 1000, () => count.Text = left); }
+                At(3000, () =>
                 {
                     count.Text = "0:00";
-                    Resize(island, 330, 40);
+                    Resize(island, 250, 40);
                     ShowLayer(all, 1);
                     bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0x9B, 0x1C, 0x1C), Color.FromRgb(0x3A, 0x3A, 0x42), TimeSpan.FromMilliseconds(420)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
-                    ((RotateTransform)bell.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(-22, 22, TimeSpan.FromMilliseconds(140)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
-                }
-                else if (sec == 5)
+                    bellRot.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(-22, 22, TimeSpan.FromMilliseconds(140)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+                    Bump(islandScale, 1.04, 140);
+                });
+                // курсор выплывает снизу справа и по дуге едет к чёлке (по X и Y — разные плавности, отсюда дуга)
+                At(3700, () =>
                 {
-                    ((RotateTransform)bell.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, null);
-                    bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(250)));
-                    Resize(island, 300, 46);
+                    var d = TimeSpan.FromMilliseconds(1150);
+                    cursor.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+                    cPos.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(372, click.X, d) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
+                    cPos.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(118, click.Y, d) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+                });
+                // клик: курсор «нажимает», чёлка проседает, от точки расходится круг
+                At(4950, () =>
+                {
+                    Bump(cScale, 0.8, 90);
+                    Bump(islandScale, 0.95, 110);
+                    Ripple(overlay, click, Brushes.White);
+                });
+                // звонок выключен: чёлка успокаивается и говорит «Готово»
+                At(5120, () =>
+                {
+                    Calm();
+                    Resize(island, 170, 34);
                     ShowLayer(all, 2);
-                }
-            }
-            sp.Loaded += (_, __) => Tick();
-            Loop(sp, TimeSpan.FromSeconds(1), Tick);
+                });
+                // курсор отъезжает в сторону и гаснет
+                At(5750, () =>
+                {
+                    var d = TimeSpan.FromMilliseconds(700);
+                    var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+                    cPos.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(click.X + 44, d) { EasingFunction = ease });
+                    cPos.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(click.Y + 50, d) { EasingFunction = ease });
+                    cursor.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(600)));
+                });
+                // «Готово» гаснет — короткая пауза и сначала
+                At(7900, () => { FadeTo(done, 0, 300); Resize(island, 200, 34); });
+            });
 
             sp.Children.Add(Facts(
-                Fact(Icons.Timer, "Таймер и будильник", "Вкладка «Заметка». Время вышло — чёлка мигает и пищит, пока не нажмёшь"),
+                Fact(Icons.Timer, "Таймер и будильник", "Вкладка «Заметка». Время вышло — чёлка мигает и звенит, пока не кликнешь"),
                 Fact(Icons.Calendar, "Календарь", "События по дням, а в момент начала — напоминание со звуком"),
                 Fact(Icons.Note, "Напоминания по-человечески", "«позвонить маме завтра в 9» — Isle сам поймёт, когда")));
             sp.Children.Add(NavRow());
             return sp;
         }
 
-        // ---------- 7) Телефон и полка ----------
+        // ---------- 7) Телефон: настоящий QR-код прямо здесь ----------
 
         private FrameworkElement FilesStep()
         {
-            var sp = Page("Телефон и полка", "Файлы туда-сюда — без проводов и приложений.");
-            var (screen, area) = MiniScreen(420, 140);
-            sp.Children.Add(screen);
-            var stage = new Canvas();
-            area.Children.Add(stage);
+            var sp = Page("Подключи телефон", "Фото, файлы и текст — между телефоном и компьютером, без проводов.");
+            var row = new Grid { Width = 470, Margin = new Thickness(0, 18, 0, 6) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            sp.Children.Add(row);
 
-            // телефон с QR-кодом слева
-            var phone = new Border { Width = 66, Height = 118, CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(2), Background = Brushes.Black, RenderTransformOrigin = new Point(0.5, 0.5) };
-            phone.SetResourceReference(Border.BorderBrushProperty, "Fg");
-            var qr = new System.Windows.Controls.Primitives.UniformGrid { Rows = 7, Columns = 7, Width = 42, Height = 42 };
-            var rnd = new Random(7);
-            for (int y = 0; y < 7; y++)
-                for (int x = 0; x < 7; x++)
-                {
-                    // угловые «глазки» QR — всегда залиты по краю, середина — случайный узор
-                    bool corner = (x < 3 && y < 3) || (x > 3 && y < 3) || (x < 3 && y > 3);
-                    bool hole = x == 1 && y == 1 || x == 5 && y == 1 || x == 1 && y == 5;
-                    bool on = corner ? !hole : rnd.Next(2) == 0;
-                    qr.Children.Add(new Border { Background = on ? Brushes.White : Brushes.Transparent, Margin = new Thickness(0.4) });
-                }
-            phone.Child = qr;
-            Canvas.SetLeft(phone, 70); Canvas.SetTop(phone, 10);
-            stage.Children.Add(phone);
+            // слева — карточка с кодом: светлые клетки на чёрном, как во вкладке «Телефон»; рамка мягко «дышит» акцентом
+            const double CardSide = 176;
+            var edge = AccentNow(45).Clone();
+            edge.Opacity = 0.35;
+            var card = new Border { Width = CardSide, Height = CardSide, CornerRadius = new CornerRadius(18), Background = Brushes.Black, BorderThickness = new Thickness(2), BorderBrush = edge, HorizontalAlignment = HorizontalAlignment.Left };
+            edge.BeginAnimation(Brush.OpacityProperty, new DoubleAnimation(0.25, 0.9, TimeSpan.FromMilliseconds(1400)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+            OnLeave(() => edge.BeginAnimation(Brush.OpacityProperty, null));
+            var cardGrid = new Grid();
+            card.Child = cardGrid;
+            var qrImg = new Image { Stretch = Stretch.Fill, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, SnapsToDevicePixels = true };
+            RenderOptions.SetBitmapScalingMode(qrImg, BitmapScalingMode.NearestNeighbor);
+            cardGrid.Children.Add(qrImg);
+            var none = new Icon { Data = Icons.Phone, Width = 40, Height = 40, Foreground = IslandMuted, Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            cardGrid.Children.Add(none);
+            var okBadge = DoneBadge(56);
+            okBadge.HorizontalAlignment = HorizontalAlignment.Center;
+            okBadge.VerticalAlignment = VerticalAlignment.Center;
+            cardGrid.Children.Add(okBadge);
+            row.Children.Add(card);
 
-            // компьютер с чёлкой справа
-            var monitor = new Border { Width = 150, Height = 92, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2), RenderTransformOrigin = new Point(0.5, 0.5) };
-            monitor.SetResourceReference(Border.BorderBrushProperty, "Fg");
-            monitor.SetResourceReference(Border.BackgroundProperty, "SelBg");
-            monitor.Child = new Border { Width = 50, Height = 11, CornerRadius = new CornerRadius(0, 0, 6, 6), Background = Brushes.Black, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Center };
-            Canvas.SetLeft(monitor, 222); Canvas.SetTop(monitor, 14);
-            stage.Children.Add(monitor);
-            var stand = new Border { Width = 46, Height = 4, CornerRadius = new CornerRadius(2) };
-            stand.SetResourceReference(Border.BackgroundProperty, "Fg");
-            Canvas.SetLeft(stand, 274); Canvas.SetTop(stand, 116);
-            stage.Children.Add(stand);
-
-            // летящая карточка: фото с телефона на компьютер, потом файл обратно
-            var tokenIcon = new Icon { Data = Icons.Image, Width = 14, Height = 14, Foreground = Brushes.White };
-            var token = new Border { Width = 30, Height = 24, CornerRadius = new CornerRadius(7), Background = AccentNow(45), Child = tokenIcon, Opacity = 0, RenderTransform = new TranslateTransform() };
-            Canvas.SetLeft(token, 88); Canvas.SetTop(token, 57);
-            stage.Children.Add(token);
-            bool toPc = true;
-            void Fly()
+            // справа — что делать, статус и «Позже»
+            var right = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+            Grid.SetColumn(right, 1);
+            row.Children.Add(right);
+            var head = Txt("Наведи камеру телефона", 17, "Fg", FontWeights.SemiBold);
+            right.Children.Add(head);
+            var sub = Txt("— откроется страничка, без приложений", 13.5, "Muted");
+            sub.Margin = new Thickness(0, 4, 0, 0);
+            right.Children.Add(sub);
+            var stRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0) };
+            var dot = new Ellipse { Width = 8, Height = 8, Fill = AccentNow(), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            dot.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.25, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            stRow.Children.Add(dot);
+            var stText = Txt("Жду телефон…", 13, "Muted");
+            stText.VerticalAlignment = VerticalAlignment.Center;
+            stRow.Children.Add(stText);
+            right.Children.Add(stRow);
+            if (PhoneLink.Paired)
             {
-                var tt = (TranslateTransform)token.RenderTransform;
-                double from = toPc ? 0 : 194, to = toPc ? 0 + 194 : 0;
-                tokenIcon.Data = toPc ? Icons.Image : Icons.File;
-                var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
-                tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(900)) { EasingFunction = ease });
-                // путь — дуга: вверх и вниз
-                var arc = new DoubleAnimationUsingKeyFrames();
-                arc.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                arc.KeyFrames.Add(new EasingDoubleKeyFrame(-38, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450)), new QuadraticEase { EasingMode = EasingMode.EaseOut }));
-                arc.KeyFrames.Add(new EasingDoubleKeyFrame(-4, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900)), new QuadraticEase { EasingMode = EasingMode.EaseIn }));
-                tt.BeginAnimation(TranslateTransform.YProperty, arc);
-                var fade = new DoubleAnimationUsingKeyFrames();
-                fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150))));
-                fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(760))));
-                fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900))));
-                token.BeginAnimation(OpacityProperty, fade);
-                // получатель чуть «вздрагивает», когда карточка долетела
-                var receiver = toPc ? monitor : phone;
-                After(880, () =>
-                {
-                    var st = new ScaleTransform();
-                    receiver.RenderTransform = st;
-                    var bump = new DoubleAnimation(1, 1.07, TimeSpan.FromMilliseconds(110)) { AutoReverse = true };
-                    st.BeginAnimation(ScaleTransform.ScaleXProperty, bump);
-                    st.BeginAnimation(ScaleTransform.ScaleYProperty, bump);
-                });
-                toPc = !toPc;
+                var was = Txt("Уже привязан: " + PhoneLink.PairedName + ". Можно ещё раз — или дальше.", 12, "Muted");
+                was.Margin = new Thickness(0, 8, 0, 0);
+                right.Children.Add(was);
             }
-            sp.Loaded += (_, __) => After(400, Fly);
-            Loop(sp, TimeSpan.FromMilliseconds(2000), Fly);
+            var later = Txt("Позже", 13, "Muted");
+            later.Cursor = Cursors.Hand;
+            later.TextDecorations = TextDecorations.Underline;
+            later.HorizontalAlignment = HorizontalAlignment.Left;
+            later.Margin = new Thickness(0, 12, 0, 0);
+            later.MouseEnter += (_, __) => later.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+            later.MouseLeave += (_, __) => later.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            later.MouseLeftButtonUp += (_, e) => { e.Handled = true; if (_flying) return; Journal.Info("welcome", "телефон: позже"); Next(); };
+            right.Children.Add(later);
+
+            // сервер для телефона — только пока шаг на экране: как вкладка «Телефон» (KeepAlive, пока видно;
+            // ушли — не выключаем сразу, сервер сам уснёт после 15 минут простоя)
+            bool keepWas = PhoneLink.KeepAlive;
+            PhoneLink.KeepAlive = true;
+            OnLeave(() => PhoneLink.KeepAlive = keepWas);
+            try { PhoneLink.Start(); }
+            catch (Exception ex) { Journal.Warn("welcome", "телефон: сервер не запустился: " + ex.Message); }
+
+            int mine = _token;
+            string url = null;
+            int modules = 0;
+            bool connected = false;
+            // QR ровный: каждая клетка — целое число пикселей экрана (с учётом масштаба Windows)
+            void FitQr()
+            {
+                if (modules <= 0) return;
+                double scale = 1;
+                try { var src = PresentationSource.FromVisual(this); if (src?.CompositionTarget != null) scale = src.CompositionTarget.TransformToDevice.M11; } catch { }
+                double inner = CardSide - 4 - 28; // рамка и тёмные поля вокруг кода — камера уверенно находит границы
+                int k = Math.Max(1, (int)Math.Floor(inner * scale / modules));
+                qrImg.Width = qrImg.Height = modules * k / scale;
+            }
+            void Fallback(string why)
+            {
+                url = null; modules = 0;
+                qrImg.Source = null;
+                none.Visibility = Visibility.Visible;
+                head.Text = "Подключишь позже";
+                sub.Text = "Нужна общая Wi-Fi сеть с телефоном. Вкладка «Телефон» в чёлке — когда будет удобно.";
+                stText.Text = why;
+                dot.Visibility = Visibility.Collapsed;
+            }
+            void RefreshQr()
+            {
+                if (mine != _token || connected) return;
+                var ip = PhoneLink.Addresses().FirstOrDefault().ip;
+                if (ip == null) { Fallback("Не вижу сети"); return; }
+                if (!PhoneLink.Running) { Fallback("Сервер не запустился"); return; }
+                var u = PhoneLink.Url(ip);
+                if (u == url) return;
+                var img = PhoneView.MakeQr(u, out int mods);
+                if (img == null) { Fallback("Код не получился"); return; }
+                url = u; modules = mods;
+                qrImg.Source = img;
+                none.Visibility = Visibility.Collapsed;
+                head.Text = "Наведи камеру телефона";
+                sub.Text = "— откроется страничка, без приложений";
+                stText.Text = "Жду телефон…";
+                dot.Visibility = Visibility.Visible;
+                FitQr();
+            }
+            // телефон открыл страничку — успех и сами дальше через полторы секунды
+            void Connected()
+            {
+                if (mine != _token || connected) return;
+                connected = true;
+                Journal.Info("welcome", "телефон: страничка открыта");
+                edge.BeginAnimation(Brush.OpacityProperty, null);
+                card.BorderBrush = Green;
+                qrImg.BeginAnimation(OpacityProperty, new DoubleAnimation(0.12, TimeSpan.FromMilliseconds(260)));
+                Pop(okBadge);
+                head.Text = "Телефон подключён ✓";
+                head.Foreground = Green;
+                sub.Text = "Страничка открыта — можно отправлять";
+                stRow.Visibility = Visibility.Collapsed;
+                later.Visibility = Visibility.Collapsed;
+                After(1500, () => { if (_step == StepFiles) Next(); });
+            }
+            Action onChanged = () => Dispatcher.BeginInvoke(new Action(RefreshQr));
+            Action onOpened = () => Dispatcher.BeginInvoke(new Action(Connected));
+            PhoneLink.Changed += onChanged;
+            PhoneLink.PageOpened += onOpened;
+            PhoneLink.PairedNow += onOpened;
+            OnLeave(() => { PhoneLink.Changed -= onChanged; PhoneLink.PageOpened -= onOpened; PhoneLink.PairedNow -= onOpened; });
+            RefreshQr();
+            sp.Loaded += (_, __) => FitQr();
 
             sp.Children.Add(Facts(
-                Fact(Icons.Phone, "Телефон без приложений", "Вкладка «Телефон»: наведи камеру на QR — фото, видео, файлы и текст летят в обе стороны"),
-                Fact(Icons.Wifi, "Одна сеть", "Общий Wi-Fi или интернет с телефона. Всё пришедшее остаётся в истории"),
-                Fact(Icons.Tray, "Полка", "Перетащи файл на чёлку — полежит, пока не вытащишь в нужное окно")));
+                Fact(Icons.Phone, "В обе стороны", "Фото, видео, файлы и текст — с телефона на компьютер и обратно"),
+                Fact(Icons.Wifi, "Одна сеть", "Общий Wi-Fi или интернет с телефона. Всё пришедшее — во вкладке «Телефон»")));
             sp.Children.Add(NavRow());
             return sp;
         }
 
-        // ---------- 8) ИИ и голос ----------
+        // ---------- 8) ИИ и голос: воображаемая переписка ----------
 
         private FrameworkElement AiStep()
         {
             var s = AppSettings.Current;
-            var sp = Page("ИИ и голос", "Чат в чёлке открывает программы, ставит таймеры и отвечает на вопросы.");
-            var (screen, area) = MiniScreen(420, 150);
+            var sp = Page("ИИ и голос", "Чат в чёлке: таймеры, программы, вопросы — текстом или голосом.");
+            var (screen, area) = MiniScreen(420, 196);
             sp.Children.Add(screen);
 
-            // модель чата: строка ввода с «+» и микрофоном, над ней — пузыри
-            var dock = new DockPanel { Margin = new Thickness(14, 10, 14, 12), LastChildFill = true };
+            var dock = new DockPanel { Margin = new Thickness(12, 8, 12, 10), LastChildFill = true };
             area.Children.Add(dock);
-            var input = new Border { Height = 36, CornerRadius = new CornerRadius(18), Padding = new Thickness(12, 0, 10, 0) };
+
+            // шапка: Клоди и что он сейчас делает
+            var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 0, 0, 4) };
+            var pet = new Character { Width = 26, Height = 19, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0), Mood = Mood.Idle };
+            header.Children.Add(pet);
+            var who = Txt("Клоди", 12, "Fg", FontWeights.SemiBold);
+            who.VerticalAlignment = VerticalAlignment.Center;
+            header.Children.Add(who);
+            var mood = Txt(" · на связи", 11, "Muted");
+            mood.VerticalAlignment = VerticalAlignment.Center;
+            header.Children.Add(mood);
+            DockPanel.SetDock(header, Dock.Top);
+            dock.Children.Add(header);
+
+            // строка ввода: «+», поле (вложение, текст, курсор, волна голоса), микрофон
+            var input = new Border { Height = 34, CornerRadius = new CornerRadius(17), Padding = new Thickness(12, 0, 10, 0), Margin = new Thickness(0, 6, 0, 0) };
             input.SetResourceReference(Border.BackgroundProperty, "SelBg");
             DockPanel.SetDock(input, Dock.Bottom);
             dock.Children.Add(input);
@@ -1333,16 +1593,31 @@ namespace Isle.Views
             ig.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             ig.ColumnDefinitions.Add(new ColumnDefinition());
             ig.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var plus = Ico(Icons.Plus, 15, "Muted");
-            plus.VerticalAlignment = VerticalAlignment.Center;
+            var plus = new Icon { Data = Icons.Plus, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(0.5, 0.5) };
+            plus.SetResourceReference(Isle.Helpers.Icon.ForegroundProperty, "Muted");
             ig.Children.Add(plus);
             var field = new Grid { Margin = new Thickness(10, 0, 10, 0) };
             Grid.SetColumn(field, 1);
             ig.Children.Add(field);
-            var typed = Txt("", 13);
+            var placeholder = Txt("Спроси что-нибудь…", 12.5, "Muted");
+            placeholder.TextWrapping = TextWrapping.NoWrap;
+            placeholder.VerticalAlignment = VerticalAlignment.Center;
+            placeholder.Opacity = 0.7;
+            field.Children.Add(placeholder);
+            var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            field.Children.Add(line);
+            // вложение-скриншот в строке ввода
+            var chip = ShotThumb(26, 18);
+            chip.Margin = new Thickness(0, 0, 8, 0);
+            chip.Visibility = Visibility.Collapsed;
+            line.Children.Add(chip);
+            var typed = Txt("", 12.5);
             typed.TextWrapping = TextWrapping.NoWrap;
             typed.VerticalAlignment = VerticalAlignment.Center;
-            field.Children.Add(typed);
+            line.Children.Add(typed);
+            var caret = new Border { Width = 1.5, Height = 15, Margin = new Thickness(1, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Opacity = 0 };
+            caret.SetResourceReference(Border.BackgroundProperty, "Fg");
+            line.Children.Add(caret);
             // волна голоса — пока «слушаем»
             var wave = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Opacity = 0 };
             for (int i = 0; i < 22; i++)
@@ -1359,55 +1634,140 @@ namespace Isle.Views
             ig.Children.Add(mic);
             input.Child = ig;
 
-            var chat = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
-            dock.Children.Add(chat);
-            Border Bubble(string text, bool mine)
+            // переписка: новые пузыри снизу, старые уезжают вверх и прячутся за краем — как в настоящем чате
+            var chatBox = new Grid { ClipToBounds = true };
+            dock.Children.Add(chatBox);
+            var chat = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
+            chatBox.Children.Add(chat);
+
+            Border Bubble(FrameworkElement content, bool mineSide)
             {
-                var t = new TextBlock { Text = text, FontSize = 12.5, TextWrapping = TextWrapping.Wrap };
-                var b = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 6, 12, 7), Margin = new Thickness(0, 3, 0, 3), MaxWidth = 300, Child = t, Opacity = 0, HorizontalAlignment = mine ? HorizontalAlignment.Right : HorizontalAlignment.Left, RenderTransformOrigin = new Point(mine ? 1 : 0, 1) };
-                if (mine) { b.Background = AccentNow(45); t.Foreground = _onAccent; }
-                else { b.SetResourceReference(Border.BackgroundProperty, "SelBg"); t.SetResourceReference(TextBlock.ForegroundProperty, "Fg"); }
+                var b = new Border
+                {
+                    CornerRadius = mineSide ? new CornerRadius(14, 14, 4, 14) : new CornerRadius(14, 14, 14, 4), Padding = new Thickness(11, 6, 11, 7), Margin = new Thickness(0, 3, 0, 0), MaxWidth = 290,
+                    Child = content, Opacity = 0, HorizontalAlignment = mineSide ? HorizontalAlignment.Right : HorizontalAlignment.Left, RenderTransformOrigin = new Point(mineSide ? 1 : 0, 1)
+                };
+                if (mineSide) b.Background = AccentNow(45);
+                else b.SetResourceReference(Border.BackgroundProperty, "SelBg");
                 return b;
             }
-            const string ask = "поставь таймер на 10 минут";
-            var q = Bubble(ask, true);
-            var a = Bubble("Готово — таймер на 10:00 ⏱", false);
-            chat.Children.Add(q); chat.Children.Add(a);
-            void Pop2(UIElement el)
+            TextBlock Said(string text, bool mineSide)
             {
-                var st = new ScaleTransform(0.85, 0.85);
-                el.RenderTransform = st;
-                var ease = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut };
-                st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
-                st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
-                el.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)));
+                var t = new TextBlock { Text = text, FontSize = 12.5, TextWrapping = TextWrapping.Wrap };
+                if (mineSide) t.Foreground = _onAccent; else t.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+                return t;
+            }
+            void Say(FrameworkElement content, bool mineSide) { var b = Bubble(content, mineSide); chat.Children.Add(b); PopIn(b); }
+
+            // «думает»: три точки по очереди подпрыгивают, Клоди задумался
+            Border dots = null;
+            void Think()
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 3, 2, 3) };
+                for (int i = 0; i < 3; i++)
+                {
+                    var tt = new TranslateTransform();
+                    var d = new Ellipse { Width = 6, Height = 6, Margin = new Thickness(2, 0, 2, 0), RenderTransform = tt };
+                    d.SetResourceReference(Shape.FillProperty, "Muted");
+                    tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -3.5, TimeSpan.FromMilliseconds(260)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromMilliseconds(i * 130), EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+                    row.Children.Add(d);
+                }
+                dots = Bubble(row, false);
+                chat.Children.Add(dots);
+                PopIn(dots);
+                pet.Mood = Mood.Thinking;
+                mood.Text = " · думает…";
+            }
+            void Answer(string text)
+            {
+                if (dots != null) { chat.Children.Remove(dots); dots = null; }
+                Say(Said(text, false), false);
+                pet.Mood = Mood.Idle;
+                pet.Cheer();
+                mood.Text = " · на связи";
+            }
+            // печать по буквам: курсор мигает, текст растёт
+            int Type(int start, string text, int perMs)
+            {
+                At(start, () => { placeholder.Opacity = 0; caret.Opacity = 1; });
+                for (int i = 0; i < text.Length; i++) { string part = text[..(i + 1)]; At(start + 40 + i * perMs, () => typed.Text = part); }
+                return start + 40 + text.Length * perMs;
+            }
+            void Sent()
+            {
+                typed.Text = "";
+                caret.Opacity = 0;
+                chip.Visibility = Visibility.Collapsed;
+                placeholder.Opacity = 0.7;
             }
 
-            // сценарий по «тикам» 70 мс: печатаем вопрос → он улетает в чат → ответ → голосовой ввод → сначала
-            int n = -6, len = ask.Length;
-            Loop(sp, TimeSpan.FromMilliseconds(70), () =>
+            const string ask1 = "поставь таймер на 10 минут", ask2 = "что тут не так?";
+            Scene(sp, 500, 15200, () =>
             {
-                n++;
-                if (n >= 0 && n < len) typed.Text = ask.Substring(0, n + 1);
-                else if (n == len + 5) { typed.Text = ""; Pop2(q); }
-                else if (n == len + 14) Pop2(a);
-                else if (n == len + 34)
+                // сначала: пустой чат, всё по местам
+                chat.BeginAnimation(OpacityProperty, null); chat.Opacity = 1;
+                chat.Children.Clear(); dots = null;
+                Sent();
+                wave.Opacity = 0; wave.BeginAnimation(OpacityProperty, null);
+                typed.Opacity = 1; typed.BeginAnimation(OpacityProperty, null);
+                mic.SetResourceReference(Isle.Helpers.Icon.ForegroundProperty, "Muted");
+                pet.Mood = Mood.Idle; mood.Text = " · на связи";
+
+                // 1) таймер
+                int t = Type(200, ask1, 52);
+                At(t + 280, () => { Sent(); Say(Said(ask1, true), true); });
+                At(t + 600, Think);
+                At(t + 1800, () => Answer("Готово! Таймер на 10:00 запущен ⏱"));
+
+                // 2) скриншот: «+» мигает, в строке ввода появляется картинка, вопрос — и ответ
+                int t2 = t + 3000;
+                At(t2, () =>
                 {
-                    // голос: волна вместо текста, микрофон цветом акцента
-                    typed.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
-                    wave.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)));
+                    plus.Foreground = AccentNow();
+                    var st = new ScaleTransform(); plus.RenderTransform = st; Bump(st, 1.3, 140);
+                    placeholder.Opacity = 0;
+                    PopIn(chip, 0.4);
+                });
+                At(t2 + 420, () => plus.SetResourceReference(Isle.Helpers.Icon.ForegroundProperty, "Muted"));
+                int t3 = Type(t2 + 500, ask2, 60);
+                At(t3 + 280, () =>
+                {
+                    Sent();
+                    var content = new StackPanel();
+                    content.Children.Add(ShotThumb(92, 54));
+                    var q = Said(ask2, true);
+                    q.Margin = new Thickness(0, 5, 0, 0);
+                    content.Children.Add(q);
+                    Say(content, true);
+                });
+                At(t3 + 600, Think);
+                At(t3 + 1900, () => Answer("Во 2-й строке опечатка: «retrun» → «return»"));
+
+                // 3) голос: волна вместо текста, микрофон цветом акцента
+                int t4 = t3 + 3200;
+                At(t4, () =>
+                {
+                    placeholder.Opacity = 0;
+                    FadeTo(wave, 1, 200);
                     mic.Foreground = AccentNow();
-                }
-                else if (n == len + 62)
+                    mood.Text = " · слушает";
+                });
+                At(t4 + 2300, () =>
                 {
-                    wave.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)));
-                    typed.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150)));
+                    FadeTo(wave, 0, 150);
                     mic.SetResourceReference(Isle.Helpers.Icon.ForegroundProperty, "Muted");
-                    q.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(200)));
-                    a.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(200)));
-                    n = -6;
-                }
+                    placeholder.Opacity = 0.7;
+                    var said = new StackPanel { Orientation = Orientation.Horizontal };
+                    said.Children.Add(new Icon { Data = Icons.Mic, Width = 12, Height = 12, Foreground = _onAccent, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+                    said.Children.Add(Said("открой телеграм", true));
+                    Say(said, true);
+                });
+                At(t4 + 2600, Think);
+                At(t4 + 3500, () => Answer("Открываю Telegram"));
+                // конец круга: переписка тает
+                At(t4 + 5000, () => FadeTo(chat, 0, 350));
             });
+            OnLeave(() => { pet.Mood = Mood.Idle; });
 
             var keys = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
             var k1 = KeyRow(s.HotkeyVoice, "голос в текст — туда, где курсор");
@@ -1415,12 +1775,147 @@ namespace Isle.Views
             Stagger(k1, 0, 250); Stagger(k2, 1, 250);
             keys.Children.Add(k1); keys.Children.Add(k2);
             sp.Children.Add(keys);
-            var note = Txt("В чате «+» или Ctrl+V — картинки и файлы. Нужен ключ ИИ: бесплатный у Groq → Настройки → ИИ.", 12, "Muted");
+            var note = Txt("Нужен ключ ИИ — бесплатный у Groq: Настройки → ИИ.", 12, "Muted");
             note.TextAlignment = TextAlignment.Center;
             note.HorizontalAlignment = HorizontalAlignment.Center;
             note.MaxWidth = 470;
-            note.Margin = new Thickness(0, 10, 0, 0);
+            note.Margin = new Thickness(0, 6, 0, 0);
             sp.Children.Add(note);
+            sp.Children.Add(NavRow());
+            return sp;
+        }
+
+        /// <summary>Мини-«скриншот» кода: тёмная картинка с тремя строками, вторая подчёркнута красным.</summary>
+        private static Border ShotThumb(double w, double h)
+        {
+            var k = h / 54;
+            var lines = new StackPanel { Margin = new Thickness(7 * k, 8 * k, 7 * k, 0) };
+            double[] lens = { 0.55, 0.72, 0.4 };
+            for (int i = 0; i < lens.Length; i++)
+            {
+                var bar = new Border { Height = Math.Max(1.5, 5 * k), Width = (w - 14 * k) * lens[i], CornerRadius = new CornerRadius(2 * k), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6 * k), Background = i == 1 ? Red : IslandMuted, Opacity = i == 1 ? 1 : 0.55 };
+                lines.Children.Add(bar);
+            }
+            return new Border
+            {
+                Width = w, Height = h, CornerRadius = new CornerRadius(Math.Max(3, 7 * k)), BorderThickness = new Thickness(1),
+                BorderBrush = Frz(Color.FromRgb(0x3A, 0x3A, 0x42)), Background = Frz(Color.FromRgb(0x16, 0x16, 0x1B)), Child = lines,
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(0.5, 0.5)
+            };
+        }
+
+        // ---------- 9) Мелочи, которые выручают: «ghbdtn» → «привет» ----------
+
+        private FrameworkElement ToolsStep()
+        {
+            var sp = Page("Мелочи, которые выручают", "Набрал не в той раскладке? Чёлка поправит в один клик.");
+            var (screen, area) = MiniScreen(420, 116);
+            sp.Children.Add(screen);
+            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            area.Children.Add(stack);
+
+            // поле с текстом: буквы — отдельными клетками, чтобы каждая могла «перевернуться»
+            var field = new Border { Width = 340, Height = 40, CornerRadius = new CornerRadius(12), ClipToBounds = true };
+            field.SetResourceReference(Border.BackgroundProperty, "SelBg");
+            var fieldGrid = new Grid();
+            field.Child = fieldGrid;
+            var letters = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 14, 0) };
+            fieldGrid.Children.Add(letters);
+            var caret = new Border { Width = 1.6, Height = 18, Margin = new Thickness(1, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            caret.SetResourceReference(Border.BackgroundProperty, "Fg");
+            caret.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(520)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            // блик пробегает по полю, пока буквы превращаются
+            var shineBrush = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
+            shineBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0));
+            shineBrush.GradientStops.Add(new GradientStop(Color.FromArgb(70, 255, 255, 255), 0.5));
+            shineBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 1));
+            var shinePos = new TranslateTransform(-90, 0);
+            var shine = new Border { Width = 80, HorizontalAlignment = HorizontalAlignment.Left, Background = shineBrush, IsHitTestVisible = false, RenderTransform = shinePos };
+            fieldGrid.Children.Add(shine);
+            stack.Children.Add(field);
+
+            // кнопки — как на вкладке «Текст»
+            var chips = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 0) };
+            var chipEls = new List<(Border b, TextBlock t, ScaleTransform st)>();
+            foreach (var name in new[] { "Раскладка", "ВЕРХНИЙ", "Транслит" })
+            {
+                var t = new TextBlock { Text = name, FontSize = 11.5, FontWeight = FontWeights.SemiBold };
+                t.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+                var st = new ScaleTransform();
+                var b = new Border { CornerRadius = new CornerRadius(11), Padding = new Thickness(11, 4, 11, 5), Margin = new Thickness(4, 0, 4, 0), Child = t, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = st };
+                b.SetResourceReference(Border.BackgroundProperty, "SelBg");
+                chipEls.Add((b, t, st));
+                chips.Children.Add(b);
+            }
+            stack.Children.Add(chips);
+
+            void Chip(int i, bool on)
+            {
+                var (b, t, st) = chipEls[i];
+                if (on) { b.Background = AccentNow(45); t.Foreground = _onAccent; Bump(st, 0.9, 90); }
+                else { b.SetResourceReference(Border.BackgroundProperty, "SelBg"); t.SetResourceReference(TextBlock.ForegroundProperty, "Fg"); }
+            }
+            var cells = new List<TextBlock>();
+            TextBlock Cell(char c)
+            {
+                var t = new TextBlock { Text = c == ' ' ? "" : c.ToString(), FontSize = 15, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(), VerticalAlignment = VerticalAlignment.Center };
+                if (c == ' ') t.Width = 5;
+                t.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+                return t;
+            }
+            // буква «переворачивается» и становится другой — цветом акцента
+            void Flip(int i, char to)
+            {
+                if (i >= cells.Count || to == ' ') return;
+                var t = cells[i];
+                var st = (ScaleTransform)t.RenderTransform;
+                var shrink = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(90)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } };
+                shrink.Completed += (_, __) =>
+                {
+                    t.Text = to.ToString();
+                    t.Foreground = AccentNow();
+                    st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170)) { EasingFunction = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut } });
+                };
+                st.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+            }
+            void Sweep() => shinePos.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-90, 350, TimeSpan.FromMilliseconds(650)) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
+            void Plain() { foreach (var c in cells) c.SetResourceReference(TextBlock.ForegroundProperty, "Fg"); }
+            // одно превращение: кнопка нажимается, блик бежит, буквы меняются слева направо
+            int Magic(int start, int chip, string to)
+            {
+                At(start, () => { Chip(chip, true); Sweep(); });
+                for (int i = 0; i < to.Length; i++) { int k = i; char c = to[i]; At(start + 120 + i * 42, () => Flip(k, c)); }
+                int end = start + 120 + to.Length * 42 + 500;
+                At(end, () => { Chip(chip, false); Plain(); });
+                return end;
+            }
+
+            // слова одной длины: каждая буква превращается на своём месте
+            const string wrong = "ghbdtn rfr ltkf", right = "привет как дела", upper = "ПРИВЕТ КАК ДЕЛА", latin = "PRIVET KAK DELA";
+            Scene(sp, 400, 9200, () =>
+            {
+                letters.BeginAnimation(OpacityProperty, null); letters.Opacity = 1;
+                letters.Children.Clear(); cells.Clear();
+                letters.Children.Add(caret);
+                for (int i = 0; i < 3; i++) Chip(i, false);
+                // печатаем «не в той раскладке»
+                for (int i = 0; i < wrong.Length; i++)
+                {
+                    char c = wrong[i];
+                    At(150 + i * 80, () => { var cell = Cell(c); cells.Add(cell); letters.Children.Insert(letters.Children.Count - 1, cell); });
+                }
+                int t = 150 + wrong.Length * 80 + 450;
+                t = Magic(t, 0, right) + 450;
+                t = Magic(t, 1, upper) + 450;
+                t = Magic(t, 2, latin) + 700;
+                At(t, () => FadeTo(letters, 0, 300));
+            });
+            OnLeave(() => caret.BeginAnimation(OpacityProperty, null));
+
+            sp.Children.Add(Facts(
+                Fact(Icons.Text, "Вкладка «Текст»", "Вставь текст — раскладка, регистр, транслит, JSON в один клик"),
+                Fact(Icons.Tray, "Полка", "Перетащи файл на чёлку — полежит, пока не вытащишь в нужное окно"),
+                Fact(Icons.Note, "Заметка под рукой", "Быстрые записи и списки с галочками — прямо в чёлке")));
             sp.Children.Add(NavRow());
             return sp;
         }

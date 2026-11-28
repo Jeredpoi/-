@@ -447,7 +447,7 @@ namespace Isle.Views
             AppHost.Window.Collapse();
         }
 
-        private static BitmapSource MakeQr(string text, out int modules)
+        internal static BitmapSource MakeQr(string text, out int modules)
         {
             modules = 0;
             try
