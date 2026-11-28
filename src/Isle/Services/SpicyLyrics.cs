@@ -74,7 +74,7 @@ namespace Isle.Services
         /// Он публичный по задумке сервиса: зашит в программу, у каждого пользователя свой лимит по IP.
         /// Пусто — встроенного ключа нет, Spicy работает только со своим ключом пользователя.
         /// </summary>
-        private const string BuiltInKey = "";
+        private const string BuiltInKey = "sl_pk_cfLOB_sPC_eCLc_-E5Y_ftVlz-6OO2K7RZGvDgdOP4M";
 
         /// <summary>Свой ключ пользователя (если вставил), иначе встроенный.</summary>
         private static string Key
