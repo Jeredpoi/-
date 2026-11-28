@@ -35,61 +35,7 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
-        private static void SnapEl(FrameworkElement v, string dir, string name)
-        {
-            v.UpdateLayout();
-            const double k = 2;
-            double W = v.ActualWidth, H = v.ActualHeight;
-            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
-            var dv = new DrawingVisual();
-            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
-            rtb.Render(dv);
-            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
-            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
-        }
-
         public static async Task RunAsync(MainWindow w, string dir)
-        {
-            Directory.CreateDirectory(dir);
-            try
-            {
-                AppSettings.Current.WelcomeShown = true;
-                AppSettings.Current.AutoUpdateCheck = false;
-                await Task.Delay(3500);
-                w.SuppressAutoCollapse = true;
-                AppSettings.Current.WinterSnow = "off";
-                var t0 = DateTime.Today;
-                CalendarService.Save(new CalEvent { Title = "Созвон по проекту", Start = t0.AddHours(11), End = t0.AddHours(12), Reminder = 10 });
-                CalendarService.Save(new CalEvent { Title = "Кино с друзьями", Location = "ТЦ", Start = t0.AddHours(18), End = t0.AddHours(19), Reminder = 10 });
-                CalendarService.Save(new CalEvent { Title = "Стоматолог", Start = t0.AddDays(2).AddHours(16), End = t0.AddDays(2).AddHours(17), Reminder = 60 });
-                foreach (var theme in new[] { "dark", "sunset" })
-                {
-                    AppSettings.Current.Theme = theme; AppSettings.Current.AccentHex = "#ECECF1"; AppSettings.Current.Save(); w.ApplyAppearance();
-                    await Task.Delay(600);
-                    var sw = new Isle.Views.SettingsWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -4000, Top = -4000, ShowActivated = false };
-                    sw.Show(); await Task.Delay(1200);
-                    foreach (var nav in new[] { "NavGeneral", "NavLook", "NavCharacter", "NavNotch", "NavMusic", "NavModules", "NavClipboard", "NavRecord", "NavAi", "NavVoice", "NavKeys", "NavUpdates" })
-                    {
-                        try
-                        {
-                            if (sw.FindName(nav) is RadioButton rb) { rb.IsChecked = true; }
-                            await Task.Delay(900);
-                            SnapEl((FrameworkElement)sw.Content, dir, theme + "-set-" + nav.Substring(3).ToLowerInvariant());
-                        }
-                        catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), nav + ": " + ex + "\n"); }
-                    }
-                    sw.Close();
-                    await Task.Delay(500);
-                }
-                AppSettings.Current.Theme = "dark"; AppSettings.Current.Save();
-            }
-            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
-            Application.Current.Shutdown();
-        }
-
-        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
-
-        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));

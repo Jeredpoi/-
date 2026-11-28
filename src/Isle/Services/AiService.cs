@@ -581,7 +581,8 @@ namespace Isle.Services
             foreach (var a in m.Attachments)
             {
                 var name = Path.GetFileName(a);
-                if (IsImage(a)) { if (!images) sb.Append("\n[картинка: " + name + "]"); continue; }
+                // картинка не уходит (модель не видит, или файла уже нет) — хотя бы пометка, чтобы текст не был пустым
+                if (IsImage(a)) { if (!images || !File.Exists(a)) sb.Append("\n[картинка: " + name + "]"); continue; }
                 if (IsText(a) && File.Exists(a))
                 {
                     string body;
@@ -601,7 +602,7 @@ namespace Isle.Services
         {
             var text = TextWithFiles(m, images);
             var imgs = images && m.IsUser ? ImagesOf(m).ToList() : new List<string>();
-            if (imgs.Count == 0) return text;
+            if (imgs.Count == 0) return string.IsNullOrWhiteSpace(text) ? "…" : text; // пустое сообщение сервисы отклоняют (400)
             var parts = new List<object> { new { type = "text", text = string.IsNullOrWhiteSpace(text) ? "Что на картинке?" : text } };
             foreach (var i in imgs) parts.Add(new { type = "image_url", image_url = new { url = "data:" + Mime(i) + ";base64," + Convert.ToBase64String(File.ReadAllBytes(i)) } });
             return parts;
@@ -611,7 +612,7 @@ namespace Isle.Services
         {
             var text = TextWithFiles(m, images);
             var imgs = images && m.IsUser ? ImagesOf(m).ToList() : new List<string>();
-            if (imgs.Count == 0) return text;
+            if (imgs.Count == 0) return string.IsNullOrWhiteSpace(text) ? "…" : text; // пустое сообщение сервисы отклоняют (400)
             var parts = new List<object>();
             foreach (var i in imgs) parts.Add(new { type = "image", source = new { type = "base64", media_type = Mime(i), data = Convert.ToBase64String(File.ReadAllBytes(i)) } });
             parts.Add(new { type = "text", text = string.IsNullOrWhiteSpace(text) ? "Что на картинке?" : text });

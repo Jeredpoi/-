@@ -346,7 +346,8 @@ namespace Isle
                 Helpers.NotchBar.Update();
                 ApplyTabs();
                 // заранее создаём вкладки в простое — первое открытие без рывка
-                _ = Dispatcher.InvokeAsync(() => { foreach (var t in TabOrder) GetView(t); }, DispatcherPriority.ApplicationIdle);
+                // по одной вкладке на операцию: между ними интерфейс успевает отрисоваться (все разом подвешивали его на ~0,4 с при запуске)
+                foreach (var t in TabOrder) { var tab = t; _ = Dispatcher.InvokeAsync(() => GetView(tab), DispatcherPriority.ApplicationIdle); }
             };
         }
 
