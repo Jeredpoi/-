@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using Isle.Services;
@@ -85,6 +85,19 @@ namespace Isle.Views
         {
             e.Handled = true;
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); } catch { }
+        }
+
+        private void OnHowToggle(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            bool open = HowBody.Visibility != Visibility.Visible;
+            HowBody.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            HowRot.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(open ? 90 : 0, TimeSpan.FromMilliseconds(160)));
+        }
+
+        private void OnCopyDashboard(object sender, RoutedEventArgs e)
+        {
+            try { Clipboard.SetText("https://developer.spotify.com/dashboard"); } catch { }
         }
     }
 }

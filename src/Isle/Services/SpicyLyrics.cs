@@ -34,7 +34,11 @@ namespace Isle.Services
         public sealed class Credit
         {
             public string Provider;
+            /// <summary>source == "spicy_lyrics": синхронизация от сообщества.</summary>
+            public bool Community;
             public Person Uploader, Maker;
+            /// <summary>Авторы песни (SongWriters) — «Written by …» в конце текста; может быть пусто.</summary>
+            public List<string> Writers = new();
         }
 
         public sealed class Result
@@ -65,7 +69,28 @@ namespace Isle.Services
             return c;
         }
 
-        private static string Key => AppSettings.Current.SpicyKey?.Trim();
+        /// <summary>
+        /// Публичный ключ Isle (sl_pk_…, «Client access» с разрешённым «No origin header» — для нативных клиентов).
+        /// Он публичный по задумке сервиса: зашит в программу, у каждого пользователя свой лимит по IP.
+        /// Пусто — встроенного ключа нет, Spicy работает только со своим ключом пользователя.
+        /// </summary>
+        private const string BuiltInKey = "";
+
+        /// <summary>Свой ключ пользователя (если вставил), иначе встроенный.</summary>
+        private static string Key
+        {
+            get
+            {
+                var own = AppSettings.Current.SpicyKey?.Trim();
+                return string.IsNullOrEmpty(own) ? BuiltInKey : own;
+            }
+        }
+
+        private static bool OwnKey => !string.IsNullOrEmpty(AppSettings.Current.SpicyKey?.Trim());
+
+        /// <summary>Остаток лимита из последнего ответа: «осталось 980 из 1000, сброс через 12 мин»; null — ещё не знаем.</summary>
+        public static string LimitText { get; private set; }
+        public static event Action LimitChanged;
 
         /// <summary>Ключ сменили — забываем паузу и ошибку, кэш текста оставляем.</summary>
         public static void KeyChanged()
@@ -183,7 +208,7 @@ namespace Isle.Services
             if (status == 401 || status == 403)
             {
                 // ключ не принят (неверный, отозван, приложение на паузе) — до смены ключа не спрашиваем
-                SetKeyProblem(status == 401 ? "Ключ не принят" + (error != null ? " (" + error + ")" : "") : "Доступ закрыт" + (error != null ? " (" + error + ")" : ""));
+                if (OwnKey) SetKeyProblem(status == 401 ? "Ключ не принят" + (error != null ? " (" + error + ")" : "") : "Доступ закрыт" + (error != null ? " (" + error + ")" : ""));
                 Pause(TimeSpan.FromHours(6), status);
             }
             else Pause(status == 400 ? TimeSpan.FromMinutes(30) : (TimeSpan?)null, status);
@@ -216,6 +241,7 @@ namespace Isle.Services
             req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + Key);
             using var resp = await Http.SendAsync(req, ct);
             int status = (int)resp.StatusCode;
+            ReadLimit(resp);
             if ((status == 429 || status == 503) && resp.Headers.RetryAfter?.Delta is TimeSpan ra && ra > _backoff) _backoff = ra;
             JsonNode body = null;
             string error = null;
@@ -229,6 +255,19 @@ namespace Isle.Services
             return (status, body, error);
         }
 
+        private static void ReadLimit(HttpResponseMessage resp)
+        {
+            static int? H(HttpResponseMessage r, string n) =>
+                r.Headers.TryGetValues(n, out var v) && int.TryParse(v.FirstOrDefault(), out var x) ? x : null;
+            int? lim = H(resp, "RateLimit-Limit"), rem = H(resp, "RateLimit-Remaining"), reset = H(resp, "RateLimit-Reset");
+            if (lim == null || rem == null) return;
+            var t = "Осталось " + rem + " из " + lim + " запросов" + (reset is int r && r > 0 ? ", сброс через " + (r >= 120 ? (r / 60) + " мин" : r + " с") : "") + ".";
+            if (t == LimitText) return;
+            LimitText = t;
+            Journal.Debug("spicy", "лимит: " + rem + "/" + lim);
+            LimitChanged?.Invoke();
+        }
+
         private static Credit ReadCredit(JsonNode body)
         {
             var src = Str(body?["source"]);
@@ -236,6 +275,9 @@ namespace Isle.Services
             {
                 Provider = src switch { "apple_music" => "Apple Music", "spotify" => "Spotify", _ => "Spicy Lyrics" },
             };
+            c.Community = src == "spicy_lyrics";
+            if (body?["SongWriters"] is JsonArray ws)
+                foreach (var w in ws) { var t = Str(w)?.Trim(); if (!string.IsNullOrEmpty(t)) c.Writers.Add(t); }
             if (src == "spicy_lyrics" && body?["UploadAttribution"] is JsonObject at)
             {
                 c.Uploader = ReadPerson(at["Uploader"]);
