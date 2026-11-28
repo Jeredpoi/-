@@ -641,13 +641,13 @@ namespace Isle.Helpers
 
         /// <summary>
         /// Пределы сдвига списка: сверху первая строка не ниже места текущей (Anchor), снизу подпись
-        /// не поднимается выше ~80 % окна (дальше уже затухание края).
+        /// поднимается до ~70 % окна — выше нижнего затухания (оно с 78 %), чтобы подпись читалась целиком.
         /// </summary>
         private double ClampScroll(double y)
         {
             double viewH = _viewport.ActualHeight;
             double max = viewH * Anchor;
-            double min = Math.Min(max, viewH * 0.8 - _contentH);
+            double min = Math.Min(max, viewH * 0.7 - _contentH);
             return Math.Clamp(y, min, max);
         }
 
