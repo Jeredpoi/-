@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
@@ -28,6 +28,14 @@ namespace Isle.Views
         private bool _fillingDevices;
         private bool _settingVolume;
         private static readonly Regex MathRx = new(@"^[\d\s+\-*/().,%]+$", RegexOptions.Compiled);
+
+        /// <summary>Скруглённая обрезка содержимого карточки плеера: отступ 14 минус рамка 1, радиус 16 − 1.</summary>
+        private void OnPlayerCardSize(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is not FrameworkElement g) return;
+            const double inset = 13;
+            g.Clip = new System.Windows.Media.RectangleGeometry(new Rect(-inset, -inset, g.ActualWidth + inset * 2, g.ActualHeight + inset * 2), 15, 15);
+        }
 
         public HomeView()
         {

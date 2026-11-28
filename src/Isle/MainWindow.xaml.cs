@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1467,35 +1467,33 @@ namespace Isle
             if (target == IntPtr.Zero || !Win32.IsWindow(target)) target = fg;
 
             var before = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
-            // 1) просим окно включить следующую раскладку (так делают переключатели вроде Punto)
-            var next = (int)((long)Win32.RequestNextLayout(target) & 0xFFFF);
-            for (int i = 0; i < 10 && (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) == before; i++) await Task.Delay(50);
-            bool changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
-            // 2) окно проигнорировало просьбу (консоли, некоторые игры) — жмём сочетание пользователя, но только если
-            //    это окно и правда активно: сочетание приходит в активное окно
-            // Раньше этот шаг работал только если окно уже было активным. А при клике по кнопке в раскрытой панели
-            // активна сама панель — и раскладка «не переключалась». Теперь сначала делаем окно активным (панель не
-            // закроется: курсор над ней), жмём сочетание пользователя
-            bool activated = false;
-            if (!changed && target != IntPtr.Zero && target != fg && Win32.IsWindow(target))
+            bool changed = false, activated = false, pressed = false;
+            IntPtr nextHkl = IntPtr.Zero;
+            // 1) Сначала — сочетание пользователя (Alt+Shift / Ctrl+Shift / Ё) в нужном окне. Так раскладку меняет сама
+            //    Windows: значок в панели задач, Chrome и все остальные видят смену. Просьба WM_INPUTLANGCHANGEREQUEST
+            //    у Chrome «срабатывала» только для одного потока, а значок и ввод оставались прежними.
+            if (Win32.LayoutHotkeyEnabled() && target != IntPtr.Zero && Win32.IsWindow(target))
             {
-                activated = Win32.SetForegroundWindow(target);
-                await Task.Delay(120);
-                fg = Win32.GetForegroundWindow();
-                fgReal = fg == target;
-            }
-            Journal.Info("layout", "кнопка раскладки: окно «" + WindowClass(target) + "», запрос " + (changed ? "сработал" : "не сработал")
-                + (activated ? ", окно сделано активным" : "") + (fgReal && target == fg ? ", жмём сочетание" : ""));
-            if (!changed && fgReal && target == fg)
-            {
-                await WaitModifiersUp();
-                if (Win32.PressLayoutHotkey())
+                if (target != fg) { activated = Win32.SetForegroundWindow(target); await Task.Delay(120); fg = Win32.GetForegroundWindow(); }
+                if (fg == target)
                 {
-                    await Task.Delay(200);
+                    await WaitModifiersUp();
+                    pressed = Win32.PressLayoutHotkey();
+                    Win32.ReleaseModifiers(); // страховка от «залипших» Alt/Shift
+                    for (int i = 0; pressed && i < 8 && (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) == before; i++) await Task.Delay(50);
                     changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
                 }
-                Win32.ReleaseModifiers(); // страховка от «залипших» Alt/Shift/Win
             }
+            // 2) Сочетание отключено или окно не стало активным — просим окно само (консоли, отключённый Alt+Shift)
+            if (!changed)
+            {
+                nextHkl = Win32.RequestNextLayout(target);
+                for (int i = 0; i < 10 && (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) == before; i++) await Task.Delay(50);
+                changed = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF) != before;
+            }
+            var next = (int)((long)nextHkl & 0xFFFF);
+            Journal.Info("layout", "кнопка раскладки: окно «" + WindowClass(target) + "»" + (activated ? ", сделано активным" : "")
+                + (pressed ? ", нажато сочетание" : ", сочетание не нажато") + (nextHkl != IntPtr.Zero ? ", отправлен запрос" : ""));
             int now = (int)((long)Win32.LayoutOf(Win32.FocusWindowOf(target)) & 0xFFFF);
             int shown = changed ? now : next;
             Journal.Info("layout", "кнопка раскладки: итог — " + (changed ? "переключилась на " + Services.SystemWatchers.LangCode(now) : "окно не подтвердило смену"));
