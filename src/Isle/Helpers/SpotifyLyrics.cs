@@ -130,8 +130,8 @@ namespace Isle.Helpers
         public double Lift = 1.5;
         /// <summary>Яркость ещё не спетого текста текущей строки.</summary>
         public double Dim = 0.35;
-        /// <summary>Ширина размытого края заливки — доля ширины слова.</summary>
-        public double Feather = 0.2;
+        /// <summary>Ширина размытого края заливки — в долях размера шрифта (как --SLR_FadeWidth 0.882em у Spicy Lyrics).</summary>
+        public double FadeEm = 0.88;
         /// <summary>Слог тянется дольше — буквы идут «волной» (каждая подрастает и вспыхивает по очереди).</summary>
         public double HoldLetters = 0.9;
         public double LetterScale = 1.08;
@@ -160,6 +160,8 @@ namespace Isle.Helpers
             public GradientStop A, B;
             public double Ws, We, Y;
             public int Group, InGroup;
+            public double Reach;                 // насколько край заливки уходит за слово, доля ширины края
+            public double Sx, Sw;                // место слога на «ленте» строки (в кадре, без выделений)
         }
 
         private struct Seg { public string Text; public double Ws, We; public bool NewWord; }
@@ -211,6 +213,9 @@ namespace Isle.Helpers
                 }
                 var syl = new Syl { Ws = s.Ws, We = s.We, Lift = new TranslateTransform(), Group = groupIdx, InGroup = inGroup++ };
                 int len = s.Text.Length;
+                bool split = s.We - s.Ws >= _st.HoldLetters && len >= 2 && len <= 16;
+                // как RefreshedSweep.Reach у Spicy: короткие слова — 0,5, обычные — 0,25, протяжные (по буквам) — 0,12–0,25
+                syl.Reach = split ? (len <= 2 ? 0.25 : 0.12) : (len <= 2 ? 0.5 : 0.25);
                 if (s.We - s.Ws >= _st.HoldLetters && len >= 2 && len <= 16)
                 {
                     var sp = new StackPanel { Orientation = Orientation.Horizontal };
@@ -325,23 +330,52 @@ namespace Isle.Helpers
             _flat = false;
             GlowTarget = null; GlowOpacity = 0;
             var pal = _st.Pal;
-            double L = _st.Lift, f = _st.Feather, dim = _st.Dim;
+            double L = _st.Lift, dim = _st.Dim;
+            double F = Math.Max(4, _st.FadeEm * _st.FontSize);
             double pre = active ? Smooth(since / 0.25) : 0;
-            Syl glowSyl = null;
+            double dt = Math.Clamp(now - _lastNow, 0, 0.1);
+            _lastNow = now;
+
+            // Как у Spicy Lyrics: слоги выложены подряд на одну «ленту», и по ней идёт ОДИН мягкий край заливки
+            // фиксированной ширины (~0,9 буквы). Слог проходится за своё время; край тянется лишь чуть за слог
+            // (Reach), поэтому спетое слово горит не целиком — его хвост ждёт следующего слова. Раньше край был
+            // в 20 % ширины слова и каждое слово загоралось само — волна казалась быстрее голоса.
+            double edge = double.NegativeInfinity, x = 0;
+            int lastGroup = -1;
+            Syl sing = null; double singP = 0;
             for (int i = 0; i < _n; i++)
             {
                 var s = _syl[i];
-                double p = active ? (now - s.Ws) / Math.Max(0.01, s.We - s.Ws) : 1;
+                if (lastGroup >= 0 && s.Group != lastGroup) x += Flow.Space;
+                lastGroup = s.Group;
+                double w = Math.Max(1, s.Elem.ActualWidth);
+                s.Sx = x; s.Sw = w;
+                double reach = i == _n - 1 ? 1 : s.Reach;
+                if (!active || now >= s.We) edge = Math.Max(edge, x + w + F * reach);
+                else if (now > s.Ws)
+                {
+                    double p = (now - s.Ws) / Math.Max(0.01, s.We - s.Ws);
+                    edge = Math.Max(edge, x + (w + F * reach) * p);
+                    sing = s; singP = p;
+                }
+                x += w;
+            }
+            if (!active) edge = double.PositiveInfinity;
 
-                // заливка
+            for (int i = 0; i < _n; i++)
+            {
+                var s = _syl[i];
+                double sx = s.Sx, w = s.Sw;
                 if (s.Letters != null)
                 {
+                    double lx = sx;
                     int m = s.Letters.Length;
-                    double edge = p * (1 + f) - f * 0.5;
+                    double p = active ? Math.Clamp((now - s.Ws) / Math.Max(0.01, s.We - s.Ws), 0, 1) : 1;
                     for (int j = 0; j < m; j++)
                     {
-                        double c = (j + 0.5) / m;
-                        double lit = Math.Clamp((edge - c) / f + 0.5, 0, 1);
+                        double lw = s.Letters[j].ActualWidth;
+                        double lit = Math.Clamp((edge - (lx + lw * 0.5)) / F, 0, 1);
+                        lx += lw;
                         var br = lit >= 1 ? pal.Full : pal[dim + (1 - dim) * lit];
                         if (!ReferenceEquals(s.Letters[j].Foreground, br)) s.Letters[j].Foreground = br;
                         // волна: буква подрастает, пока через неё идёт заливка, и возвращается
@@ -351,45 +385,62 @@ namespace Isle.Helpers
                         if (Math.Abs(t.ScaleX - sc) > 0.001) { t.ScaleX = sc; t.ScaleY = sc; }
                     }
                 }
-                else if (p <= 0) SetFg(s.Tb, pal[dim]);
-                else if (p >= 1) SetFg(s.Tb, pal.Full);
                 else
                 {
-                    if (s.Grad == null)
+                    // яркость в точке u: (edge − u)/F, 0…1 — локально в долях ширины слога
+                    double a = (edge - F - sx) / w, b2 = (edge - sx) / w;
+                    if (b2 <= 0) SetFg(s.Tb, pal[dim]);
+                    else if (a >= 1) SetFg(s.Tb, pal.Full);
+                    else
                     {
-                        s.A = new GradientStop(Color.FromArgb(255, pal.Color.R, pal.Color.G, pal.Color.B), 0);
-                        s.B = new GradientStop(Color.FromArgb((byte)Math.Round(dim * 255), pal.Color.R, pal.Color.G, pal.Color.B), 0);
-                        s.Grad = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
-                        s.Grad.GradientStops.Add(s.A); s.Grad.GradientStops.Add(s.B);
+                        if (s.Grad == null)
+                        {
+                            s.A = new GradientStop(Color.FromArgb(255, pal.Color.R, pal.Color.G, pal.Color.B), 0);
+                            s.B = new GradientStop(Color.FromArgb((byte)Math.Round(dim * 255), pal.Color.R, pal.Color.G, pal.Color.B), 0);
+                            s.Grad = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
+                            s.Grad.GradientStops.Add(s.A); s.Grad.GradientStops.Add(s.B);
+                        }
+                        if (Math.Abs(s.A.Offset - a) > 0.0005) s.A.Offset = a;
+                        if (Math.Abs(s.B.Offset - b2) > 0.0005) s.B.Offset = b2;
+                        SetFg(s.Tb, s.Grad);
                     }
-                    // край заливки проходит от −f до 1+f: в начале слово целиком тусклое, в конце — целиком яркое
-                    double e = p * (1 + f);
-                    if (Math.Abs(s.A.Offset - (e - f)) > 0.0005) s.A.Offset = e - f;
-                    if (Math.Abs(s.B.Offset - e) > 0.0005) s.B.Offset = e;
-                    SetFg(s.Tb, s.Grad);
                 }
 
-                // подъём
+                // подъём — мягкий, как YOffset у Spicy: не спетое чуть ниже, поющееся плавно поднимается и оседает
+                double pp = active ? (now - s.Ws) / Math.Max(0.01, s.We - s.Ws) : 1;
                 double y;
-                if (!active) y = now - s.We < 0.45 && now >= s.We ? -L * (1 - Smooth((now - s.We) / 0.45)) : 0;
-                else if (p <= 0) y = L * pre;
-                else if (p < 1) y = L - 2 * L * EaseOut(p);
-                else y = -L * (1 - Smooth((now - s.We) / 0.45));
+                if (!active) y = now - s.We < 0.6 && now >= s.We ? -L * (1 - Smooth((now - s.We) / 0.6)) : 0;
+                else if (pp <= 0) y = L * 0.6 * pre;
+                else if (pp < 1) y = L * 0.6 - 1.6 * L * Smooth(pp / 0.9);
+                else y = -L * (1 - Smooth((now - s.We) / 0.6));
                 if (Math.Abs(y - s.Y) > 0.01) { s.Y = y; s.Lift.Y = y; }
+            }
 
-                // свечение — у поющегося слога; в паузе между слогами — тает на последнем спетом
-                if (active && p > 0 && p < 1) { glowSyl = s; GlowOpacity = 0.35 + 0.5 * Smooth(p); }
-                else if (active && glowSyl == null && p >= 1 && now - s.We < 0.35) { glowSyl = s; GlowOpacity = 0.85 * (1 - (now - s.We) / 0.35); }
-            }
-            if (glowSyl != null)
+            // свечение — как GlowRange у Spicy: за первые 15 % слога разгорается, держится до 60 %, к концу гаснет;
+            // поверх — сглаживание (~0,15 с), чтобы не мигало на коротких слогах
+            double target = 0;
+            if (sing != null)
             {
-                GlowTarget = glowSyl.Elem;
-                double x = Flow.ChildX(glowSyl.Group);
-                if (glowSyl.Elem.Parent is Panel g)
-                    for (int k = 0; k < glowSyl.InGroup && k < g.Children.Count; k++) x += ((FrameworkElement)g.Children[k]).ActualWidth;
-                ActiveRight = x + glowSyl.Elem.ActualWidth;
+                double gp = singP;
+                double g = gp < 0.15 ? Smooth(gp / 0.15) : gp < 0.6 ? 1 : 1 - Smooth((gp - 0.6) / 0.4);
+                target = 0.75 * g;
+                if (!ReferenceEquals(sing, _glowSyl)) _glowSyl = sing;
             }
+            double kg = dt <= 0 ? 1 : 1 - Math.Exp(-dt / 0.15);
+            _glowOp += (target - _glowOp) * kg;
+            if (_glowSyl != null && _glowOp > 0.01)
+            {
+                GlowTarget = _glowSyl.Elem; GlowOpacity = _glowOp;
+                double gx = Flow.ChildX(_glowSyl.Group);
+                if (_glowSyl.Elem.Parent is Panel gpn)
+                    for (int k = 0; k < _glowSyl.InGroup && k < gpn.Children.Count; k++) gx += ((FrameworkElement)gpn.Children[k]).ActualWidth;
+                ActiveRight = gx + _glowSyl.Elem.ActualWidth;
+            }
+            else if (sing == null) _glowSyl = null;
         }
+
+        private double _lastNow, _glowOp;
+        private Syl _glowSyl;
 
         /// <summary>Строка не текущая: всё одним ярким цветом (тусклость — прозрачностью строки), без подъёма и волны.</summary>
         public void Flat()
@@ -691,6 +742,10 @@ namespace Isle.Helpers
                 s._browseY = s.ClampScroll(s._y - manualOffset.Value);
                 s.UpdateEffects();
                 s.Render(pos, snap: true);
+                s.Measure(new Size(width, height));
+                s.Arrange(new Rect(0, 0, width, height));
+                s._browseY = s.ClampScroll(s._y - manualOffset.Value);
+                s.Render(pos, snap: true);
             }
             s.Measure(new Size(width, height));
             s.Arrange(new Rect(0, 0, width, height));
@@ -931,7 +986,9 @@ namespace Isle.Helpers
                 top += it.Elem.ActualHeight + LineGap;
             }
             _glow.Move(glowAt, glowOp);
-            _contentH = top + (_footer != null ? _footer.ActualHeight + FooterGap + FooterBottom : 0);
+            // высота списка: по строкам + подпись; и не меньше, чем намерил сам список (подпись с переносами
+            // в первые кадры считалась одной строкой — и до конца подписи было не долистать)
+            _contentH = Math.Max(top + (_footer != null ? _footer.ActualHeight + FooterGap + FooterBottom : 0), _stack.ActualHeight);
 
             // прокрутка: текущая строка — на верхней трети; пока листают колесом — туда, куда долистали
             double target;
