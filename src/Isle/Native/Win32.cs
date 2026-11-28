@@ -125,6 +125,8 @@ namespace Isle.Native
         /// Возвращает раскладку, которую попросили, или IntPtr.Zero.
         /// </summary>
         [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+        [DllImport("imm32.dll")] private static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
 
         public static IntPtr RequestNextLayout(IntPtr target)
         {
@@ -141,8 +143,14 @@ namespace Isle.Native
                 int cur = (int)((long)LayoutOf(focus) & 0xFFFF);
                 int i = Array.FindIndex(list, h => (int)((long)h & 0xFFFF) == cur);
                 var next = list[(i + 1 + n) % n];
-                PostMessage(focus, 0x0050, new IntPtr(1), next); // WM_INPUTLANGCHANGEREQUEST, INPUTLANGCHANGE_SYSCHARSET
-                if (focus != target) PostMessage(target, 0x0050, new IntPtr(1), next);
+                // WM_INPUTLANGCHANGEREQUEST, INPUTLANGCHANGE_SYSCHARSET. Поле с фокусом, корневое окно и его IME-окно:
+                // Chrome и другие окна с собственным вводом принимают просьбу не через то окно, где фокус.
+                PostMessage(focus, 0x0050, new IntPtr(1), next);
+                var root = GetAncestor(target, 2); // GA_ROOT
+                if (root == IntPtr.Zero) root = target;
+                if (root != focus) PostMessage(root, 0x0050, new IntPtr(1), next);
+                var ime = ImmGetDefaultIMEWnd(root);
+                if (ime != IntPtr.Zero) PostMessage(ime, 0x0050, new IntPtr(1), next);
                 return next;
             }
             catch { return IntPtr.Zero; }
