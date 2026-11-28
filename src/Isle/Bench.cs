@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,69 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
+        private static object Call(object o, string name, params object[] args) =>
+            o.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)?.Invoke(o, args);
+
+        private static object Field(object o, string name) => o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(o);
+        private static void SetField(object o, string name, object v) => o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(o, v);
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                await Task.Delay(3000);
+                var ww = new Isle.Views.WelcomeWindow();
+                ww.Show();
+                await Task.Delay(2500);
+                AppSettings.Current.AccentHex = "#ECECF1";
+                Call(ww, "Go", 9); // «Под себя»
+                await Task.Delay(1500);
+                // кружки цвета: Border 30×30 с курсором «рука»
+                var rings = new System.Collections.Generic.List<Border>();
+                void Walk(DependencyObject d) { for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++) { var c = VisualTreeHelper.GetChild(d, i); if (c is Border bb && bb.Width == 30 && bb.Height == 30 && bb.Cursor == System.Windows.Input.Cursors.Hand) rings.Add(bb); Walk(c); } }
+                Walk((DependencyObject)ww.Content);
+                log.AppendLine("кружков цвета: " + rings.Count + ", шаг " + Field(ww, "_step"));
+                foreach (var idx in new[] { 3, 9 })
+                {
+                    if (idx >= rings.Count) continue;
+                    var q = rings[idx].PointToScreen(new Point(15, 15));
+                    SetCursorPos((int)q.X, (int)q.Y); await Task.Delay(250);
+                    mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); await Task.Delay(70); mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+                    await Task.Delay(700);
+                    log.AppendLine("клик по кружку " + idx + ": акцент " + AppSettings.Current.AccentHex);
+                }
+                SnapEl((FrameworkElement)ww.Content, dir, "setup-after");
+                log.AppendLine("память: " + Environment.WorkingSet / 1048576 + " МБ");
+                ww.Close();
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
