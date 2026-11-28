@@ -93,6 +93,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <h:Character x:Name="BuddyMedia" Width="36" Height="26" VerticalAlignment="Center" Margin="-4,0,6,0" Visibility="Collapsed"/>
                             <Border x:Name="MiniCoverBox" Width="22" Height="22" CornerRadius="6" Background="#1C1C20" ClipToBounds="True" VerticalAlignment="Center">
                                 <Image x:Name="MiniCover" Stretch="UniformToFill"/>
                             </Border>
@@ -125,8 +126,6 @@
                                 <Border x:Name="Bar4" Width="3" Height="9" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
                                 <Border x:Name="Bar5" Width="3" Height="7" CornerRadius="1.5" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Margin="2,0,0,0"/>
                             </StackPanel>
-                            <!-- Клоди танцует справа, рядом с полосками — под музыку -->
-                            <h:Character x:Name="BuddyMedia" Width="36" Height="26" VerticalAlignment="Center" Margin="6,0,-4,0" Visibility="Collapsed"/>
                             </StackPanel>
                         </Grid>
 
