@@ -62,8 +62,8 @@ namespace Isle.Views
             {
                 // OnShown зовётся ещё до того, как вкладка стала видимой, — SyncAppVolume там ничего не делал,
                 // и крутилка ждала секундного тика; синхронизируем сразу, как только видно
-                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += KaraokeFrame; SyncAppVolume(); }
-                else { _tick.Stop(); Helpers.FrameClock.Tick -= KaraokeFrame; }
+                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += LyricsFrame; SyncAppVolume(); }
+                else { _tick.Stop(); Helpers.FrameClock.Tick -= LyricsFrame; }
             };
             foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
             Launcher.ItemsSource = _launch;
@@ -288,6 +288,7 @@ namespace Isle.Views
                 CoverGlow.Source = null;
                 PlayIcon.Kind = "Play";
                 AppVol.Visibility = Visibility.Collapsed;
+                _shownLyricsKey = null; // колонку очистили — при возвращении трека текст надо построить заново
                 SetLyrics(null);
                 return;
             }
@@ -300,7 +301,11 @@ namespace Isle.Views
             PlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
             DurText.Text = Fmt(m.Duration);
             TickPosition();
-            if (_shownLyricsKey != AppHost.Lyrics.Key || AppHost.Lyrics.Loading) OnLyricsChanged();
+            // Раньше здесь сравнивался только ключ трека. Плеер на миг присылал пустое название (смена трека, Spotify),
+            // мы шли в ветку «ничего не играет» и чистили колонку (SetLyrics(null)), а ключ оставался прежним; затем
+            // LyricsState видел тот же трек с уже загруженным текстом и Changed не поднимал — колонка пустовала до
+            // следующего трека, хотя пилюля (она читает Lines каждый кадр) текст показывала. Теперь сверяем и сами строки.
+            OnLyricsChanged();
         }
 
         private async void OnSources(object s, RoutedEventArgs e)
@@ -374,54 +379,47 @@ namespace Isle.Views
             TitleStack.VerticalAlignment = VerticalAlignment.Center;
         }
 
-        /// <summary>Текст берётся из общего состояния (его же показывает пилюля «С текстом»).</summary>
+        /// <summary>
+        /// Текст берётся из общего состояния (его же показывает пилюля «С текстом»). Сравниваем с тем, что реально
+        /// построено в колонке (_lyrics), а не только с ключом трека: иначе после «пустого» обновления плеера
+        /// колонка оставалась пустой до следующего трека (см. Refresh).
+        /// </summary>
         private void OnLyricsChanged()
         {
             var st = AppHost.Lyrics;
+            if (st == null) return;
             if (st.Loading)
             {
-                _lyrics = null; _lines.Clear(); LyricsStack.Children.Clear();
+                if (_shownLyricsKey == null && _lyrics == null && LyrStatus.Visibility == Visibility.Visible && LyrStatus.Text == "Ищу текст песни…") return;
+                _lyrics = null; LyricsList.SetLines(null);
                 LyrStatus.Text = "Ищу текст песни…";
                 LyrStatus.Visibility = Visibility.Visible;
+                LyrSource.Visibility = Visibility.Collapsed;
                 _shownLyricsKey = null;
                 return;
             }
-            if (_shownLyricsKey == st.Key && _lyrics == st.Lines) return;
+            if (_shownLyricsKey == st.Key && ReferenceEquals(_lyrics, st.Lines) && (_lyrics != null || LyrStatus.Visibility == Visibility.Visible)) return;
             _shownLyricsKey = st.Key;
             SetLyrics(st.Lines);
         }
 
-        private int _curLine = -2;
-        private readonly List<TextBlock> _lines = new();
-
         private void SetLyrics(List<LyricLine> lyr)
         {
             _lyrics = lyr;
-            _curLine = -2;
-            _lines.Clear();
-            LyricsStack.Children.Clear();
-            LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
-            LyricsShift.Y = 0;
-            ShowLyricsSource(lyr != null && lyr.Count > 0 && AppHost.Lyrics?.Source == LyricsState.SourceSpicy);
-            if (lyr == null || lyr.Count == 0)
+            bool has = lyr != null && lyr.Count > 0;
+            LyricsList.SetLines(has ? lyr : null);
+            ShowLyricsSource(has && AppHost.Lyrics?.Source == LyricsState.SourceSpicy);
+            LyrSource.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+            if (!has)
             {
                 LyrStatus.Text = AppHost.Media.Current.HasSession && !string.IsNullOrEmpty(AppHost.Media.Current.Title) ? "Текст песни не найден" : "";
                 LyrStatus.Visibility = Visibility.Visible;
                 return;
             }
             LyrStatus.Visibility = Visibility.Collapsed;
-            foreach (var l in lyr)
-            {
-                var tb = new TextBlock
-                {
-                    Text = l.Text.Length == 0 ? "♪" : l.Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, FontWeight = FontWeights.SemiBold,
-                    // Keep a small right inset so glyph overhangs never touch the clipped viewport edge.
-                    Foreground = (System.Windows.Media.Brush)FindResource("Fg"), Opacity = 0.3, Margin = new Thickness(0, 0, 8, 10),
-                    RenderTransformOrigin = new Point(0, 0.5), RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
-                };
-                _lines.Add(tb);
-                LyricsStack.Children.Add(tb);
-            }
+            // сразу ставим текущую строку на место, без «въезда» всего списка
+            var m = AppHost.Media.Current;
+            if (m.HasSession) LyricsList.Render(m.LivePosition, snap: true);
         }
 
         private bool _spicyCredit;
@@ -443,37 +441,6 @@ namespace Isle.Views
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SpicyLyrics.RepoUrl) { UseShellExecute = true }); } catch { }
         }
 
-        /// <summary>Плавно прокручивает текст так, чтобы текущая строка стояла на трети высоты; она ярче и крупнее.</summary>
-        private void ShowLine(int i)
-        {
-            if (i == _curLine || _lines.Count == 0) return;
-            // караоке: у прошлой строки снова обычный текст, у новой — слова, которые загораются по очереди
-            if (_curLine >= 0 && _curLine < _lines.Count) { var old = _lines[_curLine]; var t = _lyrics[_curLine].Text; old.Inlines.Clear(); old.Text = t.Length == 0 ? "♪" : t; }
-            if (i >= 0 && i < _lines.Count && _lyrics[i].Text.Length > 0) Helpers.KaraokeText.Set(_lines[i], _lyrics[i], Helpers.KaraokeText.NextAt(_lyrics, i), KaraokeOff);
-            _curLine = i;
-            if (_lines[0].ActualHeight <= 0) LyricsStack.UpdateLayout();
-            var dur = TimeSpan.FromMilliseconds(420);
-            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
-            for (int k = 0; k < _lines.Count; k++)
-            {
-                int d = Math.Abs(k - i);
-                double op = k == i ? 1 : d == 1 ? 0.45 : d == 2 ? 0.25 : 0.12;
-                double sc = k == i ? 1.12 : 1;
-                _lines[k].BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(op, dur) { EasingFunction = ease });
-                var st = (System.Windows.Media.ScaleTransform)_lines[k].RenderTransform;
-                // Scale vertically only: horizontal scaling pushed the final glyph beyond LyricsViewport's clip.
-                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
-                st.ScaleX = 1;
-                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, dur) { EasingFunction = ease });
-            }
-            double y = 0;
-            for (int k = 0; k < Math.Max(0, i); k++) y += _lines[k].ActualHeight + 10;
-            double target = -(y - LyricsViewport.ActualHeight / 3);
-            if (i < 0) target = LyricsViewport.ActualHeight / 3;
-            LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(target, TimeSpan.FromMilliseconds(520)) { EasingFunction = ease });
-        }
-
         private void TickPosition()
         {
             var m = AppHost.Media.Current;
@@ -485,26 +452,16 @@ namespace Isle.Views
                 Progress.Value = Math.Min(Progress.Maximum, pos.TotalSeconds);
             }
             PosText.Text = Fmt(pos);
-            if (_lyrics != null && _lyrics.Count > 0)
-            {
-                int idx = Helpers.KaraokeText.Index(_lyrics, pos);
-                ShowLine(idx);
-                if (idx >= 0 && idx < _lines.Count) Helpers.KaraokeText.Update(_lines[idx], pos, KaraokeOn, KaraokeOff);
-            }
         }
 
-        /// <summary>Заливка букв — каждый кадр (таймер позиции раз в 100 мс давал рывки).</summary>
-        private void KaraokeFrame(double dt)
+        /// <summary>Текст песни — каждый кадр (общий FrameClock), только пока «Главная» и колонка видны.</summary>
+        private void LyricsFrame(double dt)
         {
-            if (_lyrics == null || _curLine < 0 || _curLine >= _lines.Count) return;
+            if (_lyrics == null || !LyricsList.HasLines || LyricsBorder.Visibility != Visibility.Visible || PlayerPanel.Visibility != Visibility.Visible) return;
             var m = AppHost.Media.Current;
             if (!m.HasSession) return;
-            Helpers.KaraokeText.Update(_lines[_curLine], m.LivePosition, KaraokeOn, KaraokeOff);
+            LyricsList.Render(m.LivePosition, dt);
         }
-
-        private static readonly System.Windows.Media.Brush KaraokeOn = Frozen(System.Windows.Media.Color.FromRgb(0xEC, 0xEC, 0xF1));
-        private static readonly System.Windows.Media.Brush KaraokeOff = Frozen(System.Windows.Media.Color.FromArgb(0x70, 0xEC, 0xEC, 0xF1));
-        private static System.Windows.Media.Brush Frozen(System.Windows.Media.Color c) { var b = new System.Windows.Media.SolidColorBrush(c); b.Freeze(); return b; }
 
         private static string Fmt(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : ((int)t.TotalMinutes) + ":" + t.Seconds.ToString("00");
 

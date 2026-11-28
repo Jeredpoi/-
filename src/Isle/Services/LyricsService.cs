@@ -13,6 +13,8 @@ namespace Isle.Services
         /// <summary>Конец строки (если сервис его знает) и время начала каждого слова — для точного караоке.</summary>
         public TimeSpan? End;
         public List<LyricWord> Words;
+        /// <summary>Строка второго голоса (дуэт, бэк-вокал) — в списке на «Главной» стоит справа, как в Spotify. Заполняет источник, если знает.</summary>
+        public bool OppositeAligned;
     }
 
     public class LyricWord

@@ -101,6 +101,8 @@
                             <!-- середина: название / строка песни / полоса времени (зависит от вида пилюли) -->
                             <StackPanel x:Name="MiniCenter" Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="MiniTitle" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <!-- пилюля «С текстом»: строка песни в стиле Spotify (слова загораются, в проигрыше — точки) -->
+                                <h:PillLyric x:Name="MiniLyric" Visibility="Collapsed" Height="18"/>
                                 <TextBlock x:Name="MiniSub" FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" Visibility="Collapsed" Margin="0,1,0,0"/>
                                 <Grid x:Name="MiniBar" Height="3" Margin="0,5,0,0" Visibility="Collapsed">
                                     <Border CornerRadius="1.5" Background="#2A2A30"/>

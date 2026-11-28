@@ -155,17 +155,17 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Текст песни: плавно прокручивается, текущая строка крупно -->
-                <Border x:Name="LyricsBorder" Grid.Column="1" Margin="14,-14,-14,-14" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1,0,0,0" Padding="14" CornerRadius="0,16,16,0">
+                <!-- Текст песни как в Spotify: список плавно едет, текущая строка крупно и ярко, слова загораются по очереди -->
+                <Border x:Name="LyricsBorder" Grid.Column="1" Margin="14,-14,-14,-14" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1,0,0,0" Padding="14,10,14,10" CornerRadius="0,16,16,0">
                     <Grid>
-                        <Canvas x:Name="LyricsViewport" ClipToBounds="True">
-                            <StackPanel x:Name="LyricsStack" Width="{Binding ActualWidth, ElementName=LyricsViewport}">
-                                <StackPanel.RenderTransform><TranslateTransform x:Name="LyricsShift"/></StackPanel.RenderTransform>
-                            </StackPanel>
-                        </Canvas>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <h:LyricsScroller x:Name="LyricsList"/>
                         <TextBlock x:Name="LyrStatus" FontSize="13" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         <!-- откуда текст: LRCLIB или (при привязанном Spotify) благодарность Spicy Lyrics со ссылкой на репозиторий -->
-                        <TextBlock x:Name="LyrSource" Text="LRCLIB" FontSize="9" Foreground="{DynamicResource Muted}" Opacity="0.6" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                        <TextBlock x:Name="LyrSource" Grid.Row="1" Text="LRCLIB" FontSize="9" Foreground="{DynamicResource Muted}" Opacity="0.6" Margin="0,4,0,0" HorizontalAlignment="Right"
                                    MouseLeftButtonUp="OnLyrSourceClick"/>
                     </Grid>
                 </Border>
