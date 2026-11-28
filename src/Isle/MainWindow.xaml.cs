@@ -509,14 +509,17 @@ namespace Isle
             return new Rect(tl.X, top, br.X - tl.X, br.Y - tl.Y);
         }
 
-        /// <summary>Пилюля приветствия «прилипла»: чёлка проявляется на её месте, пружинит от удара, Клоди радуется.</summary>
-        public void LandFromWelcome()
+        /// <summary>
+        /// Пилюля приветствия «прилипла»: чёлка проявляется на её месте, пружинит от удара (sx×sy → 1 за ms,
+        /// та же пружинка, что рисует пилюля, — подмена незаметна), Клоди радуется.
+        /// </summary>
+        public void LandFromWelcome(double sx = 1.07, double sy = 0.86, int ms = 900)
         {
             _welcomeHidden = false;
             Root.BeginAnimation(OpacityProperty, null);
             Root.Opacity = 1;
             Root.IsHitTestVisible = true;
-            Squash(1.07, 0.86, 900);
+            Squash(sx, sy, ms);
             Buddy.ForceActivity(3, 2.2); // Клоди машет: «привет!»
             Buddy.Cheer();
             Edge.DropBead();

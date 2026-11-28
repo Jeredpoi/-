@@ -146,6 +146,8 @@ namespace Isle.Views
                 AppSettings.Current.Save();
                 Journal.Info("welcome", "приветствие закрыто на шаге " + _step);
                 if (!_landed) AppHost.Window?.HideForWelcome(false); // закрыли без анимации — просто вернуть чёлку
+                try { _finaleWin?.Close(); } catch { } // сцена финала не должна пережить окно
+                _finaleWin = null;
             };
         }
 
@@ -2306,14 +2308,6 @@ namespace Isle.Views
         private static double Clamp01(double x) => x < 0 ? 0 : x > 1 ? 1 : x;
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
         private static double EaseInOutCubic(double t) => t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
-        /// <summary>Плавно туда с лёгким «приседанием» на старте и небольшим перелётом в конце.</summary>
-        private static double EaseInOutBack(double t, double c1 = 0.7)
-        {
-            double c2 = c1 * 1.525;
-            return t < 0.5
-                ? Math.Pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2) / 2
-                : (Math.Pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2;
-        }
         private static Color LerpColor(Color a, Color b, double t) => Color.FromArgb(
             (byte)Lerp(a.A, b.A, t), (byte)Lerp(a.R, b.R, t), (byte)Lerp(a.G, b.G, t), (byte)Lerp(a.B, b.B, t));
 
@@ -2332,12 +2326,21 @@ namespace Isle.Views
         }
 
         /// <summary>
-        /// Финал. Карточка (~660×600) сминается в чёрную пилюлю размером со свёрнутую чёлку: углы скругляются,
-        /// содержимое гаснет первым, фон уходит в чистый чёрный. Одновременно пилюля по дуге (с лёгким «приседанием»
-        /// и перелётом) улетает к точному месту чёлки на экране, верхние углы выпрямляются, как у чёлки.
-        /// На месте проявляется настоящая чёлка (с пружинкой) и вспыхивает мягкое свечение, окно закрывается.
-        /// Окно растягивается один раз на общий прямоугольник «карточка + чёлка», дальше двигается только карточка
-        /// внутри (TranslateTransform + размер) — без дёрганья размеров окна на каждом кадре. Около 1,2 с.
+        /// Финал (~1,65 с, кадр за кадром по CompositionTarget.Rendering и реальному времени):
+        /// 1) 0–0,60 с — содержимое карточки гаснет за 0,16 с, сама карточка сминается в сплошную пилюлю ТОЧНО
+        ///    размера и формы свёрнутой чёлки (верх прямой, низ — её радиус) и поднимается к верхнему краю,
+        ///    тормозя у цели, — замирает в 16 точках под своим гнездом («парит»);
+        /// 2) 0,60–0,94 с — «натяг»: вокруг пилюли разгорается свечение цвета акцента, пульсирует всё чаще,
+        ///    пилюля мелко дрожит и тянется вверх к гнезду, к ней слетаются искорки;
+        /// 3) 0,94–1,04 с — «щелчок»: магнит втягивает её в гнездо с ускорением;
+        /// 4) удар (1,04 с) — под пилюлей появляется настоящая чёлка с той же пружинкой (1,04×0,92 → 1),
+        ///    пилюля гаснет за 80 мс, вспыхивает кольцо, во все стороны разлетаются искры (≈0,6 с) — уже над чёлкой;
+        ///    затем окна закрываются.
+        /// Рисуется в отдельном прозрачном окне-сцене, которое один раз ставится в пикселях экрана на прямоугольник
+        /// «карточка + место чёлки + поле для искр». Пиксели экрана → точки сцены считаются через само окно
+        /// (PointFromScreen) уже ПОСЛЕ его установки — с настоящим масштабом экрана и сдвигом окна, поэтому пилюля
+        /// ложится на чёлку пиксель в пиксель. Карточка в окне знакомства прячется только после первого кадра сцены
+        /// (её точной копии) — без «провала» и рывка при смене окна.
         /// </summary>
         private void FlyToIsland()
         {
@@ -2357,151 +2360,422 @@ namespace Isle.Views
             _flying = true;
             _cleanup?.Invoke(); _cleanup = null;
             _token++; // отложенные действия шага больше не нужны
-            Rect target; double radiusPx;
-            try { target = main.IslandScreenRect(out radiusPx); }
-            catch (Exception ex) { Journal.Warn("welcome", "не нашёл чёлку на экране: " + ex.Message); CloseNow(); return; }
+            try { RunFinale(main); }
+            catch (Exception ex)
+            {
+                Journal.Warn("welcome", "финал не запустился: " + ex.Message);
+                try { _finaleWin?.Close(); } catch { }
+                _finaleWin = null;
+                CloseNow(); // Closed вернёт чёлку обычным проявлением
+            }
+        }
 
-            // экранные пиксели → точки этого окна (с учётом масштаба экрана)
-            var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
-            var tl = m.Transform(target.TopLeft);
-            var br = m.Transform(target.BottomRight);
-            double pw = Math.Max(80, br.X - tl.X), ph = Math.Max(24, br.Y - tl.Y), pr = Math.Min(ph / 2, Math.Max(4, radiusPx * m.M11));
-            var goal = new Point((tl.X + br.X) / 2, (tl.Y + br.Y) / 2);
-            // страховка: пилюля не выше верха экрана
-            double screenTop = SystemParameters.VirtualScreenTop;
-            if (goal.Y - ph / 2 < screenTop) goal.Y = screenTop + ph / 2;
-            Journal.Info("welcome", "знакомство завершено — летим к чёлке: " + Math.Round(goal.X) + "," + Math.Round(goal.Y) + " " + Math.Round(pw) + "×" + Math.Round(ph));
+        /// <summary>Окно-сцена финала (поверх всего, без фокуса, прозрачное).</summary>
+        private Window _finaleWin;
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoActivate = 0x0010, SwpNoOwnerZOrder = 0x0200;
+        private static readonly IntPtr HwndTopmost = new(-1);
+
+        /// <summary>Искорка финала: точка или чёрточка на холсте сцены.</summary>
+        private sealed class Spark
+        {
+            public FrameworkElement El;
+            public TranslateTransform Pos;
+            public RotateTransform Rot;
+            public double X, Y, Vx, Vy, Age, Life, Delay, Angle, R0;
+            public bool Streak, Done;
+        }
+
+        private static Spark MakeSpark(Canvas layer, double size, Color color, bool streak)
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            FrameworkElement el = streak
+                ? new Rectangle { Width = size * 3.4, Height = size * 0.8, RadiusX = size * 0.4, RadiusY = size * 0.4, Fill = brush }
+                : new Ellipse { Width = size, Height = size, Fill = brush };
+            el.IsHitTestVisible = false;
+            el.Opacity = 0;
+            el.RenderTransformOrigin = new Point(0.5, 0.5);
+            var sp = new Spark { El = el, Pos = new TranslateTransform(), Rot = new RotateTransform(), Streak = streak };
+            var g = new TransformGroup();
+            g.Children.Add(sp.Rot);
+            g.Children.Add(sp.Pos);
+            el.RenderTransform = g;
+            layer.Children.Add(el);
+            return sp;
+        }
+
+        private void RunFinale(MainWindow main)
+        {
+            // ---- 0) всё в пикселях экрана: место свёрнутой чёлки (у самого верха) и карточка ----
+            // чёлка рисуется с привязкой к пикселям (SnapsToDevicePixels) — и её место берём в целых пикселях
+            static Rect SnapPx(Rect r) => new(new Point(Math.Round(r.Left), Math.Round(r.Top)), new Point(Math.Round(r.Right), Math.Round(r.Bottom)));
+            Rect islPx = SnapPx(main.IslandScreenRect(out double radiusPx));
+            if (islPx.Width < 4 || islPx.Height < 4) throw new InvalidOperationException("чёлка нулевого размера");
             var card = _card;
             card.BeginAnimation(OpacityProperty, null);
             card.Opacity = 1;
+            card.RenderTransform = null; // «вырастание» давно закончилось (масштаб 1) — без трансформа границы и снимок точные
+            card.UpdateLayout();
             double w0 = card.ActualWidth, h0 = card.ActualHeight;
-            var cardTl = card.TranslatePoint(new Point(0, 0), this);
-            var start = new Point(Left + cardTl.X + w0 / 2, Top + cardTl.Y + h0 / 2);
+            var cardPx = new Rect(card.PointToScreen(new Point(0, 0)), card.PointToScreen(new Point(w0, h0)));
+            double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
 
-            // содержимое замораживаем в прежнем размере (без перекладки на каждом кадре), оно сжимается вместе с карточкой и гаснет
-            var inner = card.Child as FrameworkElement;
-            ScaleTransform innerScale = null;
-            if (inner != null)
+            // снимок карточки как есть — он гаснет поверх сминающейся пилюли
+            var shot = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                Math.Max(1, (int)Math.Ceiling(w0 * dpi)), Math.Max(1, (int)Math.Ceiling(h0 * dpi)), 96 * dpi, 96 * dpi, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+                dc.DrawRectangle(new VisualBrush(card) { Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, w0, h0) },
+                    null, new Rect(0, 0, w0, h0));
+            shot.Render(dv);
+            shot.Freeze();
+
+            var cardColor = (card.Background as SolidColorBrush)?.Color ?? (TryFindResource("Card") as SolidColorBrush)?.Color ?? Color.FromRgb(0x13, 0x13, 0x16);
+            var edgeColor = (card.BorderBrush as SolidColorBrush)?.Color ?? Color.FromRgb(0x23, 0x23, 0x2A);
+            var islandColor = (main.Island.Background as SolidColorBrush)?.Color ?? Colors.Black;
+            islandColor.A = 255;
+            var accent = AccentColor();
+
+            // ---- 1) окно-сцена: один раз, в пикселях экрана, на «карточка + чёлка» с полями под свечение и искры ----
+            Rect Box()
             {
-                inner.Width = inner.ActualWidth; inner.Height = inner.ActualHeight;
-                inner.HorizontalAlignment = HorizontalAlignment.Center;
-                inner.VerticalAlignment = VerticalAlignment.Center;
-                inner.RenderTransformOrigin = new Point(0.5, 0.5);
-                inner.RenderTransform = innerScale = new ScaleTransform();
+                var u = Rect.Union(cardPx, islPx);
+                return new Rect(Math.Floor(u.X - 240 * dpi), Math.Floor(u.Y - 24 * dpi), Math.Ceiling(u.Width + 480 * dpi), Math.Ceiling(u.Height + 150 * dpi));
             }
-            card.ClipToBounds = true;
-            var c0 = (TryFindResource("Card") as SolidColorBrush)?.Color ?? Color.FromRgb(0x13, 0x13, 0x16);
-            var bg = new SolidColorBrush(c0);
-            card.Background = bg;
-            var edge = new SolidColorBrush((TryFindResource("CardBorder") as SolidColorBrush)?.Color ?? Color.FromRgb(0x23, 0x23, 0x2A));
-            card.BorderBrush = edge;
-
-            // окно — один раз на общий прямоугольник «карточка + чёлка» с запасом под дугу и свечение;
-            // прозрачные поля пропускают клики насквозь
-            var box = Rect.Union(new Rect(start.X - w0 / 2, start.Y - h0 / 2, w0, h0), new Rect(goal.X - pw / 2, goal.Y - ph / 2, pw, ph));
-            box.Inflate(140, 70);
-            var stage = new Canvas();
-            Content = null;
-            card.HorizontalAlignment = HorizontalAlignment.Left;
-            card.VerticalAlignment = VerticalAlignment.Top;
-            var pos = new TranslateTransform();
-            card.RenderTransform = pos;
-            stage.Children.Add(card);
-            Content = stage;
-            void Place(Point c, double w, double h)
+            var box = Box();
+            var stage = new Canvas { IsHitTestVisible = false };
+            var win = _finaleWin = new Window
             {
-                card.Width = w; card.Height = h;
-                pos.X = c.X - box.X - w / 2;
-                pos.Y = c.Y - box.Y - h / 2;
-            }
-            Place(start, w0, h0);
-            Left = box.X; Top = box.Y; Width = box.Width; Height = box.Height;
-
-            // путь — квадратичная дуга с уходом вбок; на перелёте (k > 1) пилюля продолжает движение по касательной
-            var ctrl = new Point((start.X + goal.X) / 2 + 120, (start.Y + goal.Y) / 2 + 30);
-            Point Bezier(double k) => new(
-                (1 - k) * (1 - k) * start.X + 2 * (1 - k) * k * ctrl.X + k * k * goal.X,
-                (1 - k) * (1 - k) * start.Y + 2 * (1 - k) * k * ctrl.Y + k * k * goal.Y);
-
-            const double Morph = 0.50, FlyFrom = 0.12, FlyTo = 0.90, Fade = 0.18, Dark = 0.32;
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-            bool contentGone = false, landed = false;
-            EventHandler tick = null;
-            tick = (_, __) =>
-            {
-                if (_closed) { CompositionTarget.Rendering -= tick; return; }
-                if (landed) return; // окно закрывается — лишний кадр не должен «приземлить» чёлку второй раз
-                double t = clock.Elapsed.TotalSeconds;
-                double ks = EaseInOutCubic(Clamp01(t / Morph));       // сжатие в пилюлю
-                double u = Clamp01((t - FlyFrom) / (FlyTo - FlyFrom)); // полёт
-                double kf = EaseInOutBack(u);
-
-                // содержимое гаснет первым, фон темнеет до чистого чёрного, рамка растворяется
-                if (!contentGone)
-                {
-                    double fo = Clamp01(t / Fade);
-                    if (inner != null)
-                    {
-                        inner.Opacity = 1 - fo;
-                        double sc = Lerp(1, 0.85, fo);
-                        innerScale.ScaleX = sc; innerScale.ScaleY = sc;
-                        if (fo >= 1) inner.Visibility = Visibility.Collapsed;
-                    }
-                    if (fo >= 1) contentGone = true;
-                }
-                double kd = Clamp01(t / Dark);
-                bg.Color = LerpColor(c0, Colors.Black, kd);
-                edge.Opacity = 1 - kd;
-
-                if (u >= 1)
-                {
-                    // 3) на месте: настоящая чёлка проявляется и пружинит, пилюля гаснет, вспыхивает свечение
-                    landed = true;
-                    CompositionTarget.Rendering -= tick;
-                    Place(goal, pw, ph);
-                    card.CornerRadius = new CornerRadius(0, 0, pr, pr);
-                    _landed = true;
-                    main.LandFromWelcome();
-                    card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(110)));
-                    Flash(stage, new Point(goal.X - box.X, goal.Y - box.Y), pw, ph);
-                    After(320, CloseNow, stepBound: false);
-                    return;
-                }
-
-                // 1) размер → пилюля; 2) на лету чуть вытягивается вдоль пути, как капля
-                double stretch = Math.Sin(Math.PI * u) * 0.10 * ks;
-                double w = Lerp(w0, pw, ks) * (1 - stretch * 0.5), h = Lerp(h0, ph, ks) * (1 + stretch);
-                Place(Bezier(kf), w, h);
-                // углы: от 28 к полукругу, а у самой цели верхние выпрямляются, нижние — как у чёлки
-                double round = Math.Min(Lerp(28, h / 2, ks), h / 2);
-                double kc = EaseInOutCubic(Clamp01((u - 0.72) / 0.28));
-                double topR = Lerp(round, 0, kc), botR = Lerp(round, pr, kc);
-                card.CornerRadius = new CornerRadius(topR, topR, botR, botR);
+                Title = Title, WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent,
+                Topmost = true, ShowInTaskbar = false, ShowActivated = false, ResizeMode = ResizeMode.NoResize, Focusable = false,
+                Left = box.X / dpi, Top = box.Y / dpi, Width = box.Width / dpi, Height = box.Height / dpi,
+                Owner = this, Content = stage
             };
-            CompositionTarget.Rendering += tick;
+            win.Show();
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+            void PlaceStage()
+            {
+                // точно в пикселях (Left/Top в точках при 125% могли бы съехать на пиксель) и поверх окна чёлки
+                SetWindowPos(hwnd, HwndTopmost, (int)box.X, (int)box.Y, (int)box.Width, (int)box.Height, SwpNoActivate | SwpNoOwnerZOrder);
+                win.UpdateLayout();
+            }
+            PlaceStage();
+
+            // пиксели экрана → точки сцены — через само окно, уже поставленное на место: настоящий масштаб и сдвиг
+            Rect Local(Rect px) => new(win.PointFromScreen(px.TopLeft), win.PointFromScreen(px.BottomRight));
+            Rect from = Local(cardPx);
+            Rect tgt = Local(islPx);
+            double pr = radiusPx * tgt.Width / islPx.Width;
+            // сцена попала на экран с другим масштабом — Windows подгоняет размер окна; ставим его обратно и пересчитываем
+            win.DpiChanged += (_, __) => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!win.IsLoaded) return;
+                PlaceStage();
+                from = Local(cardPx);
+                tgt = Local(islPx);
+                pr = radiusPx * tgt.Width / islPx.Width;
+            }));
+            void ReadTarget()
+            {
+                // чёлка могла ещё доезжать до своего размера — пилюля целится в её настоящее место на каждом кадре
+                try
+                {
+                    var r = SnapPx(main.IslandScreenRect(out double rp));
+                    if (r.Width < 4 || r.Height < 4) return;
+                    islPx = r; radiusPx = rp;
+                    tgt = Local(r);
+                    pr = rp * tgt.Width / r.Width;
+                }
+                catch { }
+            }
+
+            // ---- слои сцены (снизу вверх): ореол, светящийся контур, пилюля со снимком, вспышка, кольцо, искры ----
+            var haloBrush = new RadialGradientBrush();
+            haloBrush.GradientStops.Add(new GradientStop(Color.FromArgb(120, accent.R, accent.G, accent.B), 0));
+            haloBrush.GradientStops.Add(new GradientStop(Color.FromArgb(70, accent.R, accent.G, accent.B), 0.5));
+            haloBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, accent.R, accent.G, accent.B), 1));
+            haloBrush.Freeze();
+            var halo = new Ellipse { Fill = haloBrush, Opacity = 0, IsHitTestVisible = false };
+            var rimGlow = new System.Windows.Media.Effects.DropShadowEffect
+            { Color = accent, ShadowDepth = 0, BlurRadius = 8, Opacity = 0.95, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
+            var rimBrush = new SolidColorBrush(accent); rimBrush.Freeze();
+            // контур под пилюлей: сам он закрыт пилюлей, наружу видно только его свечение; после удара — светится по краю чёлки
+            var rim = new Border { BorderBrush = rimBrush, BorderThickness = new Thickness(1.5), Opacity = 0, Effect = rimGlow, IsHitTestVisible = false };
+            var pillBg = new SolidColorBrush(cardColor);
+            var pillEdge = new SolidColorBrush(edgeColor);
+            var shotScale = new ScaleTransform();
+            var shotImg = new Image
+            {
+                Source = shot, Width = from.Width, Height = from.Height, Stretch = Stretch.Fill,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = shotScale
+            };
+            // снимок больше пилюли — он обрезается по ней же (раскладкой), пока гаснет
+            var pill = new Border { Background = pillBg, BorderBrush = pillEdge, BorderThickness = new Thickness(1), Child = shotImg, IsHitTestVisible = false };
+            var flashBrush = new RadialGradientBrush();
+            flashBrush.GradientStops.Add(new GradientStop(Color.FromArgb(235, 255, 255, 255), 0));
+            flashBrush.GradientStops.Add(new GradientStop(Color.FromArgb(140, accent.R, accent.G, accent.B), 0.4));
+            flashBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, accent.R, accent.G, accent.B), 1));
+            flashBrush.Freeze();
+            var flash = new Ellipse { Fill = flashBrush, Opacity = 0, IsHitTestVisible = false };
+            var ringBrush = new SolidColorBrush(Colors.White);
+            var ring = new Ellipse { Stroke = ringBrush, Opacity = 0, IsHitTestVisible = false };
+            var sparkLayer = new Canvas { IsHitTestVisible = false };
+            foreach (var el in new UIElement[] { halo, rim, pill, flash, ring, sparkLayer }) stage.Children.Add(el);
+            static void Put(FrameworkElement el, double x, double y, double w, double h)
+            {
+                el.Width = Math.Max(0, w); el.Height = Math.Max(0, h);
+                Canvas.SetLeft(el, x); Canvas.SetTop(el, y);
+            }
+
+            // искорки «натяга» — заранее, чтобы не создавать их посреди анимации
+            var rnd = new Random();
+            var gather = new List<Spark>();
+            for (int i = 0; i < 10; i++)
+            {
+                var sp = MakeSpark(sparkLayer, 2.2 + rnd.NextDouble() * 1.4, i % 3 == 0 ? Colors.White : accent, false);
+                sp.Delay = TRise1 + i * 0.014 + rnd.NextDouble() * 0.04;
+                sp.Life = 0.24 + rnd.NextDouble() * 0.06;
+                sp.Angle = (15 + 150 * (i + rnd.NextDouble()) / 10) * Math.PI / 180; // снизу и с боков (0° — вправо, 90° — вниз)
+                sp.R0 = 45 + rnd.NextDouble() * 45;
+                gather.Add(sp);
+            }
+            var burst = new List<Spark>();
+
+            // ---- 2) кадры ----
+            var clock = new System.Diagnostics.Stopwatch();
+            double lastT = 0, phase = 0, impactAt = -1, nextRaise = 0, worst = 0;
+            int frames = 0;
+            bool finished = false, inTick = false, begun = false;
+            TimeSpan lastRT = TimeSpan.Zero;
+            EventHandler tick = null;
+
+            void Burst(double tcx, double ttop, double tw, double th)
+            {
+                // искры от краёв чёлки — вниз и в стороны (вверху край экрана), с разбросом скорости, тяжестью и затуханием
+                const int n = 22;
+                for (int i = 0; i < n; i++)
+                {
+                    double a = (6 + 168 * (i + rnd.NextDouble()) / n) * Math.PI / 180;
+                    bool streak = i % 2 == 1;
+                    var sp = MakeSpark(sparkLayer, 2.2 + rnd.NextDouble() * 2.6, i % 3 == 0 ? Colors.White : accent, streak);
+                    sp.X = tcx + Math.Cos(a) * tw / 2;
+                    sp.Y = ttop + th / 2 + Math.Sin(a) * th / 2;
+                    double speed = 200 + rnd.NextDouble() * 260, dir = a + (rnd.NextDouble() - 0.5) * 0.35;
+                    sp.Vx = Math.Cos(dir) * speed * 1.25;
+                    sp.Vy = Math.Sin(dir) * speed;
+                    sp.Life = 0.42 + rnd.NextDouble() * 0.20;
+                    burst.Add(sp);
+                }
+            }
+
+            void Impact(double t, double tcx, double ttop, double tw, double th)
+            {
+                impactAt = t;
+                SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpNoOwnerZOrder);
+                _landed = true;
+                // настоящая чёлка — ровно под пилюлей и с той же пружинкой, поэтому пилюля просто растворяется без скачка
+                try { main.LandFromWelcome(SquashX, SquashY, (int)(SquashS * 1000)); }
+                catch (Exception ex) { Journal.Warn("welcome", "чёлка не проявилась: " + ex.Message); }
+                Burst(tcx, ttop, tw, th);
+                Journal.Info("welcome", "пилюля прилипла к чёлке: " + Math.Round(islPx.X) + "," + Math.Round(islPx.Y) + " " + Math.Round(islPx.Width) + "×" + Math.Round(islPx.Height)
+                    + " px, радиус " + Math.Round(radiusPx, 1) + " px, масштаб " + dpi.ToString("0.##"));
+            }
+
+            void Frame(double t)
+            {
+                double dt = Math.Clamp(t - lastT, 0, 0.05);
+                lastT = t;
+                if (impactAt < 0) ReadTarget();
+                double tw = tgt.Width, th = tgt.Height, tcx = tgt.X + tw / 2, ttop = tgt.Y;
+                if (impactAt < 0 && t >= TSnap) Impact(t, tcx, ttop, tw, th);
+                if (t >= nextRaise) // окно чёлки само поднимается «поверх всех» по таймеру — держим сцену выше
+                {
+                    nextRaise = t + 0.25;
+                    if (t > 0) SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpNoOwnerZOrder);
+                }
+
+                // содержимое карточки гаснет первым, фон уходит в цвет чёлки, рамка растворяется
+                double fo = Clamp01(t / TFade);
+                if (pill.Child != null)
+                {
+                    shotImg.Opacity = 1 - fo;
+                    shotScale.ScaleX = shotScale.ScaleY = Lerp(1, 0.9, fo);
+                    if (fo >= 1) pill.Child = null;
+                }
+                double kd = EaseInOutCubic(Clamp01(t / 0.26));
+                pillBg.Color = LerpColor(cardColor, islandColor, kd);
+                pillEdge.Opacity = 1 - kd;
+
+                double x, y, w, h, topR, botR, glow;
+                if (impactAt < 0)
+                {
+                    // 1) сминание в пилюлю и подъём с торможением к точке «парения» под гнездом
+                    double ks = EaseInOutCubic(Clamp01(t / TSize));
+                    w = Lerp(from.Width, tw, ks); h = Lerp(from.Height, th, ks);
+                    double f = Clamp01((t - TRise0) / (TRise1 - TRise0));
+                    f = 1 - Math.Pow(1 - Math.Pow(f, 1.4), 3); // мягкий старт, долгое торможение у края
+                    double cx = Lerp(from.X + from.Width / 2, tcx, f);
+                    double cy = Lerp(from.Y + from.Height / 2, ttop + Hover + th / 2, f);
+                    double sx = 1, sy = 1;
+                    if (t >= TRise1)
+                    {
+                        // 2) натяг: подтягивается на пару точек, тянется вверх и дрожит; 3) щелчок — втягивание с ускорением
+                        double k = Clamp01((t - TRise1) / (TTension - TRise1));
+                        double q = Clamp01((t - TTension) / (TSnap - TTension));
+                        double e = q * q * q;
+                        double pull = Hover * 0.25 * k * k;
+                        cy -= pull + (Hover - pull) * e;
+                        sy = 1 + 0.07 * k * k + 0.05 * e;
+                        sx = 1 - 0.025 * k * k - 0.01 * e;
+                        double shake = k * (1 - q);
+                        cx += shake * (0.8 * Math.Sin(2 * Math.PI * 31 * t) + 0.5 * Math.Sin(2 * Math.PI * 47 * t + 1.3));
+                        cy += shake * 0.45 * Math.Sin(2 * Math.PI * 41 * t + 0.4);
+                    }
+                    // растяжение — вверх, к гнезду: низ стоит, верх тянется
+                    double bottom = cy + h / 2;
+                    w *= sx; h *= sy;
+                    x = cx - w / 2; y = bottom - h;
+                    // углы: от карточных 28 к форме чёлки — верх прямой, низ её радиусом
+                    double kc = EaseInOutCubic(Clamp01((t - 0.10) / 0.40));
+                    topR = Lerp(28, 0, kc); botR = Lerp(28, pr, kc);
+                    double g = Clamp01((t - (TRise1 - 0.12)) / (TTension - TRise1 + 0.12));
+                    glow = g * g * (3 - 2 * g);
+                    pill.Opacity = 1;
+                }
+                else
+                {
+                    // 4) удар: сплющивание 1,04×0,92 и пружинка обратно — та же, что у настоящей чёлки (Helpers.Spring 6,5/13)
+                    double d = t - impactAt;
+                    double xs = Clamp01(d / SquashS);
+                    double sp = xs >= 1 ? 1 : 1 - Math.Exp(-6.5 * xs) * Math.Cos(13 * xs);
+                    w = tw * Lerp(SquashX, 1, sp); h = th * Lerp(SquashY, 1, sp);
+                    x = tcx - w / 2; y = ttop; // верх прижат к краю, как у чёлки (её пружинка — от верхнего края)
+                    topR = 0; botR = pr;
+                    pill.Opacity = 1 - Clamp01(d / 0.08);
+                    double g = 1 - Clamp01(d / 0.45);
+                    glow = g * g;
+                }
+                Put(pill, x, y, w, h);
+                pill.CornerRadius = new CornerRadius(topR, topR, botR, botR);
+
+                // свечение: разгорается и пульсирует всё чаще
+                phase += dt * 2 * Math.PI * Lerp(4, 20, glow);
+                double pulse = 0.5 + 0.5 * Math.Sin(phase);
+                Put(rim, x, y, w, h);
+                rim.CornerRadius = pill.CornerRadius;
+                rim.Opacity = glow * (0.7 + 0.3 * pulse);
+                rimGlow.BlurRadius = 6 + 20 * glow + 8 * pulse * glow;
+                double haloA = impactAt < 0 ? glow : glow * (1 - Clamp01((t - impactAt) / 0.22));
+                double hw = w + 70 + 40 * glow + 18 * pulse * glow, hh = h + 50 + 26 * glow + 12 * pulse * glow;
+                Put(halo, x + w / 2 - hw / 2, y + h / 2 - hh / 2, hw, hh);
+                halo.Opacity = haloA * (0.55 + 0.35 * pulse);
+
+                // искорки натяга слетаются к нижнему краю пилюли, закручиваясь
+                foreach (var s in gather)
+                {
+                    if (s.Done) continue;
+                    double pt = (t - s.Delay) / s.Life;
+                    if (pt <= 0) continue;
+                    if (pt >= 1 || impactAt >= 0) { s.Done = true; s.El.Visibility = Visibility.Collapsed; continue; }
+                    double e = pt * pt;
+                    double tx = x + w / 2 + Math.Cos(s.Angle) * w * 0.42, ty = y + h * 0.7;
+                    double ang = s.Angle + (1 - e) * 0.7 * (s.Angle < Math.PI / 2 ? -1 : 1);
+                    s.X = Lerp(tx + Math.Cos(ang) * s.R0 * 1.4, tx, e);
+                    s.Y = Lerp(ty + Math.Sin(ang) * s.R0, ty, e);
+                    s.El.Opacity = Math.Min(1, pt * 4) * (1 - Math.Pow(pt, 4));
+                    s.Pos.X = s.X - s.El.Width / 2; s.Pos.Y = s.Y - s.El.Height / 2;
+                }
+
+                if (impactAt >= 0)
+                {
+                    double d = t - impactAt;
+                    // вспышка на месте чёлки
+                    double pf = Clamp01(d / 0.28);
+                    double fw = tw * Lerp(1.4, 2.2, pf), fh = th * Lerp(2.6, 4.2, pf);
+                    Put(flash, tcx - fw / 2, ttop + th / 2 - fh / 2, fw, fh);
+                    flash.Opacity = 0.95 * (1 - pf) * (1 - pf);
+                    // кольцо-волна от края чёлки (центр — на верхнем крае, видна нижняя дуга)
+                    double pc = Clamp01(d / 0.42), ec = 1 - Math.Pow(1 - pc, 3);
+                    double rw = tw * Lerp(1.0, 2.3, ec), rh = th * 2 * Lerp(1.0, 3.2, ec);
+                    Put(ring, tcx - rw / 2, ttop - rh / 2, rw, rh);
+                    ring.StrokeThickness = Lerp(3.5, 0.8, ec);
+                    ringBrush.Color = LerpColor(Colors.White, accent, ec);
+                    ring.Opacity = Math.Pow(1 - pc, 1.3);
+                    // искры: сопротивление воздуха, тяжесть, затухание; чёрточки смотрят по скорости
+                    foreach (var s in burst)
+                    {
+                        if (s.Done) continue;
+                        s.Age += dt;
+                        if (s.Age >= s.Life) { s.Done = true; s.El.Visibility = Visibility.Collapsed; continue; }
+                        double drag = Math.Exp(-2.4 * dt);
+                        s.Vx *= drag;
+                        s.Vy = s.Vy * drag + 820 * dt;
+                        s.X += s.Vx * dt; s.Y += s.Vy * dt;
+                        double life = s.Age / s.Life;
+                        s.El.Opacity = Math.Pow(1 - life, 1.4);
+                        if (s.Streak) s.Rot.Angle = Math.Atan2(s.Vy, s.Vx) * 180 / Math.PI;
+                        s.Pos.X = s.X - s.El.Width / 2; s.Pos.Y = s.Y - s.El.Height / 2;
+                    }
+                    if (d >= TAfter) Finish(true);
+                }
+            }
+
+            void Finish(bool land)
+            {
+                if (finished) return;
+                finished = true;
+                CompositionTarget.Rendering -= tick;
+                if (land && !_landed && !_closed) { _landed = true; try { main.LandFromWelcome(); } catch { } }
+                Journal.Info("welcome", "финал: кадров " + frames + " за " + Math.Round(clock.Elapsed.TotalMilliseconds) + " мс, худший кадр " + Math.Round(worst) + " мс");
+                try { win.Close(); } catch { }
+                if (ReferenceEquals(_finaleWin, win)) _finaleWin = null;
+                CloseNow();
+            }
+
+            tick = (_, e) =>
+            {
+                // SetWindowPos отдаёт управление Windows — следующий кадр мог бы прийти прямо изнутри этого
+                if (e is RenderingEventArgs re) { if (re.RenderingTime == lastRT) return; lastRT = re.RenderingTime; }
+                if (finished || inTick) return;
+                if (_closed || !win.IsLoaded) { Finish(false); return; }
+                inTick = true;
+                try
+                {
+                    double before = clock.Elapsed.TotalMilliseconds;
+                    worst = Math.Max(worst, before - lastT * 1000);
+                    frames++;
+                    Frame(clock.Elapsed.TotalSeconds);
+                }
+                catch (Exception ex) { Journal.Warn("welcome", "кадр финала: " + ex.Message); Finish(true); }
+                finally { inTick = false; }
+            };
+
+            // первый кадр сцены — точная копия карточки на её месте; только когда он нарисован, прячем настоящую карточку
+            Frame(0);
+            void Begin()
+            {
+                if (begun || finished) return;
+                begun = true;
+                card.Visibility = Visibility.Hidden;
+                lastT = 0;
+                clock.Restart();
+                CompositionTarget.Rendering += tick;
+                Journal.Info("welcome", "знакомство завершено — финал: чёлка " + Math.Round(islPx.X) + "," + Math.Round(islPx.Y) + " " + Math.Round(islPx.Width) + "×" + Math.Round(islPx.Height)
+                    + " px → сцена " + Math.Round(tgt.X, 1) + "," + Math.Round(tgt.Y, 1) + " " + Math.Round(tgt.Width, 1) + "×" + Math.Round(tgt.Height, 1) + ", масштаб " + dpi.ToString("0.##"));
+            }
+            win.ContentRendered += (_, __) => Begin();
+            After(250, Begin, stepBound: false); // страховка, если ContentRendered не придёт
         }
 
-        /// <summary>Мягкая вспышка цвета акцента на месте чёлки в момент посадки.</summary>
-        private void Flash(Canvas stage, Point center, double pw, double ph)
-        {
-            var c = AccentColor();
-            var fill = new RadialGradientBrush();
-            fill.GradientStops.Add(new GradientStop(Color.FromArgb(200, c.R, c.G, c.B), 0));
-            fill.GradientStops.Add(new GradientStop(Color.FromArgb(80, c.R, c.G, c.B), 0.45));
-            fill.GradientStops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1));
-            double w = pw * 1.9, h = ph * 3.4;
-            var glow = new Ellipse { Width = w, Height = h, Fill = fill, IsHitTestVisible = false, RenderTransformOrigin = new Point(0.5, 0.5) };
-            Canvas.SetLeft(glow, center.X - w / 2);
-            Canvas.SetTop(glow, center.Y - h / 2);
-            var st = new ScaleTransform(0.4, 0.4);
-            glow.RenderTransform = st;
-            stage.Children.Add(glow);
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            var d = TimeSpan.FromMilliseconds(300);
-            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.4, 1.5, d) { EasingFunction = ease });
-            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.4, 1.5, d) { EasingFunction = ease });
-            glow.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, d) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } });
-        }
+        // фазы финала, секунды от начала
+        private const double TFade = 0.16, TSize = 0.42, TRise0 = 0.03, TRise1 = 0.60, TTension = 0.94, TSnap = 1.04, TAfter = 0.62;
+        /// <summary>На сколько точек ниже гнезда пилюля «парит» перед натягом.</summary>
+        private const double Hover = 16;
+        /// <summary>Сплющивание при ударе и время пружинки (одинаковые у пилюли и у настоящей чёлки).</summary>
+        private const double SquashX = 1.04, SquashY = 0.92, SquashS = 0.52;
     }
 }
