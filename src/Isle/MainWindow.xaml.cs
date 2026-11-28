@@ -1096,59 +1096,19 @@ namespace Isle
                 MiniBarFill.Width = Math.Max(0, MiniBar.ActualWidth * Math.Clamp(m.LivePosition.TotalSeconds / m.Duration.TotalSeconds, 0, 1));
             if (AppSettings.Current.MusicPill == "lyrics")
             {
-                var lines = AppHost.Lyrics?.Lines;
-                int idx = Helpers.KaraokeText.Index(lines, m.LivePosition);
-                string text = idx >= 0 ? (lines[idx].Text.Length == 0 ? "♪" : lines[idx].Text) : (string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist);
-                bool karaoke = idx >= 0 && lines[idx].Text.Length > 0;
-                // ключ — номер строки + текст: повтор той же строки (припев) тоже начинается заново
-                string key = idx + "|" + text;
-                if (key != _pillLine)
+                // название как запасной текст — строку собираем, только когда сменился трек (не каждый кадр)
+                if (!ReferenceEquals(_pillFallbackFor, m))
                 {
-                    _pillLine = key;
-                    _pillLyric = karaoke ? lines[idx] : null;
-                    _pillNext = karaoke ? Helpers.KaraokeText.NextAt(lines, idx) : null;
-                    SwapPillLine(text, karaoke);
+                    _pillFallbackFor = m;
+                    _pillFallback = string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist;
                 }
-                if (karaoke && !_pillSwapping) Helpers.KaraokeText.Update(MiniTitle, m.LivePosition, _lyricOn, _lyricOff);
+                MiniLyric.Render(AppHost.Lyrics?.Lines, m.LivePosition, _pillFallback, _frameDt);
             }
             MiniPlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
         }
 
-        private string _pillLine;
-        private Services.LyricLine _pillLyric;
-        private TimeSpan? _pillNext;
-        private bool _pillSwapping;
-        private readonly TranslateTransform _pillShift = new();
-        private static readonly Brush _lyricOn = MakeFrozen(Color.FromRgb(0xEC, 0xEC, 0xF1));
-        private static readonly Brush _lyricOff = MakeFrozen(Color.FromArgb(0x80, 0xEC, 0xEC, 0xF1));
-        private static Brush MakeFrozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
-
-        /// <summary>Смена строки в пилюле: старая уезжает вверх и гаснет, новая выплывает снизу (как в раскрытой панели).</summary>
-        private void SwapPillLine(string text, bool karaoke)
-        {
-            MiniTitle.RenderTransform = _pillShift;
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            if (string.IsNullOrEmpty(MiniTitle.Text) && MiniTitle.Inlines.Count == 0)
-            {
-                ShowNew();
-                return;
-            }
-            _pillSwapping = true;
-            var outA = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
-            string want = _pillLine;
-            outA.Completed += (_, __) => { if (_pillLine == want) ShowNew(); };
-            MiniTitle.BeginAnimation(OpacityProperty, outA);
-            _pillShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -6, TimeSpan.FromMilliseconds(140)));
-
-            void ShowNew()
-            {
-                if (karaoke && _pillLyric != null) Helpers.KaraokeText.Set(MiniTitle, _pillLyric, _pillNext, _lyricOff);
-                else { MiniTitle.Inlines.Clear(); MiniTitle.Text = text; }
-                _pillSwapping = false;
-                MiniTitle.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
-                _pillShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(7, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
-            }
-        }
+        private Services.MediaInfo _pillFallbackFor;
+        private string _pillFallback;
 
         private void OnMiniPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
         private void OnMiniNext(object s, RoutedEventArgs e) => AppHost.Media.Next();
@@ -1158,7 +1118,11 @@ namespace Isle
         {
             var m = AppHost.Media.Current;
             var mode = AppSettings.Current.MusicPill;
-            if (mode != "lyrics") { _pillLine = null; MiniTitle.BeginAnimation(OpacityProperty, null); MiniTitle.Opacity = 1; _pillShift.BeginAnimation(TranslateTransform.YProperty, null); _pillShift.Y = 0; }
+            // «С текстом» — своя строка в стиле Spotify; в остальных видах обычное название
+            bool lyr = mode == "lyrics";
+            MiniTitle.Visibility = lyr ? Visibility.Collapsed : Visibility.Visible;
+            MiniLyric.Visibility = lyr ? Visibility.Visible : Visibility.Collapsed;
+            if (!lyr) MiniLyric.Reset();
             if (mode == "mini") { MiniTitle.Text = m.Title; MiniSub.Text = m.Artist; }
             else if (mode != "lyrics") MiniTitle.Text = string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist;
             MiniCover.Source = m.Cover;
