@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
@@ -526,6 +527,12 @@ namespace Isle.Helpers
     /// в кадре память не выделяется: элементы строятся один раз в <see cref="SetLines"/>, кисти — из палитры,
     /// у градиентов двигаются только смещения.
     /// Для стенда: <see cref="Still"/> — готовая картинка на заданный момент.
+    ///
+    /// Как в Spotify, список можно листать колесом (плавно, в пределах текста): пока листают, слежение за строкой
+    /// на паузе, дальние строки читаемее; через ~3 с после последнего поворота колеса список сам едет обратно
+    /// к текущей строке. Щелчок по строке — перемотка на её начало (<see cref="LineClicked"/>).
+    /// Последний элемент списка — подпись авторов и источника (<see cref="SetCredit"/>): условие Spicy Lyrics —
+    /// подпись видна вместе с текстом, а не в подсказке.
     /// </summary>
     public sealed class LyricsScroller : Grid
     {
@@ -535,6 +542,15 @@ namespace Isle.Helpers
         /// <summary>Масштаб нетекущих строк (текущая — 1).</summary>
         public double DimScale { get; set; } = 0.9;
         private const double LineGap = 12, GapRowHeight = 30, SettleTime = 0.6;
+        /// <summary>Через сколько секунд после последнего поворота колеса список возвращается к текущей строке.</summary>
+        private const double BrowseIdle = 3.0;
+        /// <summary>Пикселей прокрутки на одно «деление» колеса (Delta = 120).</summary>
+        private const double WheelStep = 64;
+        /// <summary>Отступ перед подписью в конце списка и под ней.</summary>
+        private const double FooterGap = 10, FooterBottom = 12;
+
+        /// <summary>Щелчок по строке: время, куда перемотать (начало строки чуть заранее, не меньше нуля).</summary>
+        public event Action<TimeSpan> LineClicked;
 
         private readonly Canvas _viewport;
         private readonly StackPanel _stack;
@@ -551,6 +567,7 @@ namespace Isle.Helpers
             public double Op = -1, Sc = -1, H = -1;
             public int Fx = -1;           // какой эффект сейчас стоит: 0 — нет, 1/2 — размытие
             public bool Shown = true;
+            public bool Hover;            // под мышью — чуть ярче
         }
 
         private Item[] _items = Array.Empty<Item>();
@@ -562,6 +579,17 @@ namespace Isle.Helpers
         private bool _snapNext = true;
         private LyricPalette _pal;
         private KaraokeStyle _style;
+
+        // листание колесом: _browsing — слежение за строкой на паузе; _browseY — куда едет список (сдвиг, как _y);
+        // _browseIdle — сколько секунд колесо не трогали; _browseMix — плавная доля «режима чтения» (0…1) для тусклости.
+        private bool _browsing;
+        private double _browseY, _browseIdle, _browseMix;
+        private double _contentH;     // высота всего списка (строки + подпись) по последнему кадру
+
+        // подпись в конце списка: строится только в SetCredit (и заново после SetLines)
+        private FrameworkElement _footer;
+        private SpicyLyrics.Credit _credit;
+        private bool _creditSet;
 
         private static readonly Effect Blur1 = MakeBlur(1.2), Blur2 = MakeBlur(2.4);
         private readonly LinearGradientBrush _mask;
@@ -590,8 +618,45 @@ namespace Isle.Helpers
             _mask.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 1));
             _viewport.OpacityMask = _mask;
             Children.Add(_viewport);
+            // прозрачный фон — колесо ловится по всей колонке, а не только над буквами
+            Background = Brushes.Transparent;
             _glow = new MovingGlow(10, Colors.White);
             IsVisibleChanged += (_, __) => { if (IsVisible) Snap(); };
+        }
+
+        /// <summary>Список сейчас листают колесом (слежение за строкой на паузе).</summary>
+        public bool IsBrowsing => _browsing;
+
+        /// <summary>Колесо: плавная прокрутка в пределах текста, слежение за строкой — на паузу.</summary>
+        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            if (_items.Length == 0 || _viewport.ActualHeight <= 0) return;
+            e.Handled = true;
+            if (!_browsing) { _browsing = true; _browseY = _y; UpdateEffects(); }
+            _browseIdle = 0;
+            _browseY = ClampScroll(_browseY + e.Delta / 120.0 * WheelStep);
+        }
+
+        /// <summary>
+        /// Пределы сдвига списка: сверху первая строка не ниже места текущей (Anchor), снизу подпись
+        /// не поднимается выше ~80 % окна (дальше уже затухание края).
+        /// </summary>
+        private double ClampScroll(double y)
+        {
+            double viewH = _viewport.ActualHeight;
+            double max = viewH * Anchor;
+            double min = Math.Min(max, viewH * 0.8 - _contentH);
+            return Math.Clamp(y, min, max);
+        }
+
+        /// <summary>Вернуться к слежению за текущей строкой (после щелчка, по таймеру колеса).</summary>
+        public void Follow()
+        {
+            _browseIdle = 0;
+            if (!_browsing) return;
+            _browsing = false;
+            UpdateEffects();
         }
 
         public bool HasLines => _items.Length > 0;
@@ -602,15 +667,28 @@ namespace Isle.Helpers
         /// <summary>
         /// Для стенда: колонка заданного размера с текстом lines, показанная на момент pos (без анимации).
         /// Результат уже измерен и расставлен — можно сразу отдавать в RenderTargetBitmap.
+        /// credit — подпись в конце списка (null — «Lyrics: LRCLIB»); manualOffset — «пролистано колесом» на столько
+        /// пикселей вниз от текущей строки (в пределах текста; большое число — до самой подписи), null — без листания.
         /// </summary>
-        public static LyricsScroller Still(List<LyricLine> lines, TimeSpan pos, double width = 182, double height = 220)
+        public static LyricsScroller Still(List<LyricLine> lines, TimeSpan pos, double width = 182, double height = 220,
+                                           SpicyLyrics.Credit credit = null, double? manualOffset = null)
         {
             var s = new LyricsScroller { Width = width, Height = height };
             s.SetLines(lines);
+            s.SetCredit(credit);
             for (int i = 0; i < 2; i++) // второй проход — с настоящими высотами строк
             {
                 s.Measure(new Size(width, height));
                 s.Arrange(new Rect(0, 0, width, height));
+                s.Render(pos, snap: true);
+            }
+            if (manualOffset.HasValue && s._items.Length > 0)
+            {
+                // «пролистали колесом» на manualOffset px вниз от текущей строки (в пределах текста)
+                s._browsing = true;
+                s._browseIdle = 0;
+                s._browseY = s.ClampScroll(s._y - manualOffset.Value);
+                s.UpdateEffects();
                 s.Render(pos, snap: true);
             }
             s.Measure(new Size(width, height));
@@ -628,6 +706,8 @@ namespace Isle.Helpers
             _y = 0;
             _shift.Y = 0;
             _snapNext = true;
+            _browsing = false; _browseIdle = 0; _browseMix = 0; _contentH = 0;
+            _footer = null; // старую подпись убрал Clear; новую построим под новые строки
             _pal = LyricPalette.FromTheme(this);
             _style = new KaraokeStyle { FontSize = LineFontSize, Weight = FontWeights.Bold, Lift = 1.5, Pal = _pal };
             if (lines == null || lines.Count == 0) { _items = Array.Empty<Item>(); return; }
@@ -653,16 +733,99 @@ namespace Isle.Helpers
                 var sc = new ScaleTransform(DimScale, DimScale);
                 fl.RenderTransformOrigin = new Point(l.OppositeAligned ? 1 : 0, 0.5);
                 fl.RenderTransform = sc;
-                items.Add(new Item { Elem = fl, Line = kl, Scale = sc, Start = l.At.TotalSeconds, End = (next ?? l.At + TimeSpan.FromSeconds(4)).TotalSeconds });
+                var item = new Item { Elem = fl, Line = kl, Scale = sc, Start = l.At.TotalSeconds, End = (next ?? l.At + TimeSpan.FromSeconds(4)).TotalSeconds };
+                // щелчок по строке — перемотка на её начало; наведение — чуть ярче и «рука»
+                fl.Background = Brushes.Transparent; // мышь ловится и в промежутках между словами
+                fl.Cursor = Cursors.Hand;
+                fl.MouseEnter += (_, __) => item.Hover = true;
+                fl.MouseLeave += (_, __) => item.Hover = false;
+                fl.MouseLeftButtonDown += (_, e) => e.Handled = true;
+                fl.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnLineClick(item); };
+                items.Add(item);
             }
             _items = items.ToArray();
             foreach (var it in _items) _stack.Children.Add(it.Elem);
+            if (_creditSet) BuildFooter();
+        }
+
+        private void OnLineClick(Item it)
+        {
+            double at = Math.Max(0, it.Start - 0.15);
+            Follow(); // сразу снова следим за строкой — список доедет до неё сам
+            LineClicked?.Invoke(TimeSpan.FromSeconds(at));
+        }
+
+        /// <summary>
+        /// Подпись в конце списка (как у Spicy Lyrics): «Written by …» и ниже мельче — откуда синхронизация.
+        /// null — текст из LRCLIB. Строится только здесь (и заново при смене строк), в кадре не трогается.
+        /// </summary>
+        public void SetCredit(SpicyLyrics.Credit credit)
+        {
+            _credit = credit;
+            _creditSet = true;
+            BuildFooter();
+        }
+
+        private void BuildFooter()
+        {
+            if (_footer != null) _stack.Children.Remove(_footer);
+            _footer = null;
+            if (!_creditSet || _items.Length == 0) return;
+            _pal ??= LyricPalette.FromTheme(this);
+            var c = _credit;
+            var panel = new StackPanel { Margin = new Thickness(0, FooterGap, 8, FooterBottom) };
+
+            if (c?.Writers != null && c.Writers.Count > 0)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Written by " + string.Join(", ", c.Writers),
+                    FontSize = 12, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+                    Foreground = _pal[0.5], Margin = new Thickness(0, 0, 0, 5),
+                });
+            }
+
+            var src = new TextBlock { FontSize = 10, TextWrapping = TextWrapping.Wrap, Foreground = _pal[0.42] };
+            if (c == null) src.Inlines.Add(new Run("Lyrics: LRCLIB"));
+            else if (c.Community)
+            {
+                src.Inlines.Add(new Run("Community lyrics"));
+                bool up = !string.IsNullOrWhiteSpace(c.Uploader?.Name);
+                if (up) { src.Inlines.Add(new Run(" · Uploaded by ")); src.Inlines.Add(Link(c.Uploader.Name, c.Uploader.Url)); }
+                if (!string.IsNullOrWhiteSpace(c.Maker?.Name) && !(up && string.Equals(c.Maker.Name, c.Uploader.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    src.Inlines.Add(new Run(" · Made by ")); src.Inlines.Add(Link(c.Maker.Name, c.Maker.Url));
+                }
+            }
+            else
+            {
+                string prov = string.IsNullOrWhiteSpace(c.Provider) ? "Spicy Lyrics" : c.Provider;
+                if (prov == "Spicy Lyrics") src.Inlines.Add(new Run("Lyrics provided by "));
+                else src.Inlines.Add(new Run("Lyrics provided by " + prov + " · via "));
+                src.Inlines.Add(Link("Spicy Lyrics", SpicyLyrics.SiteUrl));
+            }
+            panel.Children.Add(src);
+            _footer = panel;
+            _stack.Children.Add(_footer);
+        }
+
+        /// <summary>Имя-ссылка (открывается в браузере); без адреса — просто текст.</summary>
+        private Inline Link(string text, string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return new Run(text);
+            var h = new Hyperlink(new Run(text)) { Foreground = _pal[0.62], Cursor = Cursors.Hand, ToolTip = url };
+            h.Click += (_, __) =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+            };
+            return h;
         }
 
         private Item MakeGap(double start, double end)
         {
             var dots = new GapDots(8, 7, _pal.Full);
-            var box = new Border { Height = 0, Child = dots, ClipToBounds = false, Padding = new Thickness(2, 0, 0, 0) };
+            // проигрыш не кликается: перематывать «на точки» незачем
+            var box = new Border { Height = 0, Child = dots, ClipToBounds = false, Padding = new Thickness(2, 0, 0, 0), IsHitTestVisible = false };
             return new Item { Elem = box, Dots = dots, Start = start, End = end, H = 0 };
         }
 
@@ -710,6 +873,16 @@ namespace Isle.Helpers
             double kScroll = snap ? 1 : 1 - Math.Pow(1 - 0.2, dt * 30);
             double kFast = snap ? 1 : 1 - Math.Pow(1 - 0.3, dt * 30);
 
+            // листание колесом: через BrowseIdle секунд тишины — обратно к текущей строке
+            if (_browsing && !snap)
+            {
+                _browseIdle += dt;
+                if (_browseIdle >= BrowseIdle) Follow();
+            }
+            double mixT = _browsing ? 1 : 0;
+            _browseMix = snap ? mixT : _browseMix + (mixT - _browseMix) * k;
+            if (Math.Abs(_browseMix - mixT) < 0.003) _browseMix = mixT;
+
             // строка, которая только что кончилась
             if (_settle >= 0 && _settle != _cur)
             {
@@ -740,6 +913,9 @@ namespace Isle.Helpers
                 }
 
                 double opT = i == _cur ? 1 : d == 1 ? 0.5 : d == 2 ? 0.38 : 0.3;
+                // пока листают — дальние строки читаемее; под мышью — чуть ярче
+                if (i != _cur && _browseMix > 0) opT += (Math.Max(opT, d == 1 ? 0.62 : 0.52) - opT) * _browseMix;
+                if (it.Hover && i != _cur) opT = Math.Min(1, opT + 0.22);
                 double scT = i == _cur ? 1 : DimScale;
                 double op = it.Op < 0 ? opT : it.Op + (opT - it.Op) * k;
                 double sc = it.Sc < 0 ? scT : it.Sc + (scT - it.Sc) * k;
@@ -755,10 +931,14 @@ namespace Isle.Helpers
                 top += it.Elem.ActualHeight + LineGap;
             }
             _glow.Move(glowAt, glowOp);
+            _contentH = top + (_footer != null ? _footer.ActualHeight + FooterGap + FooterBottom : 0);
 
-            // прокрутка: текущая строка — на верхней трети
-            double target = viewH * Anchor - (_cur >= 0 ? curTop : 0);
-            double y = _y + (target - _y) * kScroll;
+            // прокрутка: текущая строка — на верхней трети; пока листают колесом — туда, куда долистали
+            double target;
+            if (_browsing) { _browseY = ClampScroll(_browseY); target = _browseY; }
+            else target = viewH * Anchor - (_cur >= 0 ? curTop : 0);
+            double kY = _browsing && !snap ? 1 - Math.Pow(1 - 0.28, dt * 30) : kScroll; // за колесом — чуть живее
+            double y = _y + (target - _y) * kY;
             if (Math.Abs(y - target) < 0.2) y = target;
             if (y != _y) { _y = y; _shift.Y = Math.Round(y * 2) / 2; }
 
@@ -782,7 +962,8 @@ namespace Isle.Helpers
                 var it = _items[i];
                 if (it.Line == null) continue;
                 int d = _cur < 0 ? i + 1 : Math.Abs(i - _cur);
-                int fx = d <= 1 ? 0 : d == 2 ? 1 : 2;
+                // пока листают — размытия почти нет: только самые дальние чуть мягче
+                int fx = _browsing ? (d <= 4 ? 0 : 1) : d <= 1 ? 0 : d == 2 ? 1 : 2;
                 if (fx == it.Fx) continue;
                 it.Fx = fx;
                 it.Elem.Effect = fx switch { 1 => Blur1, 2 => Blur2, _ => null };
