@@ -79,7 +79,9 @@ namespace Isle.Services
                 if (!known)
                 {
                     id = await SpotifyAuth.CurrentTrackIdAsync(m.Title, cts.Token);
-                    lock (Ids) Ids[key] = id;
+                    // запоминаем только найденный id: null бывает и временным (429, сбой сети, Spotify ещё не переключил
+                    // трек) — раньше он запоминался, и для этой песни Spicy больше не спрашивался до перезапуска
+                    if (id != null) lock (Ids) Ids[key] = id;
                 }
                 if (id == null) return res;
                 res.TrackId = id;

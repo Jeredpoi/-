@@ -24,7 +24,7 @@
         <SolidColorBrush x:Key="SSep" Color="#0FFFFFFF"/>
         <SolidColorBrush x:Key="SNote" Color="#8A8A96"/>
         <SolidColorBrush x:Key="SRowNote" Color="#7C7C86"/>
-        <SolidColorBrush x:Key="SLabel" Color="#6E6E78"/>
+        <SolidColorBrush x:Key="SLabel" Color="#85858F"/>
         <SolidColorBrush x:Key="STile" Color="#1C1C21"/>
         <SolidColorBrush x:Key="SKeyCap" Color="#1E1E23"/>
         <SolidColorBrush x:Key="SKeyCapEdge" Color="#0E0E11"/>
@@ -41,9 +41,9 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8">
-                            <Grid Margin="{TemplateBinding Padding}">
+                            <Grid>
                                 <TextBlock x:Name="ph" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="{DynamicResource SRowNote}"
-                                           VerticalAlignment="Center" Padding="2,0,0,0" IsHitTestVisible="False" Visibility="Collapsed" TextTrimming="CharacterEllipsis"/>
+                                           VerticalAlignment="Center" Margin="{TemplateBinding Padding}" Padding="2,0,0,0" IsHitTestVisible="False" Visibility="Collapsed" TextTrimming="CharacterEllipsis"/>
                                 <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
@@ -464,7 +464,7 @@
                                     <TextBlock Style="{StaticResource RowTitle}" Text="Город"/>
                                     <TextBlock Style="{StaticResource Info}" ToolTip="Прогноз MET Norway. От погоды зависят наряд Клоди и снег из-под чёлки."/>
                                 </StackPanel>
-                                <TextBlock x:Name="CityStatus" Style="{StaticResource RowNote}" MaxWidth="200"/>
+                                <TextBlock x:Name="CityStatus" Style="{StaticResource RowNote}" MaxWidth="200" Visibility="Collapsed"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -525,12 +525,12 @@
                             </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
                             <DockPanel Style="{StaticResource Row}">
-                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                <Border x:Name="AccentsBox" DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
                                     <WrapPanel x:Name="Accents" Orientation="Horizontal"/>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Style="{StaticResource RowTitle}" Text="Акцент"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет или градиент"/>
+                                    <TextBlock x:Name="AccentNote" Style="{StaticResource RowNote}" Text="Цвет или градиент"/>
                                 </StackPanel>
                             </DockPanel>
                         </StackPanel>
@@ -981,7 +981,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
                             <DockPanel Style="{StaticResource Row}">
-                                <Button DockPanel.Dock="Right" Style="{StaticResource SPrimary}" Content="Проверить" Margin="12,0,0,0" Click="OnObsTest"/>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Проверить" Margin="12,0,0,0" Click="OnObsTest"/>
                                 <TextBlock x:Name="ObsResult" Style="{StaticResource Result}"/>
                             </DockPanel>
                         </StackPanel>
@@ -1071,7 +1071,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
                             <DockPanel Style="{StaticResource Row}">
-                                <Button DockPanel.Dock="Right" Style="{StaticResource SPrimary}" Content="Проверить" Margin="12,0,0,0" Click="OnAiTest"/>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Проверить" Margin="12,0,0,0" Click="OnAiTest"/>
                                 <TextBlock x:Name="AiTestResult" Style="{StaticResource Result}"/>
                             </DockPanel>
                         </StackPanel>
@@ -1136,7 +1136,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
                             <DockPanel Style="{StaticResource Row}">
-                                <Button DockPanel.Dock="Right" Style="{StaticResource SPrimary}" Content="Проверить" Margin="12,0,0,0" Click="OnVoiceTest"/>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Проверить" Margin="12,0,0,0" Click="OnVoiceTest"/>
                                 <Button DockPanel.Dock="Right" Style="{StaticResource SDanger}" Content="Удалить ключ" Margin="8,0,0,0" Click="OnVoiceDeleteKey"/>
                                 <TextBlock x:Name="VoiceTestResult" Style="{StaticResource Result}"/>
                             </DockPanel>
@@ -1275,7 +1275,6 @@
                         </DockPanel>
                     </Border>
 
-                    <Button Style="{StaticResource SQuiet}" Content="Закрыть Isle" HorizontalAlignment="Left" Margin="4,20,0,0" Click="OnExit"/>
                 </StackPanel>
             </Grid>
         </ScrollViewer>

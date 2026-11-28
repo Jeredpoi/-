@@ -80,8 +80,10 @@ namespace Isle.Views
         private void BuildRecent()
         {
             RecentChats.Children.Clear();
-            var recent = ChatHistory.All().Take(4).ToList();
+            var recent = ChatHistory.All().Take(3).ToList();
             RecentTitle.Visibility = recent.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // с недавними разговорами пустой экран не помещался (Клоди уезжал за верх) — подсказки тогда прячем
+            Suggestions.Visibility = recent.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
             foreach (var c in recent)
             {
                 var b = new Button
@@ -223,7 +225,7 @@ namespace Isle.Views
                 answer = await AiService.AskAsync(history, requestCts.Token);
             }
             // отмену сделал сам пользователь (другой чат, очистка) — молча выходим; иначе это тайм-аут запроса
-            catch (OperationCanceledException) when (requestCts.IsCancellationRequested) { return; }
+            catch (OperationCanceledException) when (requestCts.IsCancellationRequested) { return; } // сохранено в OpenSession/OnNew
             catch (OperationCanceledException) { answer = "Ошибка сети: сервис не ответил вовремя — попробуй ещё раз"; }
             catch (Exception ex) { answer = "Ошибка сети: " + ex.Message; }
             // A cleared or switched conversation must not be repopulated by a late API response.
@@ -384,6 +386,7 @@ namespace Isle.Views
 
         private void AddImage(System.Windows.Media.Imaging.BitmapSource img)
         {
+            if (_attach.Count >= 8) return; // тот же предел, что для файлов
             try { _attach.Add(ChatFiles.SaveImage(img)); RenderAttachments(); }
             catch (Exception ex) { Journal.Debug("chat", "картинка не сохранилась: " + ex.Message); }
         }
@@ -449,7 +452,8 @@ namespace Isle.Views
             AttachStrip.Visibility = _attach.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             bool imgs = _attach.Any(ChatFiles.IsImage);
             VisionHint.Visibility = imgs && !vision ? Visibility.Visible : Visibility.Collapsed;
-            VisionHint.Text = "Текущая модель (" + AppSettings.Current.AiModel + ") не видит изображения — отправится только текст. Сменить модель: шестерёнка → «ИИ».";
+            VisionHint.Text = "Модель не видит картинки — уйдёт только текст";
+            VisionHint.ToolTip = "Сейчас: " + AppSettings.Current.AiModel + ". Сменить модель: шестерёнка → «ИИ».";
         }
 
         private async System.Threading.Tasks.Task WarmVision()
@@ -612,6 +616,7 @@ namespace Isle.Views
 
         private void OpenSession(ChatSession c)
         {
+            SaveSession(); // вопрос, заданный во время ответа ИИ, не теряется при переходе в другой разговор
             _cts?.Cancel();
             _busy = false;
             SendBtn.IsEnabled = true;
