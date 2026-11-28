@@ -2307,6 +2307,7 @@ namespace Isle.Views
 
         private static double Clamp01(double x) => x < 0 ? 0 : x > 1 ? 1 : x;
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
+        private static double EaseOutCubic(double u) { u = Math.Clamp(u, 0, 1); return 1 - Math.Pow(1 - u, 3); }
         private static double EaseInOutCubic(double t) => t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
         private static Color LerpColor(Color a, Color b, double t) => Color.FromArgb(
             (byte)Lerp(a.A, b.A, t), (byte)Lerp(a.R, b.R, t), (byte)Lerp(a.G, b.G, t), (byte)Lerp(a.B, b.B, t));
@@ -2326,15 +2327,16 @@ namespace Isle.Views
         }
 
         /// <summary>
-        /// Финал (~1,65 с, кадр за кадром по CompositionTarget.Rendering и реальному времени):
-        /// 1) 0–0,60 с — содержимое карточки гаснет за 0,16 с, сама карточка сминается в сплошную пилюлю ТОЧНО
+        /// Финал (~3,3 с, кадр за кадром по CompositionTarget.Rendering и реальному времени):
+        /// 1) 0–0,85 с — содержимое карточки гаснет, сама карточка сминается в сплошную пилюлю ТОЧНО
         ///    размера и формы свёрнутой чёлки (верх прямой, низ — её радиус) и поднимается к верхнему краю,
-        ///    тормозя у цели, — замирает в 16 точках под своим гнездом («парит»);
-        /// 2) 0,60–0,94 с — «натяг»: вокруг пилюли разгорается свечение цвета акцента, пульсирует всё чаще,
-        ///    пилюля мелко дрожит и тянется вверх к гнезду, к ней слетаются искорки;
-        /// 3) 0,94–1,04 с — «щелчок»: магнит втягивает её в гнездо с ускорением;
-        /// 4) удар (1,04 с) — под пилюлей появляется настоящая чёлка с той же пружинкой (1,04×0,92 → 1),
-        ///    пилюля гаснет за 80 мс, вспыхивает кольцо, во все стороны разлетаются искры (≈0,6 с) — уже над чёлкой;
+        ///    тормозя у цели, — замирает в 22 точках под своим гнездом («парит»);
+        /// 2) 0,85–2,45 с — «натяг», магнит тянет тяжело: свечение цвета акцента разгорается и пульсирует всё чаще,
+        ///    пилюля дрожит всё сильнее, трижды дёргается вверх (каждый раз выше) и соскальзывает с пружинкой,
+        ///    к ней по одной слетаются искорки;
+        /// 3) 2,45–2,57 с — «щелчок»: магнит втягивает её в гнездо с ускорением;
+        /// 4) удар (2,57 с) — под пилюлей появляется настоящая чёлка с той же пружинкой (1,04×0,92 → 1),
+        ///    пилюля гаснет за 80 мс, вспыхивает кольцо, во все стороны разлетаются искры (≈0,7 с) — уже над чёлкой;
         ///    затем окна закрываются.
         /// Рисуется в отдельном прозрачном окне-сцене, которое один раз ставится в пикселях экрана на прямоугольник
         /// «карточка + место чёлки + поле для искр». Пиксели экрана → точки сцены считаются через само окно
@@ -2537,8 +2539,8 @@ namespace Isle.Views
             for (int i = 0; i < 10; i++)
             {
                 var sp = MakeSpark(sparkLayer, 2.2 + rnd.NextDouble() * 1.4, i % 3 == 0 ? Colors.White : accent, false);
-                sp.Delay = TRise1 + i * 0.014 + rnd.NextDouble() * 0.04;
-                sp.Life = 0.24 + rnd.NextDouble() * 0.06;
+                sp.Delay = TRise1 + 0.1 + i * (TTension - TRise1 - 0.5) / 10 + rnd.NextDouble() * 0.08;
+                sp.Life = 0.38 + rnd.NextDouble() * 0.12;
                 sp.Angle = (15 + 150 * (i + rnd.NextDouble()) / 10) * Math.PI / 180; // снизу и с боков (0° — вправо, 90° — вниз)
                 sp.R0 = 45 + rnd.NextDouble() * 45;
                 gather.Add(sp);
@@ -2627,13 +2629,25 @@ namespace Isle.Views
                         double k = Clamp01((t - TRise1) / (TTension - TRise1));
                         double q = Clamp01((t - TTension) / (TSnap - TTension));
                         double e = q * q * q;
-                        double pull = Hover * 0.25 * k * k;
-                        cy -= pull + (Hover - pull) * e;
-                        sy = 1 + 0.07 * k * k + 0.05 * e;
-                        sx = 1 - 0.025 * k * k - 0.01 * e;
-                        double shake = k * (1 - q);
-                        cx += shake * (0.8 * Math.Sin(2 * Math.PI * 31 * t) + 0.5 * Math.Sin(2 * Math.PI * 47 * t + 1.3));
-                        cy += shake * 0.45 * Math.Sin(2 * Math.PI * 41 * t + 0.4);
+                        // «тяжело магнитится»: медленно подтягивается, три рывка вверх — каждый сильнее, и соскальзывает
+                        // обратно с пружинкой; дрожь нарастает; после третьего рывка — щелчок
+                        double pull = Hover * 0.30 * k * k;
+                        double tug = 0;
+                        foreach (var (at, amp) in new[] { (0.22, 0.30), (0.50, 0.45), (0.78, 0.62) })
+                        {
+                            double u = (k - at) / 0.16; // длина рывка — 16% натяга (~0,25 с)
+                            if (u <= 0 || u >= 1.6) continue;
+                            tug += u < 0.25 ? amp * EaseOutCubic(u / 0.25)                                   // рывок вверх
+                                 : amp * Math.Exp(-4.5 * (u - 0.25)) * Math.Cos(9 * (u - 0.25));            // соскальзывает, покачиваясь
+                        }
+                        double pullUp = pull + (Hover - pull) * tug * (1 - e);
+                        cy -= pullUp + (Hover - pullUp) * e;
+                        double strain = k * k;
+                        sy = 1 + 0.08 * strain + 0.06 * Math.Max(0, tug) + 0.05 * e;
+                        sx = 1 - 0.03 * strain - 0.02 * Math.Max(0, tug) - 0.01 * e;
+                        double shake = (0.25 + 1.6 * strain) * (1 - q); // дрожь сильнее к концу
+                        cx += shake * (0.9 * Math.Sin(2 * Math.PI * 27 * t) + 0.6 * Math.Sin(2 * Math.PI * 43 * t + 1.3));
+                        cy += shake * 0.55 * Math.Sin(2 * Math.PI * 37 * t + 0.4);
                     }
                     // растяжение — вверх, к гнезду: низ стоит, верх тянется
                     double bottom = cy + h / 2;
@@ -2772,9 +2786,9 @@ namespace Isle.Views
         }
 
         // фазы финала, секунды от начала
-        private const double TFade = 0.16, TSize = 0.42, TRise0 = 0.03, TRise1 = 0.60, TTension = 0.94, TSnap = 1.04, TAfter = 0.62;
+        private const double TFade = 0.18, TSize = 0.50, TRise0 = 0.05, TRise1 = 0.85, TTension = 2.45, TSnap = 2.57, TAfter = 0.70;
         /// <summary>На сколько точек ниже гнезда пилюля «парит» перед натягом.</summary>
-        private const double Hover = 16;
+        private const double Hover = 22;
         /// <summary>Сплющивание при ударе и время пружинки (одинаковые у пилюли и у настоящей чёлки).</summary>
         private const double SquashX = 1.04, SquashY = 0.92, SquashS = 0.52;
     }
