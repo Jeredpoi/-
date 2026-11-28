@@ -1288,8 +1288,23 @@ namespace Isle.Views
             }
             sp.Loaded += (_, __) => Check();
 
+            // «кликни по треку» было непонятно — включаем показ слов прямо здесь, одним переключателем
+            var st = AppSettings.Current;
+            var lyricsSw = Switch(st.LyricsEnabled && st.MusicPill == "lyrics");
+            var (lyricsRow, _) = SettingRow(Icons.Text, "Слова песни в чёлке", "Пока играет музыка, в чёлке строка песни — слова подсвечиваются в такт, как в караоке", lyricsSw);
+            lyricsRow.Margin = new Thickness(0, 12, 0, 2);
+            lyricsSw.Click += (_, __) =>
+            {
+                bool on = lyricsSw.IsChecked == true;
+                st.LyricsEnabled = on || st.LyricsEnabled;
+                st.MusicPill = on ? "lyrics" : "title";
+                st.Save();
+                Journal.Info("welcome", "слова песни в чёлке: " + (on ? "вкл" : "выкл"));
+                if (on && AppHost.Media?.Current is { } cur) _ = AppHost.Lyrics?.LoadAsync(cur);
+                AppHost.Window?.ApplyAppearance();
+            };
+            sp.Children.Add(lyricsRow);
             sp.Children.Add(Facts(
-                Fact(Icons.Text, "Текст песни", "Кликни по треку — слова поедут в такт, как в караоке"),
                 Fact(Icons.Volume, "Своя громкость", "На Главной — крутилка громкости самого плеера, отдельно от системной")));
             sp.Children.Add(NavRow());
             return sp;
