@@ -26,10 +26,14 @@ namespace Isle.Services
 
         private static HttpClient CreateClient()
         {
-            var c = Helpers.Net.Client(TimeSpan.FromSeconds(10));
+            // ответы lrclib теперь с разметкой по словам (lyricsfile) — в разы тяжелее; через VPN 10 с не хватало
+            var c = Helpers.Net.Client(TimeSpan.FromSeconds(30));
             c.DefaultRequestHeaders.UserAgent.ParseAdd("Isle/0.1 (desktop island app)");
             return c;
         }
+
+        /// <summary>Последний запрос упал из-за сети (а не «текста нет») — стоит повторить.</summary>
+        public static bool LastFailed { get; private set; }
 
         public static async Task<List<LyricLine>> GetAsync(string artist, string title, TimeSpan duration)
         {
@@ -42,7 +46,13 @@ namespace Isle.Services
             {
                 var url = "https://lrclib.net/api/search?track_name=" + Uri.EscapeDataString(title) +
                           (string.IsNullOrWhiteSpace(artist) ? "" : "&artist_name=" + Uri.EscapeDataString(CleanArtist(artist)));
-                using var doc = JsonDocument.Parse(await Http.GetStringAsync(url));
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var json = await Http.GetStringAsync(url);
+                // по исполнителю ничего (у плеера бывает «Исполнитель — Topic», feat. и т. п.) — ищем общим запросом
+                if (!json.Contains("syncedLyrics\":\"") && !string.IsNullOrWhiteSpace(artist))
+                    json = await Http.GetStringAsync("https://lrclib.net/api/search?q=" + Uri.EscapeDataString(CleanArtist(artist) + " " + title));
+                Journal.Debug("lyrics", "поиск за " + sw.ElapsedMilliseconds + " мс, " + json.Length / 1024 + " КБ");
+                using var doc = JsonDocument.Parse(json);
                 JsonElement? best = null;
                 double bestScore = double.MaxValue;
                 foreach (var item in doc.RootElement.EnumerateArray())
@@ -66,7 +76,15 @@ namespace Isle.Services
                     Journal.Info("lyrics", "«" + title + "»: " + (result?.Count ?? 0) + " строк, по словам: " + (result != null && result.Exists(l => l.Words != null) ? "да" : "нет"));
                 }
             }
-            catch { return null; } // сеть или сервис упали — не запоминаем «нет текста», попробуем в следующий раз
+            catch (Exception ex)
+            {
+                // сеть или сервис упали — не запоминаем «нет текста», LyricsState попробует ещё раз
+                Journal.Warn("lyrics", "текст не загрузился: " + (ex is TaskCanceledException ? "lrclib не ответил вовремя" : ex.Message));
+                LastFailed = true;
+                return null;
+            }
+            LastFailed = false;
+            if (result == null) Journal.Info("lyrics", "«" + title + "»: текста в lrclib нет");
             Cache[key] = result;
             return result;
         }
@@ -174,6 +192,13 @@ namespace Isle.Services
             Loading = true;
             Changed?.Invoke();
             var lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
+            // сеть подвела — ещё две попытки с паузой, пока играет тот же трек
+            for (int attempt = 0; lyr == null && LyricsService.LastFailed && attempt < 2 && key == Key; attempt++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(6 * (attempt + 1)));
+                if (key != Key) return;
+                lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
+            }
             if (key != Key) return;
             Loading = false;
             Set(lyr, key);
