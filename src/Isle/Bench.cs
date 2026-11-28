@@ -86,7 +86,7 @@ namespace Isle
                 // финал: пилюля улетает в чёлку — смотрим по записи экрана
                 File.WriteAllText(Path.Combine(dir, "fly-start.txt"), DateTime.UtcNow.ToString("O"));
                 Call(ww, "FlyToIsland");
-                await Task.Delay(3000);
+                await Task.Delay(4500);
                 await Task.Delay(1500);
                 log.AppendLine("после финала: окно " + (ww.IsLoaded ? "открыто" : "закрыто") + ", остров " + w.State + " видим=" + w.IsVisible);
                 log.AppendLine("память: " + Environment.WorkingSet / 1048576 + " МБ");
