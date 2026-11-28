@@ -520,6 +520,14 @@ namespace Isle
             Root.Opacity = 1;
             Root.IsHitTestVisible = true;
             Squash(sx, sy, ms);
+            // Клоди проявляется на чёлке медленно — уже после того, как она «примагнитилась»
+            var appear = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(1700) };
+            appear.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            appear.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(350))));
+            appear.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1700)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            appear.Completed += (_, __) => { Buddy.BeginAnimation(OpacityProperty, null); Eyes.BeginAnimation(OpacityProperty, null); };
+            Buddy.BeginAnimation(OpacityProperty, appear);
+            Eyes.BeginAnimation(OpacityProperty, appear);
             Buddy.ForceActivity(3, 2.2); // Клоди машет: «привет!»
             Buddy.Cheer();
             Edge.DropBead();
