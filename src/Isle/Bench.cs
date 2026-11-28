@@ -18,8 +18,9 @@ namespace Isle
             const double k = 3;
             var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
             var dv = new DrawingVisual();
-            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(18, 18, 22)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            using (var dc = dv.RenderOpen()) dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(18, 18, 22)), null, new Rect(0, 0, W, H));
             rtb.Render(dv);
+            rtb.Render(v); // напрямую, без VisualBrush — тот растягивал содержимое
             var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
             using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
         }
