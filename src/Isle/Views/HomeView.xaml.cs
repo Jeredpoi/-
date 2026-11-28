@@ -42,6 +42,8 @@ namespace Isle.Views
             InitializeComponent();
             AppHost.Media.Changed += Refresh;
             AppHost.Lyrics.Changed += OnLyricsChanged;
+            // щелчок по строке текста — перемотка тем же путём, что и ползунок (через Spotify Web API, где он рулит)
+            LyricsList.LineClicked += t => { if (AppHost.Media.Current.HasSession) AppHost.Media.Seek(t); };
             AppHost.Audio.VolumeChanged += (_, __) => SyncVolume();
             AppHost.Audio.DeviceChanged += () => { SyncVolume(); FillDevices(); };
             _tick.Tick += (_, __) =>
@@ -423,19 +425,21 @@ namespace Isle.Views
         }
 
         /// <summary>
-        /// Подпись источника под текстом. LRCLIB — просто «LRCLIB». Spicy Lyrics (условие сервиса, рядом с текстом, не в подсказке):
-        /// провайдер всегда; у синхронизации от сообщества — ещё «кто загрузил» и «кто сделал» со ссылками на профили.
+        /// Источник текста — всегда рядом с текстом (условие Spicy Lyrics: не в подсказке), даже когда подпись
+        /// в конце списка не видна. Полная подпись («Written by …», кто загрузил и кто сделал синхронизацию
+        /// со ссылками) — последним элементом самого списка (<see cref="LyricsScroller.SetCredit"/>).
+        /// Здесь — коротко: LRCLIB или «Spicy Lyrics» со ссылкой и провайдером синхронизации.
         /// </summary>
         private void ShowLyricsSource(bool spicy)
         {
             LyrSource.Inlines.Clear();
             var c = spicy ? AppHost.Lyrics?.Credit : null;
+            LyricsList.SetCredit(c);
             if (c == null) { LyrSource.Text = "LRCLIB"; LyrSource.FontSize = 9; return; }
             LyrSource.FontSize = 10;
             LyrSource.Inlines.Add(Link("Spicy Lyrics", SpicyLyrics.SiteUrl));
-            if (c.Provider != "Spicy Lyrics") LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · " + c.Provider));
-            if (c.Uploader != null) { LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · загрузил ")); LyrSource.Inlines.Add(Link(c.Uploader.Name, c.Uploader.Url)); }
-            if (c.Maker != null) { LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · синхр. ")); LyrSource.Inlines.Add(Link(c.Maker.Name, c.Maker.Url)); }
+            if (c.Community) LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · сообщество"));
+            else if (!string.IsNullOrEmpty(c.Provider) && c.Provider != "Spicy Lyrics") LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · " + c.Provider));
         }
 
         private static System.Windows.Documents.Inline Link(string text, string url)
