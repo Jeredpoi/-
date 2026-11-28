@@ -1,4 +1,4 @@
-<UserControl x:Class="Isle.Views.HomeView"
+﻿<UserControl x:Class="Isle.Views.HomeView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:h="clr-namespace:Isle.Helpers">
@@ -17,8 +17,10 @@
         </Grid.RowDefinitions>
 
         <!-- Плеер -->
-        <Border Style="{StaticResource CardBox}" Padding="14" ClipToBounds="True">
-            <Grid>
+        <Border Style="{StaticResource CardBox}" Padding="14">
+            <!-- обрезаем по скруглению карточки (внутри рамки), а не прямоугольником: раньше свечение обложки
+                 давало острые углы и светлую полосу по краю -->
+            <Grid SizeChanged="OnPlayerCardSize">
             <!-- Пока ничего не играет: последние скопированные -->
             <DockPanel x:Name="RecentPanel" Visibility="Collapsed">
                 <DockPanel DockPanel.Dock="Top" Margin="2,0,0,8">

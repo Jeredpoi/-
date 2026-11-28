@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -156,14 +156,7 @@ namespace Isle.Native
         /// <returns>false — сочетание отключено в Windows, ничего не нажато.</returns>
         public static bool PressLayoutHotkey()
         {
-            string v = null;
-            try
-            {
-                v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Keyboard Layout\Toggle", "Language Hotkey", null) as string
-                    ?? Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Keyboard Layout\Toggle", "Hotkey", null) as string;
-            }
-            catch { }
-            switch ((v ?? "1").Trim())
+            switch (LayoutHotkeyValue())
             {
                 case "2": SendKeyCombo(0xA2, 0xA0); return true; // Ctrl+Shift
                 case "4": SendKeyCombo(0xC0); return true;       // Ё (`)
@@ -171,6 +164,21 @@ namespace Isle.Native
                 default: SendKeyCombo(0xA4, 0xA0); return true;  // Alt+Shift (по умолчанию в Windows)
             }
         }
+
+        private static string LayoutHotkeyValue()
+        {
+            string v = null;
+            try
+            {
+                v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Keyboard Layout\Toggle", "Language Hotkey", null) as string
+                    ?? Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Keyboard Layout\Toggle", "Hotkey", null) as string;
+            }
+            catch { }
+            return (v ?? "1").Trim();
+        }
+
+        /// <summary>Включено ли в Windows сочетание для смены раскладки (не «3» — отключено).</summary>
+        public static bool LayoutHotkeyEnabled() => LayoutHotkeyValue() != "3";
 
         /// <summary>
         /// Страховка: если после нашего нажатия клавиша-модификатор всё ещё числится зажатой — отпускаем её.
