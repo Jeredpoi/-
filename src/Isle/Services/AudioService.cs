@@ -121,13 +121,16 @@ namespace Isle.Services
             catch { return null; }
         }
 
-        public void SetAppVolume(string appId, float v)
+        /// <summary>false — звуковых сессий плеера пока нет (он ещё не начал выводить звук).</summary>
+        public bool SetAppVolume(string appId, float v)
         {
             try
             {
-                foreach (var ses in SessionsFor(appId)) ses.SimpleAudioVolume.Volume = Math.Clamp(v, 0f, 1f);
+                var list = SessionsFor(appId);
+                foreach (var ses in list) ses.SimpleAudioVolume.Volume = Math.Clamp(v, 0f, 1f);
+                return list.Count > 0;
             }
-            catch { }
+            catch { return false; }
         }
 
         public bool Muted

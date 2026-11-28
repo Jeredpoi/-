@@ -197,6 +197,7 @@ namespace Isle.Services
                     info.PositionStamp = DateTime.Now;
                 }
                 _lastKey = newKey;
+                ApplyHold(info, changedTrack);
                 Current = info;
                 Changed?.Invoke();
                 if (changedTrack)
@@ -272,33 +273,147 @@ namespace Isle.Services
             return bang > 0 ? name.Substring(0, bang) : name;
         }
 
-        public async void PlayPause() { try { if (_session != null) await _session.TryTogglePlayPauseAsync(); } catch { } }
-        public async void Play() { try { if (_session != null) await _session.TryPlayAsync(); } catch { } }
-        public async void Pause() { try { if (_session != null) await _session.TryPauseAsync(); } catch { } }
-        /// <summary>Повтор у текущего плеера: (умеет ли плеер его переключать снаружи, включён ли).</summary>
-        public (bool supported, bool on) Repeat
+        // ---------- управление ----------
+        // Привязан Spotify с правом управления и играет он — команды идут в Spotify Web API (SpotifyControl),
+        // интерфейс меняется сразу (оптимистично), потом сверяется с Windows и GET /me/player.
+        // Любой отказ Web API — то же самое через системные медиа-кнопки Windows, как раньше.
+
+        private bool ViaSpotify => SpotifyControl.Handles(Current);
+
+        // оптимистичное состояние: события Windows от Spotify приходят с опозданием и на миг вернули бы старое
+        private DateTime _holdUntil;
+        private bool? _holdPlaying;
+        private TimeSpan? _holdPosition;
+        private DateTime _holdStamp;
+
+        private void ApplyHold(MediaInfo info, bool changedTrack)
         {
-            get
+            if (DateTime.Now > _holdUntil || changedTrack) { _holdPlaying = null; _holdPosition = null; return; }
+            if (_holdPlaying.HasValue)
             {
-                try
-                {
-                    var pb = _session?.GetPlaybackInfo();
-                    if (pb == null) return (false, false);
-                    var mode = pb.AutoRepeatMode;
-                    return (pb.Controls.IsRepeatEnabled, mode == Windows.Media.MediaPlaybackAutoRepeatMode.Track || mode == Windows.Media.MediaPlaybackAutoRepeatMode.List);
-                }
-                catch { return (false, false); }
+                if (info.IsPlaying == _holdPlaying.Value) _holdPlaying = null; // Windows догнал
+                else { info.IsPlaying = _holdPlaying.Value; info.Position = Current.LivePosition; info.PositionStamp = DateTime.Now; }
+            }
+            if (_holdPosition.HasValue)
+            {
+                var want = _holdPosition.Value + (info.IsPlaying ? DateTime.Now - _holdStamp : TimeSpan.Zero);
+                if ((info.LivePosition - want).Duration() < TimeSpan.FromSeconds(1.5)) _holdPosition = null;
+                else { info.Position = want; info.PositionStamp = DateTime.Now; }
             }
         }
 
-        /// <summary>Повтор трека: выкл → повтор трека → выкл. false — плеер не даёт переключать повтор снаружи.</summary>
-        public async System.Threading.Tasks.Task<bool> ToggleRepeatAsync()
+        /// <summary>Сразу показать ожидаемое состояние (до ответа плеера).</summary>
+        private void Optimistic(bool? playing = null, TimeSpan? position = null)
+        {
+            void Do()
+            {
+                var c = Current;
+                if (!c.HasSession) return;
+                c.Position = position ?? c.LivePosition;
+                c.PositionStamp = DateTime.Now;
+                if (playing.HasValue) c.IsPlaying = playing.Value;
+                _holdUntil = DateTime.Now.AddSeconds(1.5);
+                if (playing.HasValue) _holdPlaying = playing;
+                if (position.HasValue) { _holdPosition = position; _holdStamp = DateTime.Now; }
+                Changed?.Invoke();
+            }
+            if (_ui.CheckAccess()) Do(); else _ui.BeginInvoke(new Action(Do));
+        }
+
+        /// <summary>После команды через Web API: сверить с Windows и Spotify.</summary>
+        private async void Reconcile()
         {
             try
             {
+                await Task.Delay(700);
+                await RefreshAsync();
+                await SpotifyControl.RefreshStateAsync(force: true);
+            }
+            catch { }
+        }
+
+        public async void PlayPause()
+        {
+            if (ViaSpotify)
+            {
+                bool was = Current.IsPlaying;
+                Optimistic(playing: !was);
+                bool ok = await SpotifyControl.SendAsync(System.Net.Http.HttpMethod.Put, was ? "pause" : "play", was ? "пауза" : "играть");
+                Reconcile();
+                if (ok) return;
+            }
+            try { if (_session != null) await _session.TryTogglePlayPauseAsync(); } catch { }
+        }
+
+        public async void Play()
+        {
+            if (ViaSpotify)
+            {
+                Optimistic(playing: true);
+                bool ok = await SpotifyControl.SendAsync(System.Net.Http.HttpMethod.Put, "play", "играть");
+                Reconcile();
+                if (ok) return;
+            }
+            try { if (_session != null) await _session.TryPlayAsync(); } catch { }
+        }
+
+        public async void Pause()
+        {
+            if (ViaSpotify)
+            {
+                Optimistic(playing: false);
+                bool ok = await SpotifyControl.SendAsync(System.Net.Http.HttpMethod.Put, "pause", "пауза");
+                Reconcile();
+                if (ok) return;
+            }
+            try { if (_session != null) await _session.TryPauseAsync(); } catch { }
+        }
+
+        public enum RepeatMode { Off, All, One }
+
+        /// <summary>Повтор у текущего плеера: (можно ли переключать снаружи, режим).</summary>
+        public (bool supported, RepeatMode mode) RepeatInfo
+        {
+            get
+            {
+                if (ViaSpotify && SpotifyControl.RepeatState != null)
+                    return (true, SpotifyControl.RepeatState == "track" ? RepeatMode.One : SpotifyControl.RepeatState == "context" ? RepeatMode.All : RepeatMode.Off);
+                try
+                {
+                    var pb = _session?.GetPlaybackInfo();
+                    if (pb == null) return (ViaSpotify, RepeatMode.Off);
+                    var mode = pb.AutoRepeatMode;
+                    var m = mode == Windows.Media.MediaPlaybackAutoRepeatMode.Track ? RepeatMode.One
+                          : mode == Windows.Media.MediaPlaybackAutoRepeatMode.List ? RepeatMode.All : RepeatMode.Off;
+                    return (ViaSpotify || pb.Controls.IsRepeatEnabled, m);
+                }
+                catch { return (ViaSpotify, RepeatMode.Off); }
+            }
+        }
+
+        /// <summary>Повтор у текущего плеера: (умеет ли плеер его переключать снаружи, включён ли).</summary>
+        public (bool supported, bool on) Repeat
+        {
+            get { var (sup, mode) = RepeatInfo; return (sup, mode != RepeatMode.Off); }
+        }
+
+        /// <summary>
+        /// Spotify через Web API: выкл → плейлист → трек → выкл. Остальные плееры: выкл → повтор трека → выкл.
+        /// false — плеер не даёт переключать повтор снаружи.
+        /// </summary>
+        public async Task<bool> ToggleRepeatAsync()
+        {
+            if (ViaSpotify)
+            {
+                if (SpotifyControl.RepeatState == null) await SpotifyControl.RefreshStateAsync(force: true);
+                if (ViaSpotify && await SpotifyControl.CycleRepeatAsync()) { Reconcile(); return true; }
+            }
+            try
+            {
                 if (_session == null) return false;
-                var (supported, on) = Repeat;
-                if (!supported) return false;
+                var pb = _session.GetPlaybackInfo();
+                if (pb == null || !pb.Controls.IsRepeatEnabled) return false;
+                bool on = pb.AutoRepeatMode != Windows.Media.MediaPlaybackAutoRepeatMode.None;
                 var next = on ? Windows.Media.MediaPlaybackAutoRepeatMode.None : Windows.Media.MediaPlaybackAutoRepeatMode.Track;
                 bool ok = await _session.TryChangeAutoRepeatModeAsync(next);
                 Journal.Info("media", "повтор: " + (on ? "выкл" : "трек") + (ok ? "" : " — плеер отказал"));
@@ -307,11 +422,75 @@ namespace Isle.Services
             catch (Exception ex) { Journal.Debug("media", "повтор не переключился: " + ex.Message); return false; }
         }
 
-        public async void Next() { try { if (_session != null) await _session.TrySkipNextAsync(); } catch { } }
-        public async void Previous() { try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { } }
+        /// <summary>Перемешивание: (можно ли переключать снаружи, включено ли).</summary>
+        public (bool supported, bool on) ShuffleInfo
+        {
+            get
+            {
+                if (ViaSpotify && SpotifyControl.Shuffle.HasValue) return (true, SpotifyControl.Shuffle.Value);
+                try
+                {
+                    var pb = _session?.GetPlaybackInfo();
+                    if (pb == null) return (ViaSpotify, false);
+                    return (ViaSpotify || pb.Controls.IsShuffleEnabled, pb.IsShuffleActive == true);
+                }
+                catch { return (ViaSpotify, false); }
+            }
+        }
+
+        /// <summary>Переключить перемешивание. false — плеер не даёт переключать его снаружи.</summary>
+        public async Task<bool> ToggleShuffleAsync()
+        {
+            if (ViaSpotify)
+            {
+                if (!SpotifyControl.Shuffle.HasValue) await SpotifyControl.RefreshStateAsync(force: true);
+                if (ViaSpotify && await SpotifyControl.ToggleShuffleAsync(ShuffleInfo.on)) { Reconcile(); return true; }
+            }
+            try
+            {
+                if (_session == null) return false;
+                var pb = _session.GetPlaybackInfo();
+                if (pb == null || !pb.Controls.IsShuffleEnabled) return false;
+                bool on = pb.IsShuffleActive == true;
+                bool ok = await _session.TryChangeShuffleActiveAsync(!on);
+                Journal.Info("media", "перемешивание: " + (on ? "выкл" : "вкл") + (ok ? "" : " — плеер отказал"));
+                return ok;
+            }
+            catch (Exception ex) { Journal.Debug("media", "перемешивание не переключилось: " + ex.Message); return false; }
+        }
+
+        public async void Next()
+        {
+            if (ViaSpotify)
+            {
+                bool ok = await SpotifyControl.SendAsync(System.Net.Http.HttpMethod.Post, "next", "следующий");
+                Reconcile();
+                if (ok) return;
+            }
+            try { if (_session != null) await _session.TrySkipNextAsync(); } catch { }
+        }
+
+        public async void Previous()
+        {
+            if (ViaSpotify)
+            {
+                bool ok = await SpotifyControl.SendAsync(System.Net.Http.HttpMethod.Post, "previous", "предыдущий");
+                Reconcile();
+                if (ok) return;
+            }
+            try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { }
+        }
 
         public async void Seek(TimeSpan pos)
         {
+            if (pos < TimeSpan.Zero) pos = TimeSpan.Zero;
+            if (ViaSpotify)
+            {
+                Optimistic(position: pos);
+                bool ok = await SpotifyControl.SendAsync(System.Net.Http.HttpMethod.Put, "seek?position_ms=" + (long)pos.TotalMilliseconds, "перемотка");
+                Reconcile();
+                if (ok) return;
+            }
             try { if (_session != null) await _session.TryChangePlaybackPositionAsync(pos.Ticks); } catch { }
         }
     }

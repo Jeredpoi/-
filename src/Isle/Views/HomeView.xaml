@@ -122,11 +122,16 @@
                         <h:VolumeKnob x:Name="AppVol" Width="38" Height="38" Visibility="Collapsed"/>
                     </Grid>
                     <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,0">
-                        <!-- повтор трека (слева от «предыдущего»); справа — пустое место той же ширины, чтобы пауза осталась по центру -->
+                        <!-- повтор (слева от «предыдущего») и перемешивание (справа от «следующего») — пауза остаётся по центру.
+                             Включено: подложка + яркая иконка + точка снизу; «1» в кружке — повтор одного трека. Выключено: приглушено. -->
                         <Button x:Name="RepeatBtn" Style="{StaticResource Ghost}" Width="40" Height="40" Margin="0,0,10,0" Click="OnRepeat" ToolTip="Повторять трек">
-                            <Grid>
-                                <h:Icon x:Name="RepeatIcon" Kind="Repeat" Width="16" Height="16" Foreground="{DynamicResource Muted}"/>
-                                <TextBlock x:Name="RepeatOne" Text="1" FontSize="8" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
+                            <Grid Width="30" Height="30">
+                                <Border x:Name="RepeatBg" CornerRadius="9" Background="{DynamicResource Accent}" Opacity="0.14" Visibility="Collapsed"/>
+                                <h:Icon x:Name="RepeatIcon" Kind="Repeat" Width="16" Height="16" StrokeWidth="2" Foreground="{DynamicResource Muted}" Opacity="0.6"/>
+                                <Border x:Name="RepeatOne" Width="11" Height="11" CornerRadius="5.5" Background="{DynamicResource Accent}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0" Visibility="Collapsed">
+                                    <TextBlock Text="1" FontSize="8" FontWeight="Bold" Foreground="#000000" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                </Border>
+                                <Ellipse x:Name="RepeatDot" Width="4" Height="4" Fill="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,1" Visibility="Collapsed"/>
                             </Grid>
                         </Button>
                         <Button Style="{StaticResource Ghost}" Width="40" Height="40" Click="OnPrev" ToolTip="Предыдущий">
@@ -140,7 +145,13 @@
                         <Button Style="{StaticResource Ghost}" Width="40" Height="40" Click="OnNext" ToolTip="Следующий">
                             <h:Icon Kind="Next" Width="17" Height="17"/>
                         </Button>
-                        <Border Width="40" Margin="10,0,0,0"/>
+                        <Button x:Name="ShuffleBtn" Style="{StaticResource Ghost}" Width="40" Height="40" Margin="10,0,0,0" Click="OnShuffle" ToolTip="Перемешивать">
+                            <Grid Width="30" Height="30">
+                                <Border x:Name="ShuffleBg" CornerRadius="9" Background="{DynamicResource Accent}" Opacity="0.14" Visibility="Collapsed"/>
+                                <h:Icon x:Name="ShuffleIcon" Kind="Shuffle" Width="16" Height="16" StrokeWidth="2" Foreground="{DynamicResource Muted}" Opacity="0.6"/>
+                                <Ellipse x:Name="ShuffleDot" Width="4" Height="4" Fill="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,1" Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
                     </StackPanel>
                 </Grid>
 
