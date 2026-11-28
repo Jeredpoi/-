@@ -1,0 +1,2 @@
+Microsoft Hyper-V Video 1024x768
+AMD EPYC 9V74 80-Core Processor                
