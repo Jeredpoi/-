@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -73,13 +73,15 @@ namespace Isle.Services
                 var line = "управление, " + what + ": " + code + (string.IsNullOrEmpty(reason) ? "" : " " + reason);
                 if (ok && quiet) Journal.Debug("spotify", line); else Journal.Info("spotify", line);
                 if (ok) return true;
+                // 429 и 5xx — временно: эта команда идёт через Windows, а Spotify пробуем снова со следующей
+                if (code == 429 || code >= 500) return false;
                 Off(reason == "PREMIUM_REQUIRED" ? "нужен Spotify Premium" : "статус " + code + (string.IsNullOrEmpty(reason) ? "" : " " + reason));
                 return false;
             }
             catch (Exception ex)
             {
+                // сбой сети — тоже временно: не выключаем управление до перезапуска
                 Journal.Info("spotify", "управление, " + what + ": " + (ex is OperationCanceledException ? "нет ответа" : ex.GetType().Name));
-                Off(ex is OperationCanceledException ? "нет ответа" : ex.GetType().Name);
                 return false;
             }
         }
