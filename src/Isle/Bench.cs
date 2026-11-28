@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections;
 using System.IO;
@@ -35,7 +36,68 @@ namespace Isle
             Journal.Info("bench", "этап: " + name);
         }
 
+        private static void SnapEl(FrameworkElement v, string dir, string name)
+        {
+            v.UpdateLayout();
+            const double k = 2;
+            double W = v.ActualWidth, H = v.ActualHeight;
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(W * k), (int)(H * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen()) { dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(40, 44, 52)), null, new Rect(0, 0, W, H)); dc.DrawRectangle(new VisualBrush(v), null, new Rect(0, 0, W, H)); }
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using var fs = File.Create(Path.Combine(dir, name + ".png")); enc.Save(fs);
+        }
+
+        private static object Call(object o, string name, params object[] args) =>
+            o.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)?.Invoke(o, args);
+
+        private static object Field(object o, string name) => o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(o);
+        private static void SetField(object o, string name, object v) => o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(o, v);
+
         public static async Task RunAsync(MainWindow w, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var log = new StringBuilder();
+            try
+            {
+                AppSettings.Current.WelcomeShown = true;
+                AppSettings.Current.AutoUpdateCheck = false;
+                AppSettings.Current.WinterSnow = "off";
+                await Task.Delay(3000);
+                var ww = new Isle.Views.WelcomeWindow();
+                ww.Show();
+                await Task.Delay(2500);
+                for (int st = 0; st <= 10; st++)
+                {
+                    Call(ww, "Go", st);
+                    await Task.Delay(1600);
+                    SnapEl((FrameworkElement)ww.Content, dir, "welcome-" + st);
+                    if (st == 1)
+                    {
+                        w.Expand("home");
+                        await Task.Delay(2500);
+                        log.AppendLine("шаг «Открой чёлку»: после раскрытия шаг " + Field(ww, "_step") + ", остров " + w.State);
+                    }
+                }
+                // финал: пилюля улетает в чёлку — смотрим по записи экрана
+                File.WriteAllText(Path.Combine(dir, "fly-start.txt"), DateTime.UtcNow.ToString("O"));
+                Call(ww, "FlyToIsland");
+                for (int k = 0; k < 8; k++) { await Task.Delay(150); try { SnapEl((FrameworkElement)ww.Content, dir, "fly-" + k); } catch { } }
+                await Task.Delay(1500);
+                log.AppendLine("после финала: окно " + (ww.IsLoaded ? "открыто" : "закрыто") + ", остров " + w.State + " видим=" + w.IsVisible);
+                log.AppendLine("память: " + Environment.WorkingSet / 1048576 + " МБ");
+            }
+            catch (Exception ex) { File.AppendAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            File.WriteAllText(Path.Combine(dir, "log.txt"), log.ToString());
+            Journal.Flush();
+            try { File.Copy(Journal.PathNow, Path.Combine(dir, "isle.log"), true); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        public static async Task RunAsyncOld2(MainWindow w, string dir) => await Task.CompletedTask;
+
+        public static async Task RunAsyncOld9(MainWindow w, string dir)
         {
             Directory.CreateDirectory(dir);
             _phases = new StreamWriter(Path.Combine(dir, "bench-phases.txt"), false, new UTF8Encoding(false));
