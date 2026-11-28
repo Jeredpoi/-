@@ -291,6 +291,10 @@ namespace Isle.Services
                 {
                     client.ReceiveTimeout = 30000;
                     Stream stream = client.GetStream();
+                    // ReceiveTimeout на ReadAsync не действует: соединение, которое молчит (браузер открывает запасные
+                    // заранее и не пользуется ими), закрываем через 30 с — с самого начала, ещё до первого байта
+                    bool gotHead = false;
+                    _ = Task.Delay(30000).ContinueWith(_ => { if (!gotHead) try { client.Close(); } catch { } });
                     // первый байт 0x16 — начало TLS: телефон пришёл по https, иначе обычный http
                     var first = new byte[1];
                     if (await stream.ReadAsync(first) <= 0) return;
@@ -303,9 +307,6 @@ namespace Isle.Services
                         await ssl.AuthenticateAsServerAsync(new System.Net.Security.SslServerAuthenticationOptions { ServerCertificateContext = PhoneTls.Context }, hs.Token);
                         stream = ssl;
                     }
-                    // ReceiveTimeout на ReadAsync не действует: соединение, которое молчит, закрываем через 30 с само
-                    bool gotHead = false;
-                    _ = Task.Delay(30000).ContinueWith(_ => { if (!gotHead) try { client.Close(); } catch { } });
                     var (method, target, headers, leftover) = await ReadHead(stream);
                     gotHead = true;
                     if (method == null) return;
@@ -345,6 +346,7 @@ namespace Isle.Services
                     else if (method == "POST" && route == "text") await ReceiveText(stream, headers, leftover);
                     else await Send(stream, 404, "text/plain", Encoding.UTF8.GetBytes("Not found"));
                 }
+                catch (Exception ex) when (ex is IOException or ObjectDisposedException && !client.Connected) { } // закрыли молчащее соединение — это не ошибка
                 catch (Exception ex) { Journal.Debug("phone", "запрос не удался: " + ex.Message); }
             }
         }

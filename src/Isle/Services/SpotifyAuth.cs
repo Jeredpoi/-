@@ -149,13 +149,22 @@ namespace Isle.Services
                 using var stream = client.GetStream();
                 var buf = new byte[8192];
                 int n = 0;
-                // читаем только строку запроса и заголовки
-                while (n < buf.Length)
+                // читаем только строку запроса и заголовки. Браузер открывает и запасные соединения, в которые ничего
+                // не шлёт: на каждое — не больше 5 с, иначе настоящий ответ ждал бы в очереди до конца ожидания
+                using (var perConn = CancellationTokenSource.CreateLinkedTokenSource(ct))
                 {
-                    int r = await stream.ReadAsync(buf.AsMemory(n), ct);
-                    if (r <= 0) break;
-                    n += r;
-                    if (Encoding.ASCII.GetString(buf, 0, n).Contains("\r\n\r\n")) break;
+                    perConn.CancelAfter(TimeSpan.FromSeconds(5));
+                    try
+                    {
+                        while (n < buf.Length)
+                        {
+                            int r = await stream.ReadAsync(buf.AsMemory(n), perConn.Token);
+                            if (r <= 0) break;
+                            n += r;
+                            if (Encoding.ASCII.GetString(buf, 0, n).Contains("\r\n\r\n")) break;
+                        }
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { continue; } // молчащее соединение — к следующему
                 }
                 var head = Encoding.ASCII.GetString(buf, 0, n);
                 var first = head.Split("\r\n")[0].Split(' ');
