@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -203,6 +203,8 @@ namespace Isle.Services
         public string SpotifyClientId { get; set; } = "";
         /// <summary>Токены Spotify хранятся зашифрованными через Windows DPAPI — как ключ ИИ.</summary>
         public string SpotifyRefreshProtected { get; set; } = "";
+        /// <summary>Ключ developer API Spicy Lyrics (sl_sk_…) — свой у пользователя, зашифрован DPAPI.</summary>
+        public string SpicyKeyProtected { get; set; } = "";
         public string SpotifyAccessProtected { get; set; } = "";
         /// <summary>Когда истекает токен доступа (UTC).</summary>
         public DateTime SpotifyTokenExpiry { get; set; }
@@ -212,6 +214,8 @@ namespace Isle.Services
         public string SpotifyScopes { get; set; } = "";
         [System.Text.Json.Serialization.JsonIgnore]
         public string SpotifyRefreshToken { get => Unprotect(SpotifyRefreshProtected); set => SpotifyRefreshProtected = Protect(value); }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string SpicyKey { get => Unprotect(SpicyKeyProtected); set => SpicyKeyProtected = Protect(value); }
         [System.Text.Json.Serialization.JsonIgnore]
         public string SpotifyAccessToken { get => Unprotect(SpotifyAccessProtected); set => SpotifyAccessProtected = Protect(value); }
 

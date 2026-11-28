@@ -422,23 +422,35 @@ namespace Isle.Views
             if (m.HasSession) LyricsList.Render(m.LivePosition, snap: true);
         }
 
-        private bool _spicyCredit;
-
-        /// <summary>Подпись источника: обычно «LRCLIB»; текст из Spicy Lyrics — маленькая кликабельная благодарность автору.</summary>
+        /// <summary>
+        /// Подпись источника под текстом. LRCLIB — просто «LRCLIB». Spicy Lyrics (условие сервиса, рядом с текстом, не в подсказке):
+        /// провайдер всегда; у синхронизации от сообщества — ещё «кто загрузил» и «кто сделал» со ссылками на профили.
+        /// </summary>
         private void ShowLyricsSource(bool spicy)
         {
-            _spicyCredit = spicy;
-            LyrSource.Text = spicy ? SpicyLyrics.Credit : "LRCLIB";
-            LyrSource.FontSize = spicy ? 10 : 9;
-            LyrSource.Cursor = spicy ? System.Windows.Input.Cursors.Hand : null;
-            LyrSource.ToolTip = spicy ? "github.com/Spikerko/spicy-lyrics" : null;
+            LyrSource.Inlines.Clear();
+            var c = spicy ? AppHost.Lyrics?.Credit : null;
+            if (c == null) { LyrSource.Text = "LRCLIB"; LyrSource.FontSize = 9; return; }
+            LyrSource.FontSize = 10;
+            LyrSource.Inlines.Add(Link("Spicy Lyrics", SpicyLyrics.SiteUrl));
+            if (c.Provider != "Spicy Lyrics") LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · " + c.Provider));
+            if (c.Uploader != null) { LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · загрузил ")); LyrSource.Inlines.Add(Link(c.Uploader.Name, c.Uploader.Url)); }
+            if (c.Maker != null) { LyrSource.Inlines.Add(new System.Windows.Documents.Run(" · синхр. ")); LyrSource.Inlines.Add(Link(c.Maker.Name, c.Maker.Url)); }
         }
 
-        private void OnLyrSourceClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private static System.Windows.Documents.Inline Link(string text, string url)
         {
-            if (!_spicyCredit) return;
-            e.Handled = true;
-            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SpicyLyrics.RepoUrl) { UseShellExecute = true }); } catch { }
+            if (string.IsNullOrEmpty(url)) return new System.Windows.Documents.Run(text);
+            var h = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run(text))
+            {
+                Foreground = (System.Windows.Media.Brush)Application.Current.TryFindResource("Muted") ?? System.Windows.Media.Brushes.Gray,
+                TextDecorations = null, Cursor = Cursors.Hand, ToolTip = url,
+            };
+            h.Click += (_, e) =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+            };
+            return h;
         }
 
         private void TickPosition()

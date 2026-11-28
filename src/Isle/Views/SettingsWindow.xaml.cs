@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -51,7 +51,11 @@ namespace Isle.Views
                 try { OnObsFields(this, null); } catch { }
             };
             // подсказка в пустом поле пароля/ключа (у PasswordBox нет своей)
-            foreach (var pb in new[] { AiKey, VoiceKey, ObsPass }) HookPlaceholder(pb);
+            foreach (var pb in new[] { AiKey, VoiceKey, ObsPass, SpicyKeyBox }) HookPlaceholder(pb);
+            SpicyKeyBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { OnSpicySave(SpicyKeyBox, null); e.Handled = true; } };
+            Services.SpicyLyrics.KeyProblemChanged += OnSpicyProblem;
+            Closed += (_, __) => Services.SpicyLyrics.KeyProblemChanged -= OnSpicyProblem;
+            UpdateSpicyStatus();
             RenderUpdate();
         }
 
@@ -1222,5 +1226,34 @@ namespace Isle.Views
             "screenshot" => S.HotkeyScreenshot, "voice" => S.HotkeyVoice, "voiceCommand" => S.HotkeyVoiceCommand, "record" => S.HotkeyRecord,
             "collapse" => S.HotkeyCollapse, _ => ""
         };
+
+        private void OnSpicySite(object sender, RoutedEventArgs e)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://developers.spicylyrics.org/dashboard/applications") { UseShellExecute = true }); } catch { }
+        }
+
+        private void OnSpicyProblem() => Dispatcher.BeginInvoke(new Action(UpdateSpicyStatus));
+
+        private void UpdateSpicyStatus()
+        {
+            bool has = !string.IsNullOrEmpty(S.SpicyKeyProtected);
+            var problem = Services.SpicyLyrics.KeyProblem;
+            SpicyStatus.Text = !has ? "" : problem ?? "Ключ сохранён — текст берётся из Spicy Lyrics, если он там есть.";
+            SpicyStatus.Foreground = problem != null ? (Brush)FindResource("Danger") : (Brush)FindResource("SNote");
+        }
+
+        private void OnSpicySave(object sender, RoutedEventArgs e)
+        {
+            var k = SpicyKeyBox.Password.Trim();
+            if (k.Length == 0 && string.IsNullOrEmpty(S.SpicyKeyProtected)) return;
+            // пустое поле + «Сохранить» — убрать ключ
+            S.SpicyKey = k;
+            S.Save();
+            SpicyKeyBox.Password = "";
+            Services.SpicyLyrics.KeyChanged();
+            AppHost.Lyrics?.Reload();
+            UpdateSpicyStatus();
+            if (k.Length == 0) SpicyStatus.Text = "Ключ удалён — текст из LRCLIB.";
+        }
     }
 }

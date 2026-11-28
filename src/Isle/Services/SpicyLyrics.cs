@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -12,48 +12,74 @@ using System.Threading.Tasks;
 namespace Isle.Services
 {
     /// <summary>
-    /// Текст песен с разметкой по слогам из Spicy Lyrics (github.com/Spikerko/spicy-lyrics). Сервис не документирован
-    /// для сторонних программ, поэтому бережно: один запрос на трек, ответы кэшируем, на 429/503 и сбои — пауза.
-    /// Любая неудача — null, и LyricsState берёт текст из LRCLIB как раньше. В журнал — только статусы.
+    /// Текст песен с разметкой по слогам из Spicy Lyrics через developer API (developers.spicylyrics.org):
+    /// GET /v1/lyrics/{id} с ключом пользователя (Authorization: Bearer sl_sk_…), поиск — GET /v1/tracks/search.
+    /// Ключ — свой у каждого пользователя, хранится зашифрованным (DPAPI). Один запрос на трек, ответы кэшируем,
+    /// на 429/503 и сбои — пауза. Любая неудача — LyricsState берёт текст из LRCLIB. В журнал — только статусы и коды ошибок.
+    /// Подпись (обязательна по условиям сервиса): провайдер всегда, у синхронизации от сообщества — ещё автор и составитель.
     /// </summary>
     public static class SpicyLyrics
     {
-        public const string Credit = "Текст: Spicy Lyrics · Spikerko";
-        public const string RepoUrl = "https://github.com/Spikerko/spicy-lyrics";
-        private const string Api = "https://api.spicylyrics.org/query";
+        public const string SiteUrl = "https://spicylyrics.org";
+        public const string DevUrl = "https://developers.spicylyrics.org";
+        private const string Api = "https://api.spicylyrics.org/v1";
 
-        /// <summary>NoMatch — трек в Spotify не нашёлся или не совпал с тем, что показывает Windows (часто временно).</summary>
+        /// <summary>NoMatch — трек не нашёлся или Spotify показал не тот трек, что Windows (часто временно).</summary>
         public enum Outcome { Ok, None, Queued, Failed, Skipped, NoMatch }
+
+        /// <summary>Человек из подписи синхронизации: имя и ссылка на профиль.</summary>
+        public sealed class Person { public string Name, Url; }
+
+        /// <summary>Чья синхронизация: провайдер (Spicy Lyrics / Apple Music / Spotify) и, у сообщества, кто загрузил и кто сделал.</summary>
+        public sealed class Credit
+        {
+            public string Provider;
+            public Person Uploader, Maker;
+        }
 
         public sealed class Result
         {
             public Outcome Outcome;
             public List<LyricLine> Lines;
             public string TrackId;
+            public Credit Credit;
         }
+
+        /// <summary>Последняя ошибка ключа (401/403) — для настроек; null — всё в порядке или ещё не спрашивали.</summary>
+        public static string KeyProblem { get; private set; }
+        public static event Action KeyProblemChanged;
 
         private static readonly HttpClient Http = CreateClient();
         /// <summary>id трека Spotify → текст (null — у сервиса текста нет). Живёт до выхода из программы.</summary>
-        private static readonly Dictionary<string, List<LyricLine>> Cache = new();
+        private static readonly Dictionary<string, (List<LyricLine> Lines, Credit Credit)> Cache = new();
         /// <summary>«Исполнитель|Название» → id трека Spotify (null — не Spotify или не совпало).</summary>
         private static readonly Dictionary<string, string> Ids = new();
         private static DateTime _pausedUntil = DateTime.MinValue;
         private static TimeSpan _backoff = TimeSpan.FromMinutes(1);
 
-        private static string Version
-        {
-            get
-            {
-                var v = typeof(SpicyLyrics).Assembly.GetName().Version;
-                return "Isle-" + (v == null ? "0.0.0" : v.Major + "." + v.Minor + "." + Math.Max(0, v.Build));
-            }
-        }
-
         private static HttpClient CreateClient()
         {
             var c = Helpers.Net.Client(TimeSpan.FromSeconds(10));
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("Isle/" + Version.Substring(5) + " (desktop island app)");
+            var v = typeof(SpicyLyrics).Assembly.GetName().Version;
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("Isle/" + (v == null ? "0" : v.Major + "." + v.Minor + "." + Math.Max(0, v.Build)) + " (desktop island app)");
             return c;
+        }
+
+        private static string Key => AppSettings.Current.SpicyKey?.Trim();
+
+        /// <summary>Ключ сменили — забываем паузу и ошибку, кэш текста оставляем.</summary>
+        public static void KeyChanged()
+        {
+            _pausedUntil = DateTime.MinValue;
+            _backoff = TimeSpan.FromMinutes(1);
+            SetKeyProblem(null);
+        }
+
+        private static void SetKeyProblem(string p)
+        {
+            if (KeyProblem == p) return;
+            KeyProblem = p;
+            KeyProblemChanged?.Invoke();
         }
 
         /// <summary>Отвязали Spotify — забываем найденные id (текст в кэше не секретный, его оставляем).</summary>
@@ -65,86 +91,167 @@ namespace Isle.Services
         /// <summary>
         /// Текст для трека, который играет в Spotify. Вся попытка (id трека + запрос) — не дольше 10 с.
         /// </summary>
+        /// <summary>Spicy Lyrics подключён: пользователь вставил свой ключ developer API.</summary>
+        public static bool Available => !string.IsNullOrEmpty(Key);
+
+        /// <summary>
+        /// Текст для играющего трека. Spotify привязан и играет он — берём точный id трека из Spotify; иначе (или если
+        /// Spotify ещё не переключился) ищем по названию, исполнителю и длительности и берём только точное совпадение.
+        /// Вся попытка — не дольше 12 с.
+        /// </summary>
         public static async Task<Result> TryGetAsync(MediaInfo m, bool retryQueued = false)
         {
             var res = new Result { Outcome = Outcome.Skipped };
-            if (m == null || !SpotifyAuth.IsLinked || !SpotifyAuth.IsSpotifyApp(m.SourceAppId)) return res;
+            if (!Available || m == null || string.IsNullOrWhiteSpace(m.Title)) return res;
             if (DateTime.UtcNow < _pausedUntil) { Journal.Debug("spicy", "пауза после отказа сервиса — сразу LRCLIB"); return res; }
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
             try
             {
                 var key = m.Artist + "|" + m.Title;
                 string id;
                 bool known;
                 lock (Ids) known = Ids.TryGetValue(key, out id);
+                bool spotify = SpotifyAuth.IsLinked && SpotifyAuth.IsSpotifyApp(m.SourceAppId);
                 if (!known)
                 {
-                    id = await SpotifyAuth.CurrentTrackIdAsync(m.Title, cts.Token);
-                    // запоминаем только найденный id: null бывает и временным (429, сбой сети, Spotify ещё не переключил
-                    // трек) — раньше он запоминался, и для этой песни Spicy больше не спрашивался до перезапуска
+                    if (spotify) id = await SpotifyAuth.CurrentTrackIdAsync(m.Title, cts.Token);
+                    if (id == null)
+                    {
+                        var (st, found) = await SearchAsync(m, cts.Token);
+                        if (st != 200 && st != 0) return Fail(res, st, "поиск");
+                        id = found;
+                    }
+                    // запоминаем только найденный id: «не нашли» бывает временным (Spotify ещё не переключил трек)
                     if (id != null) lock (Ids) Ids[key] = id;
                 }
-                if (id == null) { res.Outcome = Outcome.NoMatch; return res; }
+                if (id == null) { res.Outcome = spotify ? Outcome.NoMatch : Outcome.None; return res; }
                 res.TrackId = id;
                 lock (Cache)
                     if (Cache.TryGetValue(id, out var cached))
                     {
-                        res.Outcome = cached == null ? Outcome.None : Outcome.Ok;
-                        res.Lines = cached;
+                        res.Outcome = cached.Lines == null ? Outcome.None : Outcome.Ok;
+                        res.Lines = cached.Lines;
+                        res.Credit = cached.Credit;
                         return res;
                     }
 
-                var token = await SpotifyAuth.GetAccessTokenAsync(false, cts.Token);
-                if (token == null) { res.Outcome = Outcome.Failed; return res; }
-                var (status, data) = await QueryAsync(id, token, cts.Token);
-                if (status == 401)
-                {
-                    // как в самом Spicy Lyrics: токен уже не принимают — обновляем и пробуем ровно один раз
-                    var fresh = await SpotifyAuth.GetAccessTokenAsync(true, cts.Token);
-                    if (fresh != null && fresh != token) (status, data) = await QueryAsync(id, fresh, cts.Token);
-                }
-                Journal.Info("spicy", "запрос текста: " + status);
+                var (status, body, error) = await GetAsync("lyrics/" + Uri.EscapeDataString(id), cts.Token);
+                Journal.Info("spicy", "запрос текста: " + status + (error != null ? " " + error : ""));
                 switch (status)
                 {
                     case 200:
-                        var lines = Map(Unpack(data));
+                        SetKeyProblem(null);
+                        var lines = Map(body);
                         if (lines == null || lines.Count == 0)
                         {
                             // Static (без времени) или пусто — нам не подходит, запоминаем и берём LRCLIB
                             Journal.Info("spicy", "текст без разметки по времени — беру LRCLIB");
-                            lock (Cache) Cache[id] = null;
+                            lock (Cache) Cache[id] = (null, null);
                             res.Outcome = Outcome.None;
                             return res;
                         }
-                        lock (Cache) Cache[id] = lines;
+                        var credit = ReadCredit(body);
+                        lock (Cache) Cache[id] = (lines, credit);
                         _backoff = TimeSpan.FromMinutes(1);
                         res.Outcome = Outcome.Ok;
                         res.Lines = lines;
-                        Journal.Info("spicy", lines.Count + " строк, по словам: " + (lines.Exists(l => l.Words != null) ? "да" : "нет"));
+                        res.Credit = credit;
+                        Journal.Info("spicy", lines.Count + " строк, по словам: " + (lines.Exists(l => l.Words != null) ? "да" : "нет") + ", источник " + credit.Provider);
                         return res;
                     case 404:
-                        lock (Cache) Cache[id] = null;
+                        lock (Cache) Cache[id] = (null, null);
                         res.Outcome = Outcome.None;
                         return res;
-                    case 503:
-                        // сервер поставил трек в очередь — повторим один раз позже (LyricsState), пока покажем LRCLIB
-                        if (retryQueued) lock (Cache) Cache[id] = null;
-                        res.Outcome = Outcome.Queued;
+                    case 503 when !retryQueued:
+                        res.Outcome = Outcome.Queued; // временно — LyricsState спросит ещё раз позже
                         return res;
                     default:
-                        // 429, неизвестная версия клиента, 5xx и т. п. — не долбим сервис, пауза с ростом
-                        Pause(status == 400 || status == 403 || status == 426 ? TimeSpan.FromMinutes(30) : (TimeSpan?)null, status);
-                        res.Outcome = Outcome.Failed;
-                        return res;
+                        return Fail(res, status, error);
                 }
             }
             catch (Exception ex)
             {
-                Journal.Warn("spicy", "сбой: " + (ex is OperationCanceledException ? "не ответил за 10 с" : ex.GetType().Name));
+                Journal.Warn("spicy", "сбой: " + (ex is OperationCanceledException ? "не ответил за 12 с" : ex.GetType().Name));
                 Pause(null, 0);
                 res.Outcome = Outcome.Failed;
                 return res;
             }
+        }
+
+        private static Result Fail(Result res, int status, string error)
+        {
+            if (status == 401 || status == 403)
+            {
+                // ключ не принят (неверный, отозван, приложение на паузе) — до смены ключа не спрашиваем
+                SetKeyProblem(status == 401 ? "Ключ не принят" + (error != null ? " (" + error + ")" : "") : "Доступ закрыт" + (error != null ? " (" + error + ")" : ""));
+                Pause(TimeSpan.FromHours(6), status);
+            }
+            else Pause(status == 400 ? TimeSpan.FromMinutes(30) : (TimeSpan?)null, status);
+            res.Outcome = Outcome.Failed;
+            return res;
+        }
+
+        /// <summary>Поиск трека: только tier «exact» (другая версия песни — другие тайминги).</summary>
+        private static async Task<(int, string)> SearchAsync(MediaInfo m, CancellationToken ct)
+        {
+            var q = "tracks/search?title=" + Uri.EscapeDataString(m.Title.Trim()) + "&limit=3";
+            if (!string.IsNullOrWhiteSpace(m.Artist)) q += "&artist=" + Uri.EscapeDataString(m.Artist.Trim());
+            if (m.Duration > TimeSpan.FromSeconds(5)) q += "&duration=" + m.Duration.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+            var (status, body, error) = await GetAsync(q, ct);
+            if (status != 200) { Journal.Info("spicy", "поиск: " + status + (error != null ? " " + error : "")); return (status, null); }
+            if (body?["results"] is JsonArray rs && rs.Count > 0 && rs[0] is JsonObject first)
+            {
+                var tier = Str(first["tier"]);
+                Journal.Info("spicy", "поиск: первый результат «" + tier + "»");
+                if (tier == "exact") return (200, Str(first["id"]));
+            }
+            else Journal.Info("spicy", "поиск: ничего");
+            return (200, null);
+        }
+
+        /// <summary>GET к developer API. Возвращает HTTP-статус, Body из конверта и код ошибки (Body.error), если он есть.</summary>
+        private static async Task<(int, JsonNode, string)> GetAsync(string path, CancellationToken ct)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, Api + "/" + path);
+            req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + Key);
+            using var resp = await Http.SendAsync(req, ct);
+            int status = (int)resp.StatusCode;
+            if ((status == 429 || status == 503) && resp.Headers.RetryAfter?.Delta is TimeSpan ra && ra > _backoff) _backoff = ra;
+            JsonNode body = null;
+            string error = null;
+            try
+            {
+                var root = JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
+                body = root?["Body"];
+                if (status != 200) error = Str(body?["error"]);
+            }
+            catch { }
+            return (status, body, error);
+        }
+
+        private static Credit ReadCredit(JsonNode body)
+        {
+            var src = Str(body?["source"]);
+            var c = new Credit
+            {
+                Provider = src switch { "apple_music" => "Apple Music", "spotify" => "Spotify", _ => "Spicy Lyrics" },
+            };
+            if (src == "spicy_lyrics" && body?["UploadAttribution"] is JsonObject at)
+            {
+                c.Uploader = ReadPerson(at["Uploader"]);
+                c.Maker = ReadPerson(at["Maker"]);
+            }
+            return c;
+        }
+
+        private static Person ReadPerson(JsonNode n)
+        {
+            var name = Str(n?["username"]);
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            var url = Str(n["url"]);
+            // ссылку открываем только на профиль сервиса
+            if (url == null || !url.StartsWith("https://spicylyrics.org/", StringComparison.OrdinalIgnoreCase)) url = null;
+            return new Person { Name = name, Url = url };
         }
 
         private static void Pause(TimeSpan? fixedFor, int status)
@@ -153,51 +260,6 @@ namespace Isle.Services
             if (fixedFor == null) _backoff = TimeSpan.FromTicks(Math.Min(TimeSpan.FromMinutes(15).Ticks, _backoff.Ticks * 2));
             _pausedUntil = DateTime.UtcNow + d;
             Journal.Info("spicy", "пауза " + (int)d.TotalMinutes + " мин" + (status > 0 ? " (статус " + status + ")" : ""));
-        }
-
-        /// <summary>
-        /// Запрос как у самого Spicy Lyrics (src/utils/API/Query.ts + fetchLyrics.ts). Возвращает httpStatus из
-        /// конверта ответа (или транспортный статус, если до конверта не дошло) и поле data.
-        /// </summary>
-        private static async Task<(int, JsonNode)> QueryAsync(string trackId, string token, CancellationToken ct)
-        {
-            var ver = Version;
-            var body = new JsonObject
-            {
-                ["queries"] = new JsonArray(new JsonObject
-                {
-                    ["operation"] = "lyrics",
-                    ["variables"] = new JsonObject { ["id"] = trackId, ["auth"] = "SpicyLyrics-WebAuth" },
-                }),
-                ["client"] = new JsonObject { ["version"] = ver },
-            };
-            using var req = new HttpRequestMessage(HttpMethod.Post, Api)
-            {
-                Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-            };
-            req.Headers.TryAddWithoutValidation("X-mode", "2");
-            req.Headers.TryAddWithoutValidation("SpicyLyrics-Version", ver);
-            req.Headers.TryAddWithoutValidation("SpicyLyrics-WebAuth", "Bearer " + token);
-            using var resp = await Http.SendAsync(req, ct);
-            int transport = (int)resp.StatusCode;
-            if (!resp.IsSuccessStatusCode)
-            {
-                if (transport == 429 && resp.Headers.RetryAfter?.Delta is TimeSpan ra && ra > _backoff) _backoff = ra;
-                return (transport, null);
-            }
-            var root = JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
-            // ответ: { queries: [ { operation, operationId: "0", result: { httpStatus, data, format } } ] }
-            if (root?["queries"] is not JsonArray qs) return (0, null);
-            foreach (var q in qs)
-            {
-                var opId = q?["operationId"]?.ToString();
-                if (opId != null && opId != "0") continue;
-                var result = q?["result"];
-                if (result == null) continue;
-                int st = result["httpStatus"] is JsonValue hv && hv.TryGetValue<int>(out var s) ? s : 0;
-                return (st, result["data"]);
-            }
-            return (0, null);
         }
 
         // ---------- распаковка SLObjPack (src/utils/objpack.ts) ----------
@@ -376,6 +438,7 @@ namespace Isle.Services
                         At = double.IsNaN(ls) ? words[0].At : TimeSpan.FromSeconds(Math.Min(ls, words[0].At.TotalSeconds)),
                         Text = System.Text.RegularExpressions.Regex.Replace(text.ToString(), @"\s+", " ").Trim(),
                         Words = words,
+                        OppositeAligned = vg["OppositeAligned"] is JsonValue oa && oa.GetValueKind() == JsonValueKind.True,
                     };
                     if (!double.IsNaN(le)) line.End = TimeSpan.FromSeconds(le);
                     list.Add(line);
@@ -389,7 +452,7 @@ namespace Isle.Services
                     var t = (Str(vg["Text"]) ?? "").Trim();
                     double st = Num(vg["StartTime"]), en = Num(vg["EndTime"]);
                     if (t.Length == 0 || double.IsNaN(st)) continue;
-                    var line = new LyricLine { At = TimeSpan.FromSeconds(st), Text = t };
+                    var line = new LyricLine { At = TimeSpan.FromSeconds(st), Text = t, OppositeAligned = vg["OppositeAligned"] is JsonValue oa && oa.GetValueKind() == JsonValueKind.True };
                     if (!double.IsNaN(en) && en > st) line.End = TimeSpan.FromSeconds(en);
                     list.Add(line);
                 }

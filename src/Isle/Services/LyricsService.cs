@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
@@ -185,6 +185,8 @@ namespace Isle.Services
         /// <summary>Откуда текст: «Spicy Lyrics» или «LRCLIB» (пусто — текста нет). Для подписи на «Главной».</summary>
         public string Source { get; private set; } = "";
         public const string SourceSpicy = "Spicy Lyrics", SourceLrclib = "LRCLIB";
+        /// <summary>Подпись для текста из Spicy Lyrics (провайдер, автор и составитель синхронизации); иначе null.</summary>
+        public SpicyLyrics.Credit Credit { get; private set; }
         public event Action Changed;
 
         private readonly MediaService _media;
@@ -210,6 +212,14 @@ namespace Isle.Services
             _wasPlaying = playing;
         }
 
+        /// <summary>Загрузить текст текущего трека заново (например, вставили ключ Spicy Lyrics).</summary>
+        public void Reload()
+        {
+            Key = null;
+            Loading = false;
+            _ = LoadAsync(_media.Current);
+        }
+
         public async Task LoadAsync(MediaInfo m)
         {
             if (!AppSettings.Current.LyricsEnabled || m == null || string.IsNullOrEmpty(m.Title)) { Set(null, ""); return; }
@@ -224,11 +234,11 @@ namespace Isle.Services
 
             // привязан Spotify и играет именно он — сначала Spicy Lyrics (по слогам); любая неудача — LRCLIB как раньше
             SpicyLyrics.Result spicy = null;
-            if (SpotifyAuth.IsLinked && SpotifyAuth.IsSpotifyApp(m.SourceAppId))
+            if (SpicyLyrics.Available)
             {
                 try { spicy = await SpicyLyrics.TryGetAsync(m); } catch { spicy = null; }
                 if (key != Key) return;
-                if (spicy?.Outcome == SpicyLyrics.Outcome.Ok && spicy.Lines != null) { Set(spicy.Lines, key, SourceSpicy); return; }
+                if (spicy?.Outcome == SpicyLyrics.Outcome.Ok && spicy.Lines != null) { Set(spicy.Lines, key, SourceSpicy, spicy.Credit); return; }
                 // сразу после смены трека (особенно на паузе) Spotify Web API ещё отдаёт прошлую песню —
                 // пока показываем LRCLIB, а Spicy переспрашиваем через 3 и 8 с и когда трек заиграет
                 if (spicy?.Outcome == SpicyLyrics.Outcome.NoMatch)
@@ -264,7 +274,7 @@ namespace Isle.Services
             SpicyLyrics.Result r;
             try { r = await SpicyLyrics.TryGetAsync(m, retryQueued: true); } catch { return; }
             if (key != Key || Loading) return;
-            if (r?.Outcome == SpicyLyrics.Outcome.Ok && r.Lines != null) Set(r.Lines, key, SourceSpicy);
+            if (r?.Outcome == SpicyLyrics.Outcome.Ok && r.Lines != null) Set(r.Lines, key, SourceSpicy, r.Credit);
         }
 
         private async Task ScheduleSpicyRetriesAsync(MediaInfo m, string key)
@@ -299,7 +309,7 @@ namespace Isle.Services
                 case SpicyLyrics.Outcome.Ok when r.Lines != null:
                     _spicyRetryKey = null;
                     Journal.Info("lyrics", "Spicy: текст нашёлся со второй попытки — заменяю " + (string.IsNullOrEmpty(Source) ? "пустой" : Source));
-                    Set(r.Lines, key, SourceSpicy);
+                    Set(r.Lines, key, SourceSpicy, r.Credit);
                     break;
                 case SpicyLyrics.Outcome.NoMatch:
                     break; // ждём следующего повода
@@ -313,10 +323,11 @@ namespace Isle.Services
             }
         }
 
-        private void Set(List<LyricLine> lines, string key, string source = "")
+        private void Set(List<LyricLine> lines, string key, string source = "", SpicyLyrics.Credit credit = null)
         {
             Lines = lines;
             Source = lines == null || lines.Count == 0 ? "" : source;
+            Credit = Source == SourceSpicy ? credit : null;
             Key = key;
             Loading = false;
             Changed?.Invoke();
