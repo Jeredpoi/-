@@ -54,7 +54,8 @@ namespace Isle.Views
             foreach (var pb in new[] { AiKey, VoiceKey, ObsPass, SpicyKeyBox }) HookPlaceholder(pb);
             SpicyKeyBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { OnSpicySave(SpicyKeyBox, null); e.Handled = true; } };
             Services.SpicyLyrics.KeyProblemChanged += OnSpicyProblem;
-            Closed += (_, __) => Services.SpicyLyrics.KeyProblemChanged -= OnSpicyProblem;
+            Services.SpicyLyrics.LimitChanged += OnSpicyProblem;
+            Closed += (_, __) => { Services.SpicyLyrics.KeyProblemChanged -= OnSpicyProblem; Services.SpicyLyrics.LimitChanged -= OnSpicyProblem; };
             UpdateSpicyStatus();
             RenderUpdate();
         }
@@ -1236,16 +1237,38 @@ namespace Isle.Views
 
         private void UpdateSpicyStatus()
         {
-            bool has = !string.IsNullOrEmpty(S.SpicyKeyProtected);
+            bool own = !string.IsNullOrEmpty(S.SpicyKeyProtected);
             var problem = Services.SpicyLyrics.KeyProblem;
-            SpicyStatus.Text = !has ? "" : problem ?? "Ключ сохранён — текст берётся из Spicy Lyrics, если он там есть.";
+            var limit = Services.SpicyLyrics.LimitText;
+            SpicyBadge.Text = problem != null ? "ошибка ключа" : own ? "свой ключ" : Services.SpicyLyrics.Available ? "встроенный ключ" : "";
+            SpicyBadge.Foreground = problem != null ? (Brush)FindResource("Danger") : (Brush)FindResource("SNote");
+            SpicyStatus.Text = problem ?? ((own ? "Свой ключ сохранён." : "Сейчас — встроенный ключ Isle.") + (limit != null ? " " + limit : ""));
             SpicyStatus.Foreground = problem != null ? (Brush)FindResource("Danger") : (Brush)FindResource("SNote");
+        }
+
+        private void OnSpicyToggle(object sender, MouseButtonEventArgs e)
+        {
+            bool open = SpicyBody.Visibility != Visibility.Visible;
+            SpicyBody.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            SpicyChevronRot.BeginAnimation(RotateTransform.AngleProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(open ? 90 : 0, TimeSpan.FromMilliseconds(160)) { EasingFunction = new System.Windows.Media.Animation.CubicEase() });
+        }
+
+        private void OnSpicyCopySite(object sender, RoutedEventArgs e)
+        {
+            try { Clipboard.SetText("https://developers.spicylyrics.org/dashboard/applications"); } catch { }
         }
 
         private void OnSpicySave(object sender, RoutedEventArgs e)
         {
             var k = SpicyKeyBox.Password.Trim();
             if (k.Length == 0 && string.IsNullOrEmpty(S.SpicyKeyProtected)) return;
+            if (k.Length > 0 && !k.StartsWith("sl_", StringComparison.Ordinal))
+            {
+                SpicyStatus.Text = "Это не похоже на ключ Spicy Lyrics (начинается с sl_sk_ или sl_pk_).";
+                SpicyStatus.Foreground = (Brush)FindResource("Danger");
+                return;
+            }
             // пустое поле + «Сохранить» — убрать ключ
             S.SpicyKey = k;
             S.Save();
@@ -1253,7 +1276,7 @@ namespace Isle.Views
             Services.SpicyLyrics.KeyChanged();
             AppHost.Lyrics?.Reload();
             UpdateSpicyStatus();
-            if (k.Length == 0) SpicyStatus.Text = "Ключ удалён — текст из LRCLIB.";
+            if (k.Length == 0) SpicyStatus.Text = "Свой ключ удалён — снова встроенный ключ Isle.";
         }
     }
 }

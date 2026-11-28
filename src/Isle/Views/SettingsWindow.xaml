@@ -280,6 +280,24 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
+        <!-- текст, который можно выделить и скопировать (инструкции): TextBox только для чтения без рамки -->
+        <Style x:Key="SelectableNote" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource SNote}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="IBeam"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="RowNote" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="{DynamicResource SRowNote}"/>
@@ -793,23 +811,39 @@
                         <Border Style="{StaticResource Card}">
                             <v:SpotifyLinkPanel Margin="16,12"/>
                         </Border>
-                        <!-- Spicy Lyrics — отдельно от Spotify: свой ключ developer API (developers.spicylyrics.org) -->
-                        <TextBlock Style="{StaticResource SectionLabel}" Text="SPICY LYRICS"/>
+                        <!-- Spicy Lyrics — отдельно от Spotify. Свёрнуто: название и статус; развернул — инструкция и свой ключ.
+                             По умолчанию работает встроенный публичный ключ Isle, свой — по желанию (отдельный лимит). -->
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="ТЕКСТ ПЕСЕН"/>
                         <Border Style="{StaticResource Card}">
-                            <StackPanel Margin="16,12">
-                                <DockPanel>
-                                    <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Получить ключ" Click="OnSpicySite"/>
-                                    <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <TextBlock Style="{StaticResource RowTitle}" Text="Текст по слогам"/>
-                                        <TextBlock Style="{StaticResource RowNote}" TextWrapping="Wrap"
-                                                   Text="Создай приложение на сайте и вставь секретный ключ. Без ключа — LRCLIB."/>
+                            <StackPanel>
+                                <Border x:Name="SpicyHeader" Background="Transparent" Cursor="Hand" Padding="16,12" MouseLeftButtonUp="OnSpicyToggle">
+                                    <DockPanel>
+                                        <h:Icon x:Name="SpicyChevron" DockPanel.Dock="Left" Data="M9 6l6 6-6 6" Width="14" Height="14" StrokeWidth="2"
+                                                Foreground="{DynamicResource SNote}" RenderTransformOrigin="0.5,0.5" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <h:Icon.RenderTransform><RotateTransform x:Name="SpicyChevronRot"/></h:Icon.RenderTransform>
+                                        </h:Icon>
+                                        <TextBlock x:Name="SpicyBadge" DockPanel.Dock="Right" Style="{StaticResource RowNote}" VerticalAlignment="Center"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource RowTitle}" Text="Spicy Lyrics"/>
+                                            <TextBlock Style="{StaticResource RowNote}" Text="Текст по слогам. Нет текста — LRCLIB."/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <StackPanel x:Name="SpicyBody" Margin="40,0,16,14" Visibility="Collapsed">
+                                    <TextBlock Style="{StaticResource RowNote}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                               Text="Работает сразу. Свой ключ — по желанию: отдельный лимит запросов."/>
+                                    <!-- инструкция выделяется и копируется (TextBox только для чтения) -->
+                                    <TextBox Style="{StaticResource SelectableNote}" Text="1. Открой developers.spicylyrics.org → Dashboard → Applications → Create application.&#10;2. Скопируй секретный ключ sl_sk_… (его показывают один раз).&#10;3. Вставь ниже и нажми «Сохранить». Пустое поле + «Сохранить» — вернуть встроенный ключ."/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button Style="{StaticResource SFlat}" Content="Открыть кабинет" Click="OnSpicySite"/>
+                                        <Button Style="{StaticResource SQuiet}" Margin="6,0,0,0" Content="Скопировать адрес" Click="OnSpicyCopySite"/>
                                     </StackPanel>
-                                </DockPanel>
-                                <DockPanel Margin="0,10,0,0">
-                                    <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Margin="8,0,0,0" Content="Сохранить" Click="OnSpicySave"/>
-                                    <PasswordBox x:Name="SpicyKeyBox" Tag="sl_sk_…"/>
-                                </DockPanel>
-                                <TextBlock x:Name="SpicyStatus" Style="{StaticResource RowNote}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    <DockPanel Margin="0,10,0,0">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Margin="8,0,0,0" Content="Сохранить" Click="OnSpicySave"/>
+                                        <PasswordBox x:Name="SpicyKeyBox" Tag="Свой ключ sl_sk_…"/>
+                                    </DockPanel>
+                                    <TextBlock x:Name="SpicyStatus" Style="{StaticResource RowNote}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
