@@ -808,6 +808,7 @@ namespace Isle.Helpers
             public double Start, End, X;
             public double Op = -1, Y = double.NaN;
             public int Mask = -1;
+            public double ClipW = -1, ClipH = -1;
             public readonly LinearGradientBrush FadeRight = MakeFade(false), FadeBoth = MakeFade(true); // свои у ячейки: ширина окна своя
         }
 
@@ -834,8 +835,10 @@ namespace Isle.Helpers
         public static PillLyric Still(List<LyricLine> lines, TimeSpan pos, string fallback = "", double width = 300, double height = 18)
         {
             var p = new PillLyric { Width = width, Height = height };
-            for (int i = 0; i < 2; i++)
+            // три прохода: ячейку показывают внутри Render (была Collapsed) — её раскладка догоняет на следующем
+            for (int i = 0; i < 3; i++)
             {
+                p.InvalidateMeasure();
                 p.Measure(new Size(width, height));
                 p.Arrange(new Rect(0, 0, width, height));
                 p.Render(lines, pos, fallback, snap: true);
@@ -854,7 +857,6 @@ namespace Isle.Helpers
             var box = new Canvas { Visibility = Visibility.Collapsed };
             box.Children.Add(line.Flow);
             // обрезаем только по бокам: сверху и снизу место для подъёма и свечения
-            box.SizeChanged += (_, e) => box.Clip = new RectangleGeometry(new Rect(0, -12, e.NewSize.Width, e.NewSize.Height + 24));
             var dots = new GapDots(5, 4, _pal.Full) { Visibility = Visibility.Collapsed, Margin = new Thickness(1, 0, 0, 0) };
             var shift = new TranslateTransform();
             var root = new Grid { RenderTransform = shift };
@@ -928,26 +930,44 @@ namespace Isle.Helpers
             else _glow.Move(null, 0);
         }
 
-        /// <summary>Строка шире пилюли — едет влево так, чтобы поющееся слово оставалось на виду.</summary>
-        private static void ScrollToSinging(Slot s, double dt, bool snap)
+        /// <summary>
+        /// Строка шире пилюли — едет влево так, чтобы поющееся слово оставалось на виду.
+        /// Размер окна берём у самой пилюли, а не у Canvas ячейки: ячейку только что показали (была Collapsed),
+        /// и до следующего прохода раскладки её ActualWidth = 0 — тогда маска затухания вставала шириной в 1 px
+        /// и прятала всю строку. Маска и её ширина сверяются каждый кадр; без известной ширины маски нет вовсе.
+        /// </summary>
+        private void ScrollToSinging(Slot s, double dt, bool snap)
         {
             var fl = s.Line.Flow;
-            double viewW = s.Box.ActualWidth, h = s.Box.ActualHeight;
-            double top = Math.Round((h - fl.DesiredSize.Height) / 2);
-            if (Math.Abs(Canvas.GetTop(fl) - top) > 0.4 || double.IsNaN(Canvas.GetTop(fl))) Canvas.SetTop(fl, top);
-            double over = Math.Max(0, fl.ContentWidth - viewW);
+            double viewW = ActualWidth > 0 ? ActualWidth : s.Box.ActualWidth;
+            double h = ActualHeight > 0 ? ActualHeight : s.Box.ActualHeight;
+            if (double.IsNaN(viewW)) viewW = 0;
+            double top = h > 0 ? Math.Round((h - fl.DesiredSize.Height) / 2) : 0;
+            double curTop = Canvas.GetTop(fl);
+            if (double.IsNaN(curTop) || Math.Abs(curTop - top) > 0.4) Canvas.SetTop(fl, top);
+            // обрезка только по бокам (сверху и снизу место для подъёма и свечения) — пересоздаётся лишь при смене размера
+            if (viewW > 0 && (s.ClipW != viewW || s.ClipH != h))
+            {
+                s.ClipW = viewW; s.ClipH = h;
+                s.Box.Clip = new RectangleGeometry(new Rect(0, -12, viewW, Math.Max(0, h) + 24));
+            }
+
+            double over = viewW > 0 ? Math.Max(0, fl.ContentWidth - viewW) : 0;
             double target = over <= 0 ? 0 : Math.Clamp(s.Line.ActiveRight + 28 - viewW, 0, over);
             double k = snap ? 1 : 1 - Math.Pow(1 - 0.15, dt * 30);
             double x = s.X + (target - s.X) * k;
             if (Math.Abs(x - target) < 0.2) x = target;
             if (x != s.X) { s.X = x; s.Scroll.X = -Math.Round(x * 2) / 2; }
+
             int mask = over <= 0 ? 0 : x > 1 ? 2 : 1;
-            if (viewW > 0 && Math.Abs(s.FadeRight.EndPoint.X - viewW) > 0.5)
+            if (mask != 0 && Math.Abs(s.FadeRight.EndPoint.X - viewW) > 0.5)
             {
                 s.FadeRight.EndPoint = new Point(viewW, 0);
                 s.FadeBoth.EndPoint = new Point(viewW, 0);
             }
-            if (mask != s.Mask) { s.Mask = mask; s.Box.OpacityMask = mask == 0 ? null : mask == 1 ? s.FadeRight : s.FadeBoth; }
+            var want = mask == 0 ? null : mask == 1 ? s.FadeRight : s.FadeBoth;
+            s.Mask = mask;
+            if (!ReferenceEquals(s.Box.OpacityMask, want)) s.Box.OpacityMask = want;
         }
 
         private void Prepare(Slot s, List<LyricLine> lines, int idx, LyricLine line, string fallback)
@@ -965,7 +985,9 @@ namespace Isle.Helpers
             s.Plain.Visibility = s.Kind == 0 ? Visibility.Visible : Visibility.Collapsed;
             s.Box.Visibility = s.Kind == 1 ? Visibility.Visible : Visibility.Collapsed;
             s.Dots.Visibility = s.Kind == 2 ? Visibility.Visible : Visibility.Collapsed;
-            if (s.Kind == 1) { s.Line.Flow.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity)); s.Mask = -1; }
+            // новая строка начинает без маски затухания: её выбирает ScrollToSinging, когда известна ширина
+            s.Box.OpacityMask = null; s.Mask = 0;
+            if (s.Kind == 1) s.Line.Flow.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         }
 
         private static void Place(Slot s, double op, double y)
