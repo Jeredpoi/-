@@ -180,13 +180,22 @@ namespace Isle.Services
                 Journal.Info("vpn", (active ? "подключён: " + Name : "отключён") + (first ? " (при запуске)" : ""));
                 // Плашку показываем сразу. Раньше она ждала страну по IP, а в момент отключения сеть
                 // перестраивается: запрос висел до таймаута, и «VPN отключён» не появлялось вовсе.
-                if (!first) ShowToast(active);
+                // Одна плашка, а не две («VPN подключён», а следом «… · Нидерланды»): при подключении ждём страну
+                // до 3,5 с и показываем сразу с ней; не успела — плашка без страны, а страна просто появится в карточке.
+                // При отключении плашка сразу: сеть перестраивается, и запрос страны может висеть до таймаута.
                 if (active || !first)
                 {
-                    (Country, CountryName, Ip) = await LookupCountry();
-                    if (Active != active) return; // пока узнавали страну, состояние снова поменялось
+                    var lookup = LookupCountry();
+                    if (active && !first) await Task.WhenAny(lookup, Task.Delay(3500));
+                    if (lookup.IsCompleted && Active == active) (Country, CountryName, Ip) = lookup.Result;
+                    if (!first) ShowToast(active);
+                    if (!lookup.IsCompleted)
+                    {
+                        var r = await lookup;
+                        if (Active != active) return; // пока узнавали страну, состояние снова поменялось
+                        (Country, CountryName, Ip) = r;
+                    }
                     Changed?.Invoke();
-                    if (!first && CountryName.Length > 0) ShowToast(active); // та же плашка, уже со страной
                 }
             }
             finally
