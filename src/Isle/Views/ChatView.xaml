@@ -62,7 +62,7 @@
                             <h:Icon Kind="Plus" Width="15" Height="15"/>
                         </Button>
                         <TextBox x:Name="Input" Grid.Column="1" Tag="Напиши сообщение" AcceptsReturn="True" TextWrapping="Wrap" Background="Transparent" BorderBrush="Transparent"
-                                 MaxHeight="110" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey" Padding="2,11,2,11" VerticalAlignment="Center"/>
+                                 MaxHeight="110" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey" Padding="2,10,2,10" VerticalAlignment="Center" VerticalContentAlignment="Center"/>
                         <Button x:Name="MicBtn" Grid.Column="2" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="0,0,5,5" VerticalAlignment="Bottom" Click="OnMic" ToolTip="Надиктовать голосом">
                             <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
                         </Button>
