@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -270,7 +270,10 @@ namespace Isle.Helpers
                 if (line.Words[w].End is TimeSpan wEnd && wEnd.TotalSeconds > ws)
                     we = w + 1 < wc ? Math.Min(we, wEnd.TotalSeconds) : wEnd.TotalSeconds; // точный конец слога (Spicy)
                 else
-                    we = Math.Min(we, ws + Math.Max(0.35, len * 0.3 + 0.4)); // конец неизвестен — не тянем бесконечно
+                    // конец неизвестен (LRCLIB даёт только начала слов) — слово тянется до следующего: протяжные слова
+                    // поются медленно, и раньше заливка обрывалась на ~0,3 с на букву и «убегала» вперёд голоса.
+                    // Ограничиваем только явные паузы внутри строки (дыхание, проигрыш) — там слово гаснет за 3,5 с.
+                    we = Math.Min(we - 0.03, ws + Math.Max(3.5, len * 0.45 + 1.2));
                 if (we <= ws) we = ws + 0.2;
                 list.Add(new Seg { Text = piece, Ws = ws, We = we, NewWord = newWord });
                 pos = at + len;

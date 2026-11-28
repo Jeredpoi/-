@@ -1097,10 +1097,16 @@ namespace Isle
             if (AppSettings.Current.MusicPill == "lyrics")
             {
                 // название как запасной текст — строку собираем, только когда сменился трек (не каждый кадр)
-                if (!ReferenceEquals(_pillFallbackFor, m))
+                // текст из Spicy Lyrics — до первой строки здесь же и подпись (условие сервиса: рядом с текстом)
+                var credit = AppHost.Lyrics?.Credit;
+                if (!ReferenceEquals(_pillFallbackFor, m) || !ReferenceEquals(_pillCreditFor, credit))
                 {
                     _pillFallbackFor = m;
+                    _pillCreditFor = credit;
                     _pillFallback = string.IsNullOrEmpty(m.Artist) ? m.Title : m.Title + " — " + m.Artist;
+                    if (credit != null)
+                        _pillFallback += " · Spicy Lyrics" + (credit.Provider != "Spicy Lyrics" ? " · " + credit.Provider : "")
+                            + (credit.Uploader != null ? " · " + credit.Uploader.Name : "") + (credit.Maker != null ? " · " + credit.Maker.Name : "");
                 }
                 MiniLyric.Render(AppHost.Lyrics?.Lines, m.LivePosition, _pillFallback, _frameDt);
             }
@@ -1108,6 +1114,7 @@ namespace Isle
         }
 
         private Services.MediaInfo _pillFallbackFor;
+        private Services.SpicyLyrics.Credit _pillCreditFor;
         private string _pillFallback;
 
         private void OnMiniPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();

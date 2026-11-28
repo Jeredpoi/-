@@ -1,4 +1,4 @@
-<UserControl x:Class="Isle.Views.SpotifyLinkPanel"
+﻿<UserControl x:Class="Isle.Views.SpotifyLinkPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Необязательная привязка Spotify: текст песен по слогам из Spicy Lyrics и управление Spotify (Web API). Блок самодостаточный —
@@ -19,7 +19,7 @@
     <StackPanel>
         <!-- заголовок + подсказка с шагами настройки -->
         <DockPanel LastChildFill="False">
-            <TextBlock DockPanel.Dock="Left" Style="{StaticResource PTitle}" Text="Spotify: текст песен и управление"/>
+            <TextBlock DockPanel.Dock="Left" Style="{StaticResource PTitle}" Text="Spotify: управление музыкой"/>
             <Border x:Name="InfoBadge" DockPanel.Dock="Left" Width="16" Height="16" CornerRadius="8" Margin="8,0,0,0" VerticalAlignment="Center"
                     BorderThickness="1" BorderBrush="{DynamicResource Muted}" Background="Transparent" Cursor="Help"
                     ToolTipService.InitialShowDelay="150" ToolTipService.ShowDuration="60000">
@@ -35,7 +35,7 @@
             </Border>
         </DockPanel>
 
-        <TextBlock Style="{StaticResource PNote}" Margin="0,3,0,0" Text="Необязательно. Без привязки текст берётся из LRCLIB, а кнопки управляют плеером через Windows. С привязкой (нужен Premium) работают повтор, перемешивание и громкость самого Spotify."/>
+        <TextBlock Style="{StaticResource PNote}" Margin="0,3,0,0" Text="Необязательно. Без привязки кнопки управляют плеером через Windows. С привязкой (нужен Premium) работают повтор, перемешивание и громкость самого Spotify."/>
 
         <!-- статус -->
         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
@@ -68,10 +68,5 @@
 
         <TextBlock x:Name="ErrorText" Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource Danger}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
-        <!-- благодарность автору сервиса -->
-        <TextBlock Margin="0,10,0,0" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap">
-            <Run Text="Текст по слогам — "/><Hyperlink NavigateUri="https://github.com/Spikerko/spicy-lyrics" RequestNavigate="OnCredit"
-                       Foreground="{DynamicResource Muted}" ToolTip="github.com/Spikerko/spicy-lyrics">Spicy Lyrics · Spikerko</Hyperlink>
-        </TextBlock>
     </StackPanel>
 </UserControl>
