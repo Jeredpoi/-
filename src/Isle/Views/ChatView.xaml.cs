@@ -273,10 +273,16 @@ namespace Isle.Views
         private void InsertVoice(string text)
         {
             _busyHide?.Stop();
-            RecordBar.Visibility = Visibility.Collapsed;
+            HideRecordBar();
             Input.Text = (Input.Text.Length > 0 ? Input.Text.TrimEnd() + " " : "") + text;
             Input.CaretIndex = Input.Text.Length;
             Input.Focus();
+        }
+
+        private void HideRecordBar()
+        {
+            RecordBar.Visibility = Visibility.Collapsed;
+            Input.Visibility = AttachBtn.Visibility = MicBtn.Visibility = Visibility.Visible;
         }
 
         private void OnMic(object s, RoutedEventArgs e)
@@ -294,7 +300,7 @@ namespace Isle.Views
             _ = AppHost.Voice.StopAsync(InsertVoice);
             _busyHide?.Stop();
             _busyHide = new DispatcherTimer { Interval = TimeSpan.FromSeconds(25) };
-            _busyHide.Tick += (_, __) => { _busyHide.Stop(); RecordBar.Visibility = Visibility.Collapsed; };
+            _busyHide.Tick += (_, __) => { _busyHide.Stop(); HideRecordBar(); };
             _busyHide.Start();
         }
 
@@ -302,7 +308,7 @@ namespace Isle.Views
         {
             _busyHide?.Stop();
             AppHost.Voice.Cancel();
-            RecordBar.Visibility = Visibility.Collapsed;
+            HideRecordBar();
         }
 
         /// <summary>Запись идёт — поле ввода становится полосой записи: ✕, красная точка, таймер, волна, ✓.</summary>
@@ -315,6 +321,7 @@ namespace Isle.Views
                 ChatWave.Clear(); ChatWave.Fill = (Brush)FindResource("Accent");
                 ChatWave.Visibility = Visibility.Visible; RecBusy.Visibility = Visibility.Collapsed; RecDone.IsEnabled = true;
                 RecordBar.Visibility = Visibility.Visible;
+                Input.Visibility = AttachBtn.Visibility = MicBtn.Visibility = Visibility.Hidden; // полоса записи вместо поля (без своей подложки — углы поля круглые)
                 Composer.BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0xF8, 0x71, 0x71));
                 _recTick.Start();
             }
@@ -323,7 +330,7 @@ namespace Isle.Views
                 _recTick.Stop();
                 _recMine = false;
                 Composer.SetResourceReference(Border.BorderBrushProperty, "CardBorder");
-                if (RecBusy.Visibility != Visibility.Visible) RecordBar.Visibility = Visibility.Collapsed;
+                if (RecBusy.Visibility != Visibility.Visible) HideRecordBar();
             }
         }
 
