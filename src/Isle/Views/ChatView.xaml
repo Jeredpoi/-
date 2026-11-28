@@ -10,8 +10,8 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <!-- история разговоров — один кружок: буква текущего разговора (у нового — значок часов); клик — панель над ним -->
-            <Border x:Name="HistoryBadge" Width="40" Height="40" CornerRadius="20" VerticalAlignment="Bottom" Cursor="Hand"
-                    Background="{DynamicResource ChipBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1"
+            <Border x:Name="HistoryBadge" Width="44" Height="44" CornerRadius="22" VerticalAlignment="Bottom" Cursor="Hand"
+                    Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1"
                     MouseLeftButtonUp="OnHistory" ToolTip="Разговоры · Ctrl+N — новый">
                 <Grid>
                     <TextBlock x:Name="BadgeLetter" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
@@ -42,7 +42,8 @@
             </Popup>
 
             <!-- поле ввода с вложениями: сверху карточки файлов и картинок, ниже «+», текст и микрофон -->
-            <Border x:Name="Composer" Grid.Column="1" Margin="8,0" CornerRadius="14" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+            <!-- все три элемента строки одной высоты (44) и выровнены по низу: кружок, поле-пилюля, круглая «отправить» -->
+            <Border x:Name="Composer" Grid.Column="1" Margin="10,0" CornerRadius="22" MinHeight="44" VerticalAlignment="Bottom" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -51,22 +52,22 @@
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="VisionHint" Grid.Row="0" Visibility="Collapsed" Margin="12,8,12,0" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
                     <WrapPanel x:Name="AttachStrip" Grid.Row="1" Margin="8,8,8,0" Visibility="Collapsed"/>
-                    <Grid Grid.Row="2" MinHeight="38">
+                    <Grid Grid.Row="2" MinHeight="42">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Button x:Name="AttachBtn" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="4,0,0,3" VerticalAlignment="Bottom" Click="OnAttach" ToolTip="Прикрепить файл или картинку (или перетащи сюда, Ctrl+V — из буфера)">
+                        <Button x:Name="AttachBtn" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="5,0,0,5" VerticalAlignment="Bottom" Click="OnAttach" ToolTip="Прикрепить файл или картинку (или перетащи сюда, Ctrl+V — из буфера)">
                             <h:Icon Kind="Plus" Width="15" Height="15"/>
                         </Button>
                         <TextBox x:Name="Input" Grid.Column="1" Tag="Напиши сообщение" AcceptsReturn="True" TextWrapping="Wrap" Background="Transparent" BorderBrush="Transparent"
-                                 MaxHeight="110" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey" Padding="6,9"/>
-                        <Button x:Name="MicBtn" Grid.Column="2" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="0,0,4,3" VerticalAlignment="Bottom" Click="OnMic" ToolTip="Надиктовать голосом">
+                                 MaxHeight="110" VerticalScrollBarVisibility="Auto" PreviewKeyDown="OnKey" Padding="2,11,2,11" VerticalAlignment="Center"/>
+                        <Button x:Name="MicBtn" Grid.Column="2" Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="0,0,5,5" VerticalAlignment="Bottom" Click="OnMic" ToolTip="Надиктовать голосом">
                             <h:Icon x:Name="MicIcon" Kind="Mic" Width="15" Height="15"/>
                         </Button>
                         <!-- запись голоса: ✕ отмена · красная точка · таймер · волна под голос · ✓ готово -->
-                        <Grid x:Name="RecordBar" Grid.ColumnSpan="3" Visibility="Collapsed" Background="{DynamicResource Card}">
+                        <Grid x:Name="RecordBar" Grid.ColumnSpan="3" Visibility="Collapsed" Background="Transparent">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -74,7 +75,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="4,0,0,0" Click="OnRecCancel" ToolTip="Отменить запись (Esc)">
+                            <Button Style="{StaticResource Ghost}" Width="32" Height="32" Padding="0" Margin="5,0,0,0" Click="OnRecCancel" ToolTip="Отменить запись (Esc)">
                                 <h:Icon Kind="Close" Width="13" Height="13"/>
                             </Button>
                             <Ellipse x:Name="RecDotChat" Grid.Column="1" Width="8" Height="8" Fill="{DynamicResource Danger}" Margin="8,0,0,0" VerticalAlignment="Center"/>
@@ -82,14 +83,16 @@
                                        Typography.NumeralAlignment="Tabular"/>
                             <h:VoiceWave x:Name="ChatWave" Grid.Column="3" Height="26" Margin="0,0,10,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="RecBusy" Grid.Column="3" Text="Распознаю…" FontSize="12" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Visibility="Collapsed"/>
-                            <Button x:Name="RecDone" Grid.Column="4" Style="{StaticResource Primary}" Width="32" Height="32" Padding="0" Margin="0,0,4,0" Click="OnRecDone" ToolTip="Готово — вставить текст">
+                            <Button x:Name="RecDone" Grid.Column="4" Style="{StaticResource Primary}" Width="32" Height="32" Padding="0" Margin="0,0,5,0" Click="OnRecDone" ToolTip="Готово — вставить текст">
+                                <Button.Clip><EllipseGeometry Center="16,16" RadiusX="16" RadiusY="16"/></Button.Clip>
                                 <h:Icon Kind="Check" Width="14" Height="14" Foreground="#08080A"/>
                             </Button>
                         </Grid>
                     </Grid>
                 </Grid>
             </Border>
-            <Button x:Name="SendBtn" Grid.Column="2" Height="40" Style="{StaticResource Primary}" Width="40" VerticalAlignment="Bottom" Click="OnSend" ToolTip="Отправить (Enter)">
+            <Button x:Name="SendBtn" Grid.Column="2" Height="44" Style="{StaticResource Primary}" Width="44" VerticalAlignment="Bottom" Click="OnSend" ToolTip="Отправить (Enter)">
+                <Button.Clip><EllipseGeometry Center="22,22" RadiusX="22" RadiusY="22"/></Button.Clip>
                 <h:Icon Kind="Send" Width="15" Height="15" Foreground="#08080A"/>
             </Button>
         </Grid>
