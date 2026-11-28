@@ -112,8 +112,13 @@ namespace Isle.Services
             catch { }
         }
 
+        private readonly object _attachLock = new();
+
         private void Attach()
         {
+            // События сессий Windows приходят из разных потоков одновременно (по журналу — NullReference в Attach
+            // при двух вызовах сразу): переключение сессии и подписки делаем по одному
+            lock (_attachLock)
             try
             {
                 var s = _mgr == null ? null : PickSession();
