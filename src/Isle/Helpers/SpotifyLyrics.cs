@@ -545,7 +545,8 @@ namespace Isle.Helpers
         /// <summary>Через сколько секунд после последнего поворота колеса список возвращается к текущей строке.</summary>
         private const double BrowseIdle = 3.0;
         /// <summary>Пикселей прокрутки на одно «деление» колеса (Delta = 120).</summary>
-        private const double WheelStep = 64;
+        private const double WheelStep = 56;
+        private double _vy; // скорость прокрутки, px/с (пружина)
         /// <summary>Отступ перед подписью в конце списка и под ней.</summary>
         private const double FooterGap = 10, FooterBottom = 12;
 
@@ -870,7 +871,6 @@ namespace Isle.Helpers
 
             // сглаживание «x += (цель − x)·k», одинаковое на любой частоте кадров; 0,27 за 1/30 с ≈ 250 мс на смену
             double k = snap ? 1 : 1 - Math.Pow(1 - 0.27, dt * 30);
-            double kScroll = snap ? 1 : 1 - Math.Pow(1 - 0.2, dt * 30);
             double kFast = snap ? 1 : 1 - Math.Pow(1 - 0.3, dt * 30);
 
             // листание колесом: через BrowseIdle секунд тишины — обратно к текущей строке
@@ -937,10 +937,26 @@ namespace Isle.Helpers
             double target;
             if (_browsing) { _browseY = ClampScroll(_browseY); target = _browseY; }
             else target = viewH * Anchor - (_cur >= 0 ? curTop : 0);
-            double kY = _browsing && !snap ? 1 - Math.Pow(1 - 0.28, dt * 30) : kScroll; // за колесом — чуть живее
-            double y = _y + (target - _y) * kY;
-            if (Math.Abs(y - target) < 0.2) y = target;
-            if (y != _y) { _y = y; _shift.Y = Math.Round(y * 2) / 2; }
+            // Пружина с критическим затуханием: скорость меняется плавно — нет рывка в начале (как у «x += (цель − x)·k»)
+            // и нет перелёта в конце. Несколько щелчков колеса подряд складываются в одно мягкое движение.
+            double y;
+            if (snap) { y = target; _vy = 0; }
+            else
+            {
+                double w = _browsing ? 9.0 : 7.5; // «жёсткость»: время успокоения ≈ 4/w с (0,45–0,55 с)
+                double rest = dt;
+                y = _y;
+                while (rest > 0) // мелкими шагами — устойчиво и на 30, и на 240 Гц
+                {
+                    double h = Math.Min(rest, 1 / 120.0);
+                    _vy += (w * w * (target - y) - 2 * w * _vy) * h;
+                    y += _vy * h;
+                    rest -= h;
+                }
+                if (Math.Abs(y - target) < 0.15 && Math.Abs(_vy) < 2) { y = target; _vy = 0; }
+            }
+            // в движении — дробный сдвиг (без «ступенек» на медленном ходу), в покое — по полупикселю для чёткого текста
+            if (y != _y) { _y = y; _shift.Y = _vy == 0 ? Math.Round(y * 2) / 2 : y; }
 
             // невидимые строки не рисуем вовсе (и их размытие тоже)
             double from = -_y - 40, to = -_y + viewH + 40, yy = 0;
