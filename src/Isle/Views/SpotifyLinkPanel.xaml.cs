@@ -6,7 +6,7 @@ using Isle.Services;
 namespace Isle.Views
 {
     /// <summary>
-    /// Блок «Spotify для текста песен» для страницы «Музыка» в настройках: статус, Client ID, Привязать/Отвязать.
+    /// Блок «Spotify: текст песен и управление» для страницы «Музыка» в настройках: статус, Client ID, Привязать/Отвязать.
     /// Самодостаточный — сам читает и сохраняет AppSettings и следит за SpotifyAuth.Changed.
     /// </summary>
     public partial class SpotifyLinkPanel : UserControl
@@ -34,6 +34,8 @@ namespace Isle.Views
             Dot.Opacity = linked ? 1 : 0.6;
             LinkBtn.Content = linking ? "Отменить" : linked ? "Привязать заново" : "Привязать Spotify";
             UnlinkBtn.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
+            // токен выдан до появления управления (нет user-modify-playback-state) — просим перепривязать
+            ScopeHint.Visibility = linked && !linking && !SpotifyAuth.HasControlScope ? Visibility.Visible : Visibility.Collapsed;
             ClientIdBox.IsEnabled = !linking;
         }
 

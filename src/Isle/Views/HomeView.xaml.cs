@@ -49,15 +49,20 @@ namespace Isle.Views
                 TickPosition();
                 if (++_appVolTicks % 10 != 0) return;
                 SyncAppVolume();
+                // раз в 5 с — повтор, перемешивание и громкость самого Spotify (их меняют и в приложении Spotify)
+                if (_appVolTicks % 50 == 0 && SpotifyControl.Handles(AppHost.Media.Current)) _ = SpotifyControl.RefreshStateAsync();
                 // раз в секунду: пауза затянулась — пора спрятать плеер (событий от плеера в это время нет)
                 bool idleNow = _pausedSince.HasValue && DateTime.Now - _pausedSince.Value > PlayerIdleTimeout;
                 if (idleNow != _shownIdle) Refresh();
             };
             AppVol.ValueChanged += OnAppVolume;
+            SpotifyControl.StateChanged += () => { UpdateRepeat(); UpdateShuffle(); SyncAppVolume(); };
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
             IsVisibleChanged += (_, __) =>
             {
-                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += KaraokeFrame; }
+                // OnShown зовётся ещё до того, как вкладка стала видимой, — SyncAppVolume там ничего не делал,
+                // и крутилка ждала секундного тика; синхронизируем сразу, как только видно
+                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += KaraokeFrame; SyncAppVolume(); }
                 else { _tick.Stop(); Helpers.FrameClock.Tick -= KaraokeFrame; }
             };
             foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
@@ -261,6 +266,10 @@ namespace Isle.Views
         {
             var m = AppHost.Media.Current;
             UpdateRepeat();
+            UpdateShuffle();
+            // новый трек или переключились на Spotify — перечитать его повтор/перемешивание/громкость
+            var stateKey = m.SourceAppId + "|" + m.Title;
+            if (stateKey != _spotifyStateKey && SpotifyControl.Handles(m)) { _spotifyStateKey = stateKey; _ = SpotifyControl.RefreshStateAsync(force: true); }
             // музыка на паузе дольше 3 минут — вместо плеера показываем «Недавно скопировано»
             if (m.HasSession && m.IsPlaying) _pausedSince = null;
             else if (_pausedSince == null) _pausedSince = DateTime.Now;
@@ -501,33 +510,75 @@ namespace Isle.Views
 
         private int _appVolTicks;
         private DateTime _appVolSetAt;
+        private string _spotifyStateKey = "";
+        /// <summary>Последняя известная громкость каждого плеера (по AUMID) — показываем её, пока звуковой сессии ещё нет.</summary>
+        private readonly Dictionary<string, double> _appVolKnown = new();
+        /// <summary>Громкость, которую выставили крутилкой, когда звуковой сессии плеера ещё не было, — применим, как появится.</summary>
+        private readonly Dictionary<string, double> _appVolPending = new();
 
         /// <summary>
         /// Громкость плеера — та же, что в самом приложении и в «Микшере громкости» Windows:
         /// в Spotify стоит 30 % — крутилка показывает 30 %, переключился на браузер со 100 % — покажет 100 %.
+        /// Spotify привязан с правом управления — крутилка управляет громкостью самого Spotify (Web API).
+        /// Крутилка видна сразу, как есть плеер: звуковая сессия у плеера появляется только когда он начал
+        /// выводить звук (через секунду-другую после смены трека), до этого — последнее известное значение.
         /// </summary>
         private void SyncAppVolume()
         {
             if (!IsVisible) return; // вкладка скрыта — не опрашиваем звуковые сессии зря (обновится при показе)
             var m = AppHost.Media.Current;
             if (!m.HasSession || string.IsNullOrEmpty(m.SourceAppId)) { AppVol.Visibility = Visibility.Collapsed; return; }
+            AppVol.Visibility = Visibility.Visible;
             if (AppVol.IsMouseCaptured || DateTime.Now - _appVolSetAt < TimeSpan.FromSeconds(1)) return; // крутят сейчас — не перебиваем
-            var v = AppHost.Audio.AppVolume(m.SourceAppId);
-            AppVol.Visibility = v.HasValue ? Visibility.Visible : Visibility.Collapsed;
-            if (v.HasValue) AppVol.Value = v.Value;
+            var id = m.SourceAppId;
+            if (SpotifyControl.Handles(m) && SpotifyControl.VolumePercent is int sp)
+            {
+                AppVol.Value = sp / 100.0;
+                AppVol.ToolTip = "Громкость Spotify · крути колесиком";
+                return;
+            }
+            var v = AppHost.Audio.AppVolume(id);
+            if (v.HasValue)
+            {
+                if (_appVolPending.Remove(id, out var want) && Math.Abs(want - v.Value) > 0.005)
+                {
+                    AppHost.Audio.SetAppVolume(id, (float)want); // крутили, пока сессии не было
+                    v = (float)want;
+                }
+                _appVolKnown[id] = v.Value;
+                AppVol.Value = v.Value;
+            }
+            else AppVol.Value = _appVolPending.TryGetValue(id, out var p) ? p : _appVolKnown.TryGetValue(id, out var k) ? k : 1.0;
             AppVol.ToolTip = "Громкость " + (string.IsNullOrEmpty(m.SourceApp) ? "плеера" : m.SourceApp) + " · крути колесиком";
         }
 
         private async void OnAppVolume(double v)
         {
             _appVolSetAt = DateTime.Now;
-            var id = AppHost.Media.Current.SourceAppId;
-            AppHost.Audio.SetAppVolume(id, (float)v);
+            var m = AppHost.Media.Current;
+            var id = m.SourceAppId;
+            if (string.IsNullOrEmpty(id)) return;
+            if (SpotifyControl.Handles(m))
+            {
+                // громкость самого Spotify; запросы прореживаются, отказ — громкость в микшере Windows
+                SpotifyControl.SetVolume(v, x => SetWindowsAppVolume(id, x));
+                return;
+            }
+            if (!SetWindowsAppVolume(id, v)) return;
             // некоторые плееры сразу возвращают свою громкость обратно — проверим и скажем честно
             await System.Threading.Tasks.Task.Delay(600);
             var now = AppHost.Audio.AppVolume(id);
             if (now.HasValue && Math.Abs(now.Value - v) > 0.04)
                 AppVol.ToolTip = "Плеер не дал изменить громкость извне — поменяй её в самом приложении";
+        }
+
+        /// <summary>Громкость плеера в микшере Windows. false — звуковой сессии пока нет (применим, когда появится).</summary>
+        private bool SetWindowsAppVolume(string id, double v)
+        {
+            if (!AppHost.Audio.SetAppVolume(id, (float)v)) { _appVolPending[id] = v; return false; }
+            _appVolPending.Remove(id);
+            _appVolKnown[id] = v;
+            return true;
         }
 
         private void OnPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
@@ -547,13 +598,49 @@ namespace Isle.Views
             UpdateRepeat();
         }
 
+        /// <summary>Вид кнопки-переключателя: включено — подложка, яркая иконка и точка; выключено — приглушено.</summary>
+        private static void PaintToggle(Helpers.Icon icon, FrameworkElement bg, FrameworkElement dot, bool on, bool supported)
+        {
+            icon.SetResourceReference(Helpers.Icon.ForegroundProperty, on ? "Accent" : "Muted");
+            icon.Opacity = on ? 1 : supported ? 0.6 : 0.35;
+            bg.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            dot.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void UpdateRepeat()
         {
-            var (supported, on) = AppHost.Media.Repeat;
-            RepeatIcon.SetResourceReference(Helpers.Icon.ForegroundProperty, on ? "Accent" : "Muted");
-            RepeatOne.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-            RepeatBtn.Opacity = supported ? 1 : 0.55;
-            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи" : on ? "Повтор трека включён — нажми, чтобы выключить" : "Повторять трек";
+            var (supported, mode) = AppHost.Media.RepeatInfo;
+            bool on = mode != MediaService.RepeatMode.Off, one = mode == MediaService.RepeatMode.One;
+            PaintToggle(RepeatIcon, RepeatBg, RepeatDot, on, supported);
+            RepeatOne.Visibility = one ? Visibility.Visible : Visibility.Collapsed;
+            bool spotify = SpotifyControl.Handles(AppHost.Media.Current);
+            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи"
+                : one ? "Повтор трека включён — нажми, чтобы выключить"
+                : on ? (spotify ? "Повтор плейлиста включён — нажми: повтор трека" : "Повтор включён — нажми, чтобы выключить")
+                : spotify ? "Повтор выключен — нажми: повтор плейлиста" : "Повторять трек";
+        }
+
+        private void UpdateShuffle()
+        {
+            var (supported, on) = AppHost.Media.ShuffleInfo;
+            PaintToggle(ShuffleIcon, ShuffleBg, ShuffleDot, on, supported);
+            ShuffleBtn.ToolTip = !supported ? "Перемешивание — этот плеер не даёт включать его снаружи"
+                : on ? "Перемешивание включено — нажми, чтобы выключить" : "Перемешивать";
+        }
+
+        private async void OnShuffle(object s, RoutedEventArgs e)
+        {
+            if (!await AppHost.Media.ToggleShuffleAsync())
+            {
+                var app = AppHost.Media.Current?.SourceApp ?? "";
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Info, Title = "Перемешивание переключается только в самом плеере", Icon = Icons.Shuffle, Important = true, Duration = TimeSpan.FromSeconds(3.5),
+                    Subtitle = app.Contains("spotify", StringComparison.OrdinalIgnoreCase) ? "Spotify не даёт включать его снаружи — в Spotify: Ctrl+S" : "Этот плеер не даёт включать перемешивание снаружи",
+                });
+            }
+            await System.Threading.Tasks.Task.Delay(300);
+            UpdateShuffle();
         }
         private void OnNext(object s, RoutedEventArgs e) => AppHost.Media.Next();
         private void OnPlay(object s, RoutedEventArgs e) => AppHost.Media.PlayPause();
