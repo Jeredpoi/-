@@ -50,7 +50,24 @@ namespace Isle.Views
                 try { OnVoiceFields(this, null); } catch { }
                 try { OnObsFields(this, null); } catch { }
             };
+            // подсказка в пустом поле пароля/ключа (у PasswordBox нет своей)
+            foreach (var pb in new[] { AiKey, VoiceKey, ObsPass }) HookPlaceholder(pb);
             RenderUpdate();
+        }
+
+        private static void HookPlaceholder(PasswordBox pb)
+        {
+            void Update()
+            {
+                pb.ApplyTemplate();
+                if (pb.Template?.FindName("ph", pb) is UIElement ph)
+                    ph.Visibility = pb.Password.Length == 0 && !pb.IsKeyboardFocused ? Visibility.Visible : Visibility.Collapsed;
+            }
+            pb.PasswordChanged += (_, __) => Update();
+            pb.GotKeyboardFocus += (_, __) => Update();
+            pb.LostKeyboardFocus += (_, __) => Update();
+            pb.IsVisibleChanged += (_, __) => Update();
+            pb.Loaded += (_, __) => Update();
         }
 
         // ---------- Обновления ----------
@@ -142,24 +159,105 @@ namespace Isle.Views
 
         public void ShowSection(string key)
         {
+            // старые ключи («weather», «record», «modules», «updates») ведут в новые разделы
             var rb = key switch
             {
-                "look" => NavLook, "music" => NavMusic, "ai" => NavAi, "voice" => NavVoice, "record" => NavRecord, "weather" => NavWeather,
-                "modules" => NavModules, "keys" => NavKeys, "updates" => NavUpdates, _ => NavGeneral
+                "look" => NavLook, "character" => NavCharacter, "notch" or "tabs" => NavNotch, "music" => NavMusic,
+                "modules" or "notifications" => NavModules, "clipboard" => NavClipboard, "record" or "capture" => NavRecord,
+                "ai" => NavAi, "voice" => NavVoice, "keys" => NavKeys, "updates" or "about" => NavUpdates, _ => NavGeneral
             };
+            if (NavSearch.Text.Length > 0) NavSearch.Text = ""; // раздел мог быть скрыт поиском
             rb.IsChecked = true;
         }
 
+        private (RadioButton nav, FrameworkElement sec)[] Sections() => new (RadioButton, FrameworkElement)[]
+        {
+            (NavGeneral, SecGeneral), (NavLook, SecLook), (NavCharacter, SecCharacter), (NavNotch, SecNotch), (NavMusic, SecMusic),
+            (NavModules, SecModules), (NavClipboard, SecClipboard), (NavRecord, SecRecord), (NavAi, SecAi), (NavVoice, SecVoice),
+            (NavKeys, SecKeys), (NavUpdates, SecUpdates)
+        };
+
         private void OnNav(object s, RoutedEventArgs e)
         {
-            if (SecGeneral == null) return;
-            var map = new (RadioButton nav, FrameworkElement sec)[]
-            {
-                (NavGeneral, SecGeneral), (NavLook, SecLook), (NavMusic, SecMusic), (NavAi, SecAi), (NavVoice, SecVoice), (NavRecord, SecRecord),
-                (NavWeather, SecWeather), (NavModules, SecModules), (NavKeys, SecKeys), (NavUpdates, SecUpdates)
-            };
-            foreach (var (nav, sec) in map) sec.Visibility = nav.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            if (SecGeneral == null || SecUpdates == null) return;
+            foreach (var (nav, sec) in Sections()) sec.Visibility = nav.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
             Scroll?.ScrollToTop();
+        }
+
+        /// <summary>Слова для поиска по меню: название раздела и то, что в нём лежит.</summary>
+        private (RadioButton nav, string words)[] NavWords() => new (RadioButton, string)[]
+        {
+            (NavGeneral, "общее запуск windows автозапуск полноэкранн игры oled прятать наведен край скриншот запись погода город"),
+            (NavLook, "внешний вид тема закат акцент цвет градиент размер масштаб прозрачн непрозрачн вырез macbook плавность fps кадр"),
+            (NavCharacter, "персонаж клоди глаза никого наряд одежда шапка снег"),
+            (NavNotch, "чёлка челка вкладки порядок часы секунды 24 формат время музыка свёрнут"),
+            (NavMusic, "музыка пилюля плеер главная текст песни lyrics spotify обложка"),
+            (NavModules, "уведомления всплывашки громкость раскладка caps lock батарея зарядка vpn steam загрузки журнал баннер"),
+            (NavClipboard, "буфер обмена история картинки копировать"),
+            (NavRecord, "снимки скриншот printscreen запись экрана obs пометки видеокарта папка rec"),
+            (NavAi, "ии ai сервис ключ api модель groq gemini openrouter polza openai claude ollama"),
+            (NavVoice, "диктовка голос текст whisper распознавание язык знаки препинания вставлять"),
+            (NavKeys, "клавиши сочетания горячие hotkey"),
+            (NavUpdates, "о программе обновления версия данные папка журнал отладка знакомство приветствие закрыть выйти"),
+        };
+
+        private void OnNavSearch(object s, TextChangedEventArgs e)
+        {
+            if (NavPanel == null || NavUpdates == null || NavSep == null) return;
+            var q = NavSearch.Text.Trim().ToLowerInvariant();
+            var all = NavWords();
+            foreach (var (nav, words) in all)
+                nav.Visibility = q.Length == 0 || words.Contains(q) ? Visibility.Visible : Visibility.Collapsed;
+            NavSep.Visibility = q.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            // если выбранный раздел скрыт поиском — открываем первый найденный
+            var cur = all.FirstOrDefault(x => x.nav.IsChecked == true).nav;
+            var first = all.FirstOrDefault(x => x.nav.Visibility == Visibility.Visible).nav;
+            if (first != null && cur != null && cur.Visibility != Visibility.Visible) first.IsChecked = true;
+        }
+
+        // ---------- Состояния: точка + слово ----------
+
+        private static readonly Brush DotOk = Rgb(0x4A, 0xDE, 0x80), DotOff = Rgb(0x6E, 0x6E, 0x78), DotBad = Rgb(0xF8, 0x71, 0x71);
+
+        private static void SetState(System.Windows.Shapes.Ellipse dot, TextBlock text, string word, Brush color)
+        {
+            dot.Fill = color;
+            text.Text = word;
+        }
+
+        private void ShowAiKeyState(string word = null) =>
+            SetState(AiKeyDot, AiKeyState, word ?? (string.IsNullOrEmpty(S.AiKey) ? "Ключа нет" : "Ключ сохранён"), string.IsNullOrEmpty(S.AiKey) ? DotOff : DotOk);
+
+        private void ShowVoiceKeyState(string word = null) =>
+            SetState(VoiceKeyDot, VoiceKeyState, word ?? (string.IsNullOrEmpty(S.VoiceKey) ? "Берётся из «ИИ»" : "Свой ключ сохранён"), string.IsNullOrEmpty(S.VoiceKey) ? DotOff : DotOk);
+
+        private void ShowNotifState()
+        {
+            var n = AppHost.Notifications;
+            bool ok = n?.Available == true;
+            SetState(NotifDot, NotifStatus, n?.Status ?? "—", ok ? DotOk : (n == null ? DotOff : DotBad));
+            NotifStatus.ToolTip = n?.Status;
+            NotifAccessBtn.Visibility = ok || n == null ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>Нет доступа к уведомлениям — открываем параметры Windows и пробуем снова.</summary>
+        private async void OnNotifAccess(object s, RoutedEventArgs e)
+        {
+            var n = AppHost.Notifications;
+            if (n == null || n.Available) return;
+            SystemControls.OpenSettings("ms-settings:privacy-notifications");
+            try { await n.StartAsync(); } catch { }
+            ShowNotifState();
+        }
+
+        /// <summary>Зависимые строки гаснут, когда главный переключатель выключен.</summary>
+        private void UpdateDeps()
+        {
+            if (RowClipImg == null) return;
+            RowClockSeconds.IsEnabled = ShowClock.IsChecked == true;
+            RowLyricsHome.IsEnabled = Lyrics.IsChecked == true;
+            RowNotifOnly.IsEnabled = Notif.IsChecked == true;
+            RowClipImg.IsEnabled = ClipHist.IsChecked == true;
         }
 
         // ---------- Загрузка ----------
@@ -197,7 +295,7 @@ namespace Isle.Views
             SelectPreset(S.AiPreset, false);
             AiBase.Text = S.AiBaseUrl;
             AiModel.Text = S.AiModel;
-            AiKeyState.Text = string.IsNullOrEmpty(S.AiKey) ? "Ключ не сохранён" : "•••••••• ключ сохранён";
+            ShowAiKeyState();
 
             VpGroq.IsChecked = S.VoicePreset == "groq";
             VpOpenAi.IsChecked = S.VoicePreset == "openai";
@@ -205,7 +303,7 @@ namespace Isle.Views
             VpCustom.IsChecked = S.VoicePreset == "custom";
             VoiceBase.Text = S.VoiceBaseUrl;
             VoiceModel.Text = S.VoiceModel;
-            VoiceKeyState.Text = string.IsNullOrEmpty(S.VoiceKey) ? "Используется ключ из раздела «ИИ», если сервис тот же" : "•••••••• свой ключ сохранён";
+            ShowVoiceKeyState();
             (S.MaxFps switch { 30 => Fps30, 120 => Fps120, 0 => FpsMax, _ => Fps60 }).IsChecked = true;
             VlAuto.IsChecked = string.IsNullOrEmpty(S.VoiceLanguage);
             VlRu.IsChecked = S.VoiceLanguage == "ru";
@@ -237,7 +335,7 @@ namespace Isle.Views
             Notif.IsChecked = S.NotificationToasts;
             NotifOnly.IsChecked = S.NotificationsOnlyInIsland;
             RefreshHotkeyNotes();
-            NotifStatus.Text = "Статус: " + (AppHost.Notifications?.Status ?? "—");
+            ShowNotifState();
             Vpn.IsChecked = S.VpnStatus;
             SteamExact.IsChecked = S.SteamExactSpeed;
             UpdateSteamActivate();
@@ -245,10 +343,14 @@ namespace Isle.Views
             ClipImg.IsChecked = S.ClipboardImages;
             AutoUpdate.IsChecked = S.AutoUpdateCheck;
             ObsStatus.IsChecked = S.ObsStatus;
+            PrtScr.IsChecked = S.PrintScreenIsle;
+            SaveShots.IsChecked = S.SaveScreenshots;
+            UpdateDeps();
         }
 
         private void OnToggle(object s, RoutedEventArgs e)
         {
+            UpdateDeps();
             if (_loading) return;
             Dispatcher.BeginInvoke(new Action(UpdatePreview), System.Windows.Threading.DispatcherPriority.Background); // превью — по новым настройкам
             S.HideInFullscreen = Fullscreen.IsChecked == true;
@@ -290,9 +392,12 @@ namespace Isle.Views
         }
 
         /// <summary>Кнопка видна, только пока точная скорость ни разу не заработала (и включена).</summary>
+        private const string SteamNote = "Isle один раз перезапустит Steam";
+
         private async void UpdateSteamActivate()
         {
-            SteamActivateRow.Visibility = Visibility.Collapsed;
+            SteamActivateBtn.Visibility = Visibility.Collapsed;
+            SteamExactStatus.Text = SteamNote;
             if (!S.SteamExactSpeed || S.SteamExactActivated) return;
             if (Services.SteamDownloadService.SteamRoot() == null) return; // Steam не установлен
             bool working = await Services.SteamClientApi.IsWorkingAsync();
@@ -303,7 +408,8 @@ namespace Isle.Views
                 S.Save();
                 return;
             }
-            SteamActivateRow.Visibility = Visibility.Visible;
+            SteamActivateBtn.Visibility = Visibility.Visible;
+            SteamExactStatus.Text = "Steam закроется и откроется снова";
         }
 
         private async void OnSteamActivate(object s, RoutedEventArgs e)
@@ -318,7 +424,8 @@ namespace Isle.Views
                 S.SteamExactActivated = true;
                 S.Save();
                 await System.Threading.Tasks.Task.Delay(2500); // дать прочитать «Готово»
-                SteamActivateRow.Visibility = Visibility.Collapsed;
+                SteamActivateBtn.Visibility = Visibility.Collapsed;
+                SteamExactStatus.Text = SteamNote;
             }
             else SteamActivateBtn.IsEnabled = true;
         }
@@ -335,6 +442,7 @@ namespace Isle.Views
 
         private void OnMusicToggle(object s, RoutedEventArgs e)
         {
+            UpdateDeps();
             if (_loading) return;
             S.MediaEnabled = Media.IsChecked == true;
             S.LyricsEnabled = Lyrics.IsChecked == true;
@@ -399,7 +507,40 @@ namespace Isle.Views
             SystemControls.Shell(Storage.Dir);
         }
 
-        private void OnExit(object s, RoutedEventArgs e) => Application.Current.Shutdown();
+        // «Закрыть Isle» — тихая кнопка с подтверждением: первый щелчок спрашивает, второй (в течение 4 с) закрывает
+        private DateTime _exitArmed;
+
+        private void OnExit(object s, RoutedEventArgs e)
+        {
+            if (DateTime.Now - _exitArmed < TimeSpan.FromSeconds(4)) { Application.Current.Shutdown(); return; }
+            _exitArmed = DateTime.Now;
+            if (s is not Button b) return;
+            var old = b.Content;
+            b.Content = "Точно закрыть?";
+            b.Foreground = DotBad;
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+            t.Tick += (_, __) => { t.Stop(); b.Content = old; b.ClearValue(ForegroundProperty); };
+            t.Start();
+        }
+
+        /// <summary>PrintScreen → снимок через Isle: выделение области, миниатюра в чёлке, файл в «Изображения\Isle».</summary>
+        private void OnPrintScreen(object s, RoutedEventArgs e)
+        {
+            if (!AppHost.Window.SetPrintScreen(PrtScr.IsChecked == true))
+            {
+                PrtScr.IsChecked = false;
+                ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Windows не дал занять PrintScreen",
+                    Subtitle = "Выключи «PrintScreen открывает Ножницы» в Параметры → Специальные возможности → Клавиатура",
+                    Icon = Icons.Keyboard, Important = true, Duration = TimeSpan.FromSeconds(6) });
+            }
+        }
+
+        // сохранять ли снимки Isle файлом или только в буфер обмена
+        private void OnSaveShots(object s, RoutedEventArgs e)
+        {
+            S.SaveScreenshots = SaveShots.IsChecked == true;
+            S.Save();
+        }
 
         // ---------- Внешний вид ----------
 
@@ -417,8 +558,8 @@ namespace Isle.Views
             {
                 var rb = new RadioButton
                 {
-                    Style = (Style)FindResource("SSegment"), GroupName = "accent", Tag = hex, Padding = new Thickness(0),
-                    Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = Helpers.AccentPaint.Brush(hex, 45) },
+                    Style = (Style)FindResource("SSegment"), GroupName = "accent", Tag = hex, Padding = new Thickness(0), Width = 28,
+                    Content = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Helpers.AccentPaint.Brush(hex, 45) },
                     IsChecked = string.Equals(hex, S.AccentHex, StringComparison.OrdinalIgnoreCase), ToolTip = tip
                 };
                 rb.Click += (_, __) =>
@@ -459,7 +600,8 @@ namespace Isle.Views
         /// </summary>
         private void ApplyTheme()
         {
-            var keys = new[] { "SBg", "SSide", "SCard", "SCardBorder", "SField", "SFieldBorder", "SBtn", "SBtnBorder", "SSeg", "SSegHover", "SNavHover", "SNavSel", "SSep", "SNote" };
+            var keys = new[] { "SBg", "SSide", "SCard", "SCardBorder", "SField", "SFieldBorder", "SBtn", "SBtnBorder", "SSeg", "SSegHover", "SSegSel",
+                "SNavHover", "SNavSel", "SSep", "SNote", "SRowNote", "SLabel", "STile", "SKeyCap", "SKeyCapEdge" };
             if (!_darkRes.ContainsKey("SBg")) foreach (var k in keys) _darkRes[k] = Resources[k];
             // в «Закате» акцент всегда розовый — выбор цвета акцента не действует, показываем это
             Accents.IsEnabled = !Helpers.SunsetTheme.On;
@@ -496,6 +638,12 @@ namespace Isle.Views
             Resources["SNavSel"] = A(0x40, 0xF2, 0x67, 0x9F);
             Resources["SSep"] = A(0x1F, 0xFF, 0xFF, 0xFF);
             Resources["SNote"] = A(0xFF, 0xCF, 0xC7, 0xDA);
+            Resources["SSegSel"] = A(0x38, 0xFF, 0xFF, 0xFF);
+            Resources["SRowNote"] = A(0xFF, 0xB9, 0xB0, 0xC8);
+            Resources["SLabel"] = A(0xFF, 0xA8, 0x9C, 0xBC);
+            Resources["STile"] = A(0x1F, 0xFF, 0xFF, 0xFF);
+            Resources["SKeyCap"] = A(0x1E, 0xFF, 0xFF, 0xFF);
+            Resources["SKeyCapEdge"] = A(0x40, 0x00, 0x00, 0x00);
         }
         private readonly System.Collections.Generic.Dictionary<string, object> _darkRes = new();
 
@@ -570,25 +718,26 @@ namespace Isle.Views
                 var tab = IslandTabs.Get(order[i]);
                 int index = i;
                 bool isHome = tab.Id == "home", visible = !hidden.Contains(tab.Id);
-                var row = new Grid { Margin = new Thickness(0, 2, 0, 2), Height = 38 };
+                if (i > 0) TabsList.Children.Add(new Border { Style = (Style)FindResource("Sep") });
+                var row = new Grid { Margin = new Thickness(16, 0, 16, 0), Height = 44 };
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 var fg = (Brush)FindResource(visible ? "Fg" : "Muted");
                 row.Children.Add(new Icon { Kind = tab.Icon, Width = 16, Height = 16, Foreground = fg, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left });
-                var title = new TextBlock { Text = tab.Title + (isHome ? "  · всегда" : ""), Foreground = fg, VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
+                var title = new TextBlock { Text = tab.Title + (isHome ? "  · всегда" : ""), Foreground = fg, VerticalAlignment = VerticalAlignment.Center, FontSize = 13.5, FontWeight = FontWeights.Medium };
                 Grid.SetColumn(title, 1); row.Children.Add(title);
                 var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
                 Button Arrow(string glyph, int delta, bool enabled)
                 {
-                    var b = new Button { Style = (Style)FindResource("Ghost"), Width = 30, Height = 30, Padding = new Thickness(0), IsEnabled = enabled, Opacity = enabled ? 1 : 0.3,
+                    var b = new Button { Style = (Style)FindResource("SBtnBase"), Width = 28, Height = 28, Padding = new Thickness(0), IsEnabled = enabled,
                         Content = new TextBlock { Text = glyph, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center }, ToolTip = delta < 0 ? "Левее" : "Правее" };
                     b.Click += (_, __) => MoveTab(index, delta);
                     return b;
                 }
                 tools.Children.Add(Arrow("↑", -1, i > 0));
                 tools.Children.Add(Arrow("↓", +1, i < order.Count - 1));
-                var cb = new CheckBox { IsChecked = visible, IsEnabled = !isHome, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Opacity = isHome ? 0.4 : 1 };
+                var cb = new CheckBox { IsChecked = visible, IsEnabled = !isHome, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Opacity = isHome ? 0.4 : 1 };
                 var id = tab.Id;
                 cb.Click += (_, __) => { if (cb.IsChecked == true) hidden.Remove(id); else hidden.Add(id); ApplyTabs(order, hidden); };
                 tools.Children.Add(cb);
@@ -649,31 +798,29 @@ namespace Isle.Views
 
         // ---------- ИИ ----------
 
+        // сервисов много — сегменты переносились бы на вторую строку, поэтому выпадающий список
+        private bool _presetSync;
+
         private void BuildPresets()
         {
             foreach (var p in AiService.Presets)
-            {
-                var content = new StackPanel { Orientation = Orientation.Horizontal };
-                content.Children.Add(new TextBlock { Text = p.Title });
-                if (p.Free)
-                    content.Children.Add(new Border
-                    {
-                        // нейтральная полупрозрачная плашка: читается и на тёмной кнопке, и на выбранной (белой/розовой)
-                        Background = new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)), CornerRadius = new CornerRadius(6),
-                        Padding = new Thickness(5, 1, 5, 1), Margin = new Thickness(8, 0, 0, 0),
-                        Child = new TextBlock { Text = "бесплатно", FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xE8, 0xB2)) }
-                    });
-                var rb = new RadioButton { Style = (Style)FindResource("SSegment"), GroupName = "ai", Tag = p.Id, Content = content };
-                rb.Click += (_, __) => SelectPreset(p.Id, true);
-                AiPresets.Children.Add(rb);
-            }
+                AiPresets.Items.Add(new ComboBoxItem { Content = p.Title + (p.Free ? " · бесплатно" : ""), Tag = p.Id });
+        }
+
+        private void OnAiPresetPicked(object s, SelectionChangedEventArgs e)
+        {
+            if (_presetSync || _loading) return;
+            if (AiPresets.SelectedItem is ComboBoxItem it && it.Tag is string id) SelectPreset(id, true);
         }
 
         private void SelectPreset(string id, bool apply)
         {
             var p = AiService.Preset(id) ?? AiService.Presets[0];
-            foreach (RadioButton rb in AiPresets.Children) rb.IsChecked = (string)rb.Tag == p.Id;
+            _presetSync = true;
+            AiPresets.SelectedItem = AiPresets.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == p.Id);
+            _presetSync = false;
             AiNote.Text = p.Note;
+            AiNote.ToolTip = p.Note;
             AiKeyLink.Tag = p.KeyUrl;
             if (!apply) return;
             S.AiPreset = p.Id;
@@ -696,14 +843,14 @@ namespace Isle.Views
             S.AiKey = AiKey.Password.Trim();
             S.Save();
             AiKey.Password = "";
-            AiKeyState.Text = "•••••••• ключ сохранён";
+            ShowAiKeyState();
         }
 
         private void OnAiDeleteKey(object s, RoutedEventArgs e)
         {
             S.AiKey = "";
             S.Save();
-            AiKeyState.Text = "Ключ удалён";
+            ShowAiKeyState("Ключ удалён");
         }
 
         private void OnAiFieldsChanged(object s, RoutedEventArgs e)
@@ -774,7 +921,7 @@ namespace Isle.Views
             S.VoiceKey = VoiceKey.Password.Trim();
             S.Save();
             VoiceKey.Password = "";
-            VoiceKeyState.Text = string.IsNullOrEmpty(S.VoiceKey) ? "Используется ключ из раздела «ИИ», если сервис тот же" : "•••••••• свой ключ сохранён";
+            ShowVoiceKeyState();
         }
 
         private async void OnVoiceModels(object s, RoutedEventArgs e)
@@ -810,7 +957,7 @@ namespace Isle.Views
             S.VoiceKey = "";
             S.Save();
             VoiceKey.Password = "";
-            VoiceKeyState.Text = "Свой ключ удалён · используется ключ из раздела «ИИ», если сервис тот же";
+            ShowVoiceKeyState("Удалён · берётся из «ИИ»");
         }
 
         private void OnFps(object s, RoutedEventArgs e)
@@ -842,7 +989,7 @@ namespace Isle.Views
         }
 
         private void ShowObsFolder() => ObsFolder.Text = string.IsNullOrWhiteSpace(S.ObsRecordFolder)
-            ? "Как в настройках OBS (Настройки → Вывод → Путь записи)"
+            ? "Как в OBS (Вывод → Путь записи)"
             : S.ObsRecordFolder;
 
         private void OnObsFolder(object s, RoutedEventArgs e)
@@ -911,33 +1058,31 @@ namespace Isle.Views
         };
 
         private static Brush Rgb(byte r, byte g, byte b, byte a = 255) { var x = new SolidColorBrush(Color.FromArgb(a, r, g, b)); x.Freeze(); return x; }
-        // клавиши-«кнопки»: в «Закате» — светлое стекло, а не чёрные квадраты
-        private static Brush CapBg => Helpers.SunsetTheme.On ? CapBgGlass : CapBgDark;
-        private static Brush CapLine => Helpers.SunsetTheme.On ? CapLineGlass : CapLineDark;
-        private static readonly Brush CapBgDark = Rgb(0x18, 0x18, 0x1C), CapBgGlass = Rgb(0xFF, 0xFF, 0xFF, 0x1E),
-            CapLineDark = Rgb(0x2A, 0x2A, 0x32), CapLineGlass = Rgb(0xFF, 0xFF, 0xFF, 0x30);
         private static readonly Brush CapFg = Rgb(0xEC, 0xEC, 0xF1),
             CapMuted = Rgb(0x8B, 0x8B, 0x95), HostHover = Rgb(0xFF, 0xFF, 0xFF, 0x0C), HostRec = Rgb(0xFF, 0xFF, 0xFF, 0x16);
 
-        /// <summary>Сочетание кнопками-клавишами, как в знакомстве: [Ctrl] + [Alt] + [K].</summary>
+        /// <summary>Сочетание клавишами-«фишками»: [Ctrl] + [Alt] + [K]. Цвета — из ресурсов окна (в «Закате» светлое стекло).</summary>
         private static FrameworkElement Keycaps(string hotkey)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
             if (string.IsNullOrWhiteSpace(hotkey))
             {
-                row.Children.Add(new TextBlock { Text = "не назначено", FontSize = 12.5, FontStyle = FontStyles.Italic, Foreground = CapMuted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 4, 4, 4) });
+                row.Children.Add(new TextBlock { Text = "не назначено", FontSize = 12, FontStyle = FontStyles.Italic, Foreground = CapMuted, VerticalAlignment = VerticalAlignment.Center });
                 return row;
             }
             var parts = hotkey.Split('+');
             for (int i = 0; i < parts.Length; i++)
             {
-                if (i > 0) row.Children.Add(new TextBlock { Text = "+", Foreground = CapMuted, FontSize = 12, Margin = new Thickness(5, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center });
-                row.Children.Add(new Border
+                if (i > 0) row.Children.Add(new TextBlock { Text = "+", Foreground = CapMuted, FontSize = 11, Margin = new Thickness(4, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center });
+                var chip = new Border
                 {
-                    Background = CapBg, BorderBrush = CapLine, BorderThickness = new Thickness(1, 1, 1, 2.5), CornerRadius = new CornerRadius(7),
-                    Padding = new Thickness(9, 4, 9, 4), MinWidth = 30,
-                    Child = new TextBlock { Text = parts[i].Replace("Space", "Пробел"), FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = CapFg, HorizontalAlignment = HorizontalAlignment.Center }
-                });
+                    Height = 24, MinWidth = 24, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(0, 0, 0, 2), Padding = new Thickness(7, 0, 7, 0),
+                    Child = new TextBlock { Text = parts[i].Replace("Space", "Пробел"), FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = CapFg,
+                        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+                };
+                chip.SetResourceReference(Border.BackgroundProperty, "SKeyCap");
+                chip.SetResourceReference(Border.BorderBrushProperty, "SKeyCapEdge");
+                row.Children.Add(chip);
             }
             return row;
         }
@@ -947,9 +1092,9 @@ namespace Isle.Views
         {
             var b = new Border
             {
-                Width = 30, Height = 30, CornerRadius = new CornerRadius(15), Background = Brushes.Transparent, Cursor = Cursors.Hand,
+                Width = 26, Height = 26, CornerRadius = new CornerRadius(7), Background = Brushes.Transparent, Cursor = Cursors.Hand,
                 Margin = new Thickness(4, 0, 0, 0), ToolTip = tip, VerticalAlignment = VerticalAlignment.Center,
-                Child = new Isle.Helpers.Icon { Data = path, Width = 15, Height = 15, Foreground = CapMuted, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+                Child = new Isle.Helpers.Icon { Data = path, Width = 14, Height = 14, Foreground = CapMuted, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
             };
             b.MouseEnter += (_, __) => { b.Background = HostHover; ((Isle.Helpers.Icon)b.Child).Foreground = CapFg; };
             b.MouseLeave += (_, __) => { b.Background = Brushes.Transparent; ((Isle.Helpers.Icon)b.Child).Foreground = CapMuted; };
@@ -962,13 +1107,13 @@ namespace Isle.Views
             var keys = new[]
             {
                 ("island", "Остров", "Открыть или закрыть чёлку"),
-                ("command", "Командная строка", "Калькулятор, запуск программ, таймер, напоминание"),
+                ("command", "Командная строка", "Калькулятор, программы, таймер"),
                 ("clipboard", "Буфер обмена", "История скопированного"),
-                ("screenshot", "Снимок экрана", "Выделить область и сделать снимок"),
-                ("voice", "Голос в текст", "Начать или закончить диктовку"),
+                ("screenshot", "Снимок экрана", "Выделить область и снять"),
+                ("voice", "Диктовка", "Начать или закончить"),
                 ("voiceCommand", "Голосовая команда", "Сказать команду ИИ"),
-                ("record", "Запись видео", "Выделить область и записать её на видео"),
-                ("collapse", "Свернуть остров", "Работает, когда остров активен"),
+                ("record", "Запись видео", "Выделить область и записать"),
+                ("collapse", "Свернуть остров", "Когда остров активен"),
             };
             const string ResetIcon = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3 M4.5 4.5v4h4";
             const string DeleteIcon = "M7 7L17 17 M17 7L7 17";
@@ -976,10 +1121,11 @@ namespace Isle.Views
             {
                 var (name, title, note) = keys[n];
                 if (n > 0) KeysList.Children.Add(new Border { Style = (Style)FindResource("Sep") });
-                var g = new Grid { Margin = new Thickness(0, 10, 0, 10) };
+                // колонки: текст | сочетание (ровно 200 — фишки выстраиваются по одной линии) | ↺ ×
+                var g = new Grid { Margin = new Thickness(16, 10, 10, 10), MinHeight = 32, Background = Brushes.Transparent };
                 g.ColumnDefinitions.Add(new ColumnDefinition());
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
 
                 var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
                 text.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("RowTitle") });
@@ -989,9 +1135,9 @@ namespace Isle.Views
                 // поле сочетания: нажми — оно ждёт новое сочетание (Esc — отмена, кроме самой клавиши сворачивания)
                 var host = new Border
                 {
-                    CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 5, 8, 5), Background = Brushes.Transparent,
+                    CornerRadius = new CornerRadius(8), Padding = new Thickness(6, 3, 6, 3), Background = Brushes.Transparent,
                     BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(1), Focusable = true, Cursor = Cursors.Hand,
-                    FocusVisualStyle = null, VerticalAlignment = VerticalAlignment.Center, MinWidth = 120,
+                    FocusVisualStyle = null, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right,
                     ToolTip = "Нажми, затем нажми новое сочетание клавиш"
                 };
                 bool recording = false;
@@ -1005,8 +1151,8 @@ namespace Isle.Views
                 void Record()
                 {
                     recording = true;
-                    host.Child = new TextBlock { Text = "Нажми сочетание…", FontSize = 12.5, Foreground = CapFg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4) };
-                    host.BorderBrush = CapLine;
+                    host.Child = new TextBlock { Text = "Нажми сочетание…", FontSize = 12, Foreground = CapFg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 3, 4, 3) };
+                    host.SetResourceReference(Border.BorderBrushProperty, "Accent"); // фокус — акцентом
                     host.Background = HostRec;
                 }
                 void Apply(string next)
@@ -1040,44 +1186,16 @@ namespace Isle.Views
                 Grid.SetColumn(host, 1);
                 g.Children.Add(host);
 
-                var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
-                buttons.Children.Add(IconButton(ResetIcon, "Вернуть как было: " + DefaultHotkeys[name], () => Apply(DefaultHotkeys[name])));
-                buttons.Children.Add(IconButton(DeleteIcon, "Убрать сочетание совсем", () => Apply("")));
+                // ↺ и × видны только при наведении на строку
+                var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Visibility = Visibility.Hidden };
+                buttons.Children.Add(IconButton(ResetIcon, "Вернуть как было: " + KeyName(DefaultHotkeys[name]), () => Apply(DefaultHotkeys[name])));
+                buttons.Children.Add(IconButton(DeleteIcon, "Убрать сочетание", () => Apply("")));
                 Grid.SetColumn(buttons, 2);
                 g.Children.Add(buttons);
+                g.MouseEnter += (_, __) => buttons.Visibility = Visibility.Visible;
+                g.MouseLeave += (_, __) => buttons.Visibility = Visibility.Hidden;
                 KeysList.Children.Add(g);
             }
-
-            // PrintScreen → снимок через Isle: выделение области, миниатюра в чёлке, файл в Изображения\Isle
-            var prtRow = new Grid { Margin = new Thickness(0, 14, 0, 4) };
-            prtRow.ColumnDefinitions.Add(new ColumnDefinition());
-            prtRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            prtRow.Children.Add(new TextBlock { Text = "PrintScreen делает снимок через Isle (вместо «Ножниц» Windows)", FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
-            var prt = new CheckBox { IsChecked = S.PrintScreenIsle, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-            Grid.SetColumn(prt, 1);
-            prtRow.Children.Add(prt);
-            prt.Click += (_, __) =>
-            {
-                if (!AppHost.Window.SetPrintScreen(prt.IsChecked == true))
-                {
-                    prt.IsChecked = false;
-                    ToastBus.Show(new Toast { Kind = ToastKind.Error, Title = "Windows не дал занять PrintScreen",
-                        Subtitle = "Выключи «PrintScreen открывает Ножницы» в Параметры → Специальные возможности → Клавиатура",
-                        Icon = Icons.Keyboard, Important = true, Duration = TimeSpan.FromSeconds(6) });
-                }
-            };
-            KeysList.Children.Add(prtRow);
-
-            // сохранять ли снимки Isle файлом или только в буфер обмена
-            var saveRow = new Grid { Margin = new Thickness(0, 6, 0, 4) };
-            saveRow.ColumnDefinitions.Add(new ColumnDefinition());
-            saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            saveRow.Children.Add(new TextBlock { Text = "Сохранять снимки Isle в «Изображения\\Isle» (выключено — только в буфер обмена)", FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
-            var save = new CheckBox { IsChecked = S.SaveScreenshots, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-            save.Click += (_, __) => { S.SaveScreenshots = save.IsChecked == true; S.Save(); };
-            Grid.SetColumn(save, 1);
-            saveRow.Children.Add(save);
-            KeysList.Children.Add(saveRow);
         }
 
         private static string KeyName(string hotkey) => hotkey.Replace("Space", "Пробел");
@@ -1085,10 +1203,11 @@ namespace Isle.Views
         /// <summary>Подсказки с сочетаниями клавиш — по текущим настройкам (их можно поменять или убрать).</summary>
         private void RefreshHotkeyNotes()
         {
-            HoverNote.Text = "Подведи курсор к самому верху экрана над чёлкой. Просто водить по чёлке можно — она не откроется. Если выключить — только кликом"
+            HoverNote.ToolTip = "Подведи курсор к самому верху экрана над чёлкой. Просто водить по чёлке можно — она не откроется. Если выключить — только кликом"
                 + (string.IsNullOrWhiteSpace(S.Hotkey) ? "." : " или " + KeyName(S.Hotkey) + ".");
-            VoiceNote.Text = (string.IsNullOrWhiteSpace(S.HotkeyVoice) ? "Назначь сочетание в «Клавишах», нажми его" : "Нажми " + KeyName(S.HotkeyVoice))
-                + ", скажи и нажми ещё раз: текст окажется в буфере. Запись уходит в выбранный сервис распознавания (Whisper).";
+            VoiceNote.Text = string.IsNullOrWhiteSpace(S.HotkeyVoice)
+                ? "Назначь сочетание в «Клавишах»"
+                : KeyName(S.HotkeyVoice) + " — скажи, и текст в буфере";
         }
 
         private string GetHotkey(string name) => name switch

@@ -2,13 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:h="clr-namespace:Isle.Helpers"
-        Title="Isle — настройки" Width="900" Height="700" MinWidth="760" MinHeight="520"
+        Title="Isle — настройки" Width="980" Height="720" MinWidth="760" MinHeight="520"
         Background="#0A0A0C" Foreground="{StaticResource Fg}" FontFamily="{StaticResource UiFont}"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="pack://application:,,,/Isle;component/app.ico">
     <Window.Resources>
         <!-- цвета окна: в теме «Закат» подменяются (SettingsWindow.ApplyTheme) — фото пальм под тёмной вуалью и стекло -->
         <SolidColorBrush x:Key="SBg" Color="#0C0C0E"/>
-        <SolidColorBrush x:Key="SSide" Color="#000000"/>
+        <SolidColorBrush x:Key="SSide" Color="#08080A"/>
         <SolidColorBrush x:Key="SCard" Color="#141417"/>
         <SolidColorBrush x:Key="SCardBorder" Color="#12FFFFFF"/>
         <SolidColorBrush x:Key="SField" Color="#1A1A1F"/>
@@ -17,60 +17,187 @@
         <SolidColorBrush x:Key="SBtnBorder" Color="#2A2A30"/>
         <SolidColorBrush x:Key="SSeg" Color="#1A1A1E"/>
         <SolidColorBrush x:Key="SSegHover" Color="#232328"/>
-        <SolidColorBrush x:Key="SNavHover" Color="#141417"/>
-        <SolidColorBrush x:Key="SNavSel" Color="#222228"/>
+        <SolidColorBrush x:Key="SSegSel" Color="#2C2C33"/>
+        <SolidColorBrush x:Key="SNavHover" Color="#121215"/>
+        <SolidColorBrush x:Key="SNavSel" Color="#1C1C21"/>
         <SolidColorBrush x:Key="SSep" Color="#0FFFFFFF"/>
         <SolidColorBrush x:Key="SNote" Color="#8A8A96"/>
-        <!-- В настройках поля и кнопки светлее карточек, а выбранный вариант — белый: всё читается с первого взгляда -->
+        <SolidColorBrush x:Key="SRowNote" Color="#7C7C86"/>
+        <SolidColorBrush x:Key="SLabel" Color="#6E6E78"/>
+        <SolidColorBrush x:Key="STile" Color="#1C1C21"/>
+        <SolidColorBrush x:Key="SKeyCap" Color="#1E1E23"/>
+        <SolidColorBrush x:Key="SKeyCapEdge" Color="#0E0E11"/>
+
+        <!-- ===== поля ввода: высота 32, скругление 8, фокус — акцентом ===== -->
         <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Background" Value="{DynamicResource SField}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource SFieldBorder}"/>
-            <!-- одна высота у всех однострочных полей и кнопок рядом с ними; по центру — иначе отступ удваивался -->
-            <Setter Property="Padding" Value="12,0"/>
-            <Setter Property="Height" Value="36"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="10,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-        <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
-            <Setter Property="Background" Value="{DynamicResource SField}"/>
-            <Setter Property="Height" Value="36"/>
-        </Style>
-        <Style x:Key="SFlat" TargetType="Button" BasedOn="{StaticResource Flat}">
-            <Setter Property="Background" Value="{DynamicResource SBtn}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SBtnBorder}"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="FontSize" Value="12"/>
-        </Style>
-        <Style x:Key="SSegment" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#D4D4DA"/>
-            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Margin" Value="0,0,6,6"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="b" Background="{DynamicResource SSeg}" BorderBrush="{DynamicResource SBtnBorder}" BorderThickness="1" CornerRadius="10" Padding="12,7">
-                            <ContentPresenter VerticalAlignment="Center"/>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <TextBlock x:Name="ph" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="{DynamicResource SRowNote}"
+                                           VerticalAlignment="Center" Padding="2,0,0,0" IsHitTestVisible="False" Visibility="Collapsed" TextTrimming="CharacterEllipsis"/>
+                                <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource SSegHover}"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource Accent}"/>
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Accent}"/>
-                                <Setter Property="Foreground" Value="#000000"/>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Text" Value=""/>
+                                    <Condition Property="IsKeyboardFocused" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="ph" Property="Visibility" Value="Visible"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="Nav" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#B9B9C3"/>
+        <!-- у пароля подсказка (Tag) включается из кода: PasswordBox не умеет «пусто» в триггерах -->
+        <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+            <Setter Property="Background" Value="{DynamicResource SField}"/>
+            <Setter Property="Height" Value="32"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource SFieldBorder}" BorderThickness="1" CornerRadius="8">
+                            <Grid Margin="10,0">
+                                <TextBlock x:Name="ph" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="{DynamicResource SRowNote}"
+                                           VerticalAlignment="Center" Padding="2,0,0,0" IsHitTestVisible="False" TextTrimming="CharacterEllipsis"/>
+                                <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="Height" Value="32"/>
+        </Style>
+        <!-- переключатель в строке — справа, по центру -->
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="Margin" Value="16,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- ===== кнопки: высота 32, скругление 8 ===== -->
+        <Style x:Key="SBtnBase" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Fg}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"/>
+                            <Border x:Name="hov" CornerRadius="8" Background="#14FFFFFF" Visibility="Collapsed"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="hov" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="hov" Property="Background" Value="#24FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SFlat" TargetType="Button" BasedOn="{StaticResource SBtnBase}">
+            <Setter Property="Background" Value="{DynamicResource SBtn}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SBtnBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="SPrimary" TargetType="Button" BasedOn="{StaticResource SBtnBase}">
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="#08080A"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="16,0"/>
+        </Style>
+        <Style x:Key="SDanger" TargetType="Button" BasedOn="{StaticResource SBtnBase}">
+            <Setter Property="Foreground" Value="#F87171"/>
+            <Setter Property="Padding" Value="10,0"/>
+        </Style>
+        <Style x:Key="SQuiet" TargetType="Button" BasedOn="{StaticResource SBtnBase}">
+            <Setter Property="Foreground" Value="{DynamicResource SNote}"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+        </Style>
+
+        <!-- ===== сегменты: одна «пилюля», выбранный — светлее и белым текстом ===== -->
+        <Style x:Key="SSegBox" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SSeg}"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Padding" Value="2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SSegment" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#A6A6B0"/>
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="11,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource SSegHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource SSegSel}"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== меню слева: значок в плитке 22×22, выбранный — плитка цвета акцента ===== -->
+        <Style x:Key="Nav" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#B4B4BE"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="GroupName" Value="nav"/>
@@ -78,10 +205,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="b" Background="Transparent" CornerRadius="10" Padding="12,9">
-                            <StackPanel Orientation="Horizontal">
-                                <ContentPresenter Content="{TemplateBinding Tag}" VerticalAlignment="Center"/>
-                                <ContentPresenter Margin="12,0,0,0" VerticalAlignment="Center"/>
+                        <Border x:Name="b" Background="Transparent" CornerRadius="8" Padding="5,0,10,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="tile" Width="22" Height="22" CornerRadius="6" Background="{DynamicResource STile}" TextElement.Foreground="#B4B4BE">
+                                    <ContentPresenter Content="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -90,6 +219,8 @@
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="b" Property="Background" Value="{DynamicResource SNavSel}"/>
+                                <Setter TargetName="tile" Property="Background" Value="{DynamicResource Accent}"/>
+                                <Setter TargetName="tile" Property="TextElement.Foreground" Value="#000000"/>
                                 <Setter Property="Foreground" Value="#FFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -97,159 +228,255 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- ===== страница ===== -->
+        <Style x:Key="Page" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+        </Style>
+        <Style x:Key="H1" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style x:Key="PageDesc" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource SNote}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin" Value="0,0,0,24"/>
+        </Style>
+        <Style x:Key="SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource SLabel}"/>
+            <Setter Property="Margin" Value="12,20,0,8"/>
+        </Style>
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource SCard}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource SCardBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="16"/>
-            <Setter Property="Padding" Value="18,6"/>
-            <Setter Property="Margin" Value="0,0,0,14"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="0"/>
         </Style>
-        <Style x:Key="H1" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-            <Setter Property="FontSize" Value="24"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,0,0,18"/>
+        <!-- строка: [значок] заголовок/пояснение … элемент справа; высота от 52 -->
+        <Style x:Key="Row" TargetType="DockPanel">
+            <Setter Property="Margin" Value="16,10"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="LastChildFill" Value="True"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- зависимая строка: сдвинута на 16 и гаснет, когда главный переключатель выключен -->
+        <Style x:Key="SubRow" TargetType="DockPanel" BasedOn="{StaticResource Row}">
+            <Setter Property="Margin" Value="32,10,16,10"/>
         </Style>
         <Style x:Key="RowTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-            <Setter Property="FontSize" Value="14"/>
-            <!-- строка без описания: заголовок по центру переключателя, а не прижат к верху -->
-            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="13.5"/>
             <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
         <Style x:Key="RowNote" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="{DynamicResource SNote}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SRowNote}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+            <Setter Property="MaxWidth" Value="420"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+        <!-- результат проверки: может быть длинным — переносится -->
+        <Style x:Key="Result" TargetType="TextBlock" BasedOn="{StaticResource RowNote}">
             <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <!-- «ⓘ» рядом с заголовком: длинное объяснение — только во всплывающей подсказке -->
+        <Style x:Key="Info" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Text" Value="ⓘ"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource SLabel}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Margin" Value="6,1,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Help"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="80"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
         </Style>
         <Style x:Key="Sep" TargetType="Border">
             <Setter Property="Height" Value="1"/>
             <Setter Property="Background" Value="{DynamicResource SSep}"/>
-            <Setter Property="Margin" Value="-18,0"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
         </Style>
-        <Style x:Key="Row" TargetType="Grid">
-            <Setter Property="Margin" Value="0,12"/>
+        <Style x:Key="SepIcon" TargetType="Border" BasedOn="{StaticResource Sep}">
+            <Setter Property="Margin" Value="56,0,0,0"/>
+        </Style>
+        <Style x:Key="SepSub" TargetType="Border" BasedOn="{StaticResource Sep}">
+            <Setter Property="Margin" Value="32,0,0,0"/>
+        </Style>
+        <!-- плитка 28×28 со значком слева в строке -->
+        <Style x:Key="Tile" TargetType="Border">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Background" Value="{DynamicResource STile}"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextElement.Foreground" Value="#D4D4DA"/>
+        </Style>
+        <Style x:Key="Dot" TargetType="Ellipse">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Height" Value="6"/>
+            <Setter Property="Fill" Value="#6E6E78"/>
+            <Setter Property="Margin" Value="0,1,6,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
     </Window.Resources>
 
     <Grid x:Name="Root" Background="{DynamicResource SBg}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="220"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Меню разделов -->
-        <DockPanel Background="{DynamicResource SSide}" >
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="20,22,20,22">
-                <Border Width="44" Height="22" CornerRadius="11" Background="Black" BorderBrush="#3A3A42" BorderThickness="1">
-                    <h:Character Width="30" Height="18"/>
-                </Border>
-                <StackPanel Margin="12,0,0,0">
-                    <TextBlock Text="Isle" FontSize="16" FontWeight="Bold"/>
-                    <TextBlock x:Name="VersionText" Text="Версия" FontSize="11" Foreground="{DynamicResource SNote}"/>
+        <!-- ================= Меню разделов ================= -->
+        <Border Background="{DynamicResource SSide}" BorderBrush="{DynamicResource SSep}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="18,20,18,16">
+                    <Border Width="40" Height="20" CornerRadius="10" Background="Black" BorderBrush="#3A3A42" BorderThickness="1">
+                        <h:Character Width="28" Height="17"/>
+                    </Border>
+                    <TextBlock Text="Isle" FontSize="16" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
-            </StackPanel>
-            <Button DockPanel.Dock="Bottom" Style="{StaticResource Ghost}" Margin="14,0,14,18" HorizontalContentAlignment="Left" Click="OnExit">
-                <StackPanel Orientation="Horizontal">
-                    <h:Icon Kind="Power" Width="15" Height="15" Foreground="#F87171"/>
-                    <TextBlock Text="Выйти из Isle" Margin="10,0,0,0" Foreground="#F87171" FontSize="13"/>
-                </StackPanel>
-            </Button>
-            <TextBlock DockPanel.Dock="Bottom" Text="Изменения сохраняются сразу" FontSize="11" Foreground="{DynamicResource SNote}" Opacity="0.8" Margin="26,0,0,10"/>
-            <StackPanel x:Name="NavPanel" Margin="12,0">
-                <RadioButton Style="{StaticResource Nav}" Content="Общее" Tag="{h:IconFor Sliders}" x:Name="NavGeneral" IsChecked="True" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Внешний вид" Tag="{h:IconFor Contrast}" x:Name="NavLook" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Музыка" Tag="{h:IconFor Wave}" x:Name="NavMusic" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="ИИ" Tag="{h:IconFor Chat}" x:Name="NavAi" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Голос в текст" Tag="{h:IconFor Mic}" x:Name="NavVoice" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Запись экрана" Tag="{h:IconFor Record}" x:Name="NavRecord" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Погода" Tag="{h:IconFor Sun}" x:Name="NavWeather" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Всплывашки и модули" Tag="{h:IconFor Bell}" x:Name="NavModules" Checked="OnNav"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Клавиши" Tag="{h:IconFor Keyboard}" x:Name="NavKeys" Checked="OnNav"/>
-                <Border Height="1" Background="{DynamicResource SSep}" Margin="10,10,10,10"/>
-                <RadioButton Style="{StaticResource Nav}" Tag="{h:IconFor Restart}" x:Name="NavUpdates" Checked="OnNav">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Обновления"/>
-                        <Border x:Name="UpdateDot" Width="7" Height="7" CornerRadius="3.5" Background="#4ADE80" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
-                    </StackPanel>
-                </RadioButton>
-            </StackPanel>
-        </DockPanel>
+                <!-- поиск по разделам: фильтрует пункты меню -->
+                <TextBox x:Name="NavSearch" DockPanel.Dock="Top" Margin="12,0,12,12" Tag="Поиск" TextChanged="OnNavSearch"/>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Visible" x:Name="Scroll" Background="Transparent">
-            <Grid Margin="32,26,32,26">
+                <!-- низ: версия и тихий выход -->
+                <DockPanel DockPanel.Dock="Bottom" Margin="18,6,10,14" LastChildFill="False">
+                    <TextBlock x:Name="VersionText" Text="Версия" FontSize="11" Foreground="{DynamicResource SLabel}" VerticalAlignment="Center"/>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource SQuiet}" Height="26" FontSize="11.5" Content="Закрыть Isle" Click="OnExit"/>
+                </DockPanel>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="NavPanel" Margin="10,0">
+                        <RadioButton Style="{StaticResource Nav}" Content="Общее" Tag="{h:IconFor Sliders, Size=14}" x:Name="NavGeneral" IsChecked="True" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Внешний вид" Tag="{h:IconFor Contrast, Size=14}" x:Name="NavLook" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Персонаж" x:Name="NavCharacter" Checked="OnNav">
+                            <RadioButton.Tag><h:Icon Width="14" Height="14" Data="M12 3a9 9 0 1 0 0.01 0 M8.5 14.5c1.8 2 5.2 2 7 0 M9 9.5v1 M15 9.5v1"/></RadioButton.Tag>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource Nav}" Content="Чёлка" x:Name="NavNotch" Checked="OnNav">
+                            <RadioButton.Tag><h:Icon Width="14" Height="14" Data="M3 6h4c0 2.2 1.8 4 4 4h2c2.2 0 4-1.8 4-4h4 M3 6v12h18V6"/></RadioButton.Tag>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource Nav}" Content="Музыка" Tag="{h:IconFor Wave, Size=14}" x:Name="NavMusic" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Уведомления" Tag="{h:IconFor Bell, Size=14}" x:Name="NavModules" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Буфер обмена" Tag="{h:IconFor Clipboard, Size=14}" x:Name="NavClipboard" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Снимки и запись" Tag="{h:IconFor Record, Size=14}" x:Name="NavRecord" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="ИИ" Tag="{h:IconFor Chat, Size=14}" x:Name="NavAi" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Диктовка" Tag="{h:IconFor Mic, Size=14}" x:Name="NavVoice" Checked="OnNav"/>
+                        <RadioButton Style="{StaticResource Nav}" Content="Клавиши" Tag="{h:IconFor Keyboard, Size=14}" x:Name="NavKeys" Checked="OnNav"/>
+                        <Border x:Name="NavSep" Height="1" Background="{DynamicResource SSep}" Margin="8,8"/>
+                        <RadioButton Style="{StaticResource Nav}" Tag="{h:IconFor Info, Size=14}" x:Name="NavUpdates" Checked="OnNav">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="О программе"/>
+                                <Border x:Name="UpdateDot" Width="7" Height="7" CornerRadius="3.5" Background="#4ADE80" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </RadioButton>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" x:Name="Scroll" Background="Transparent">
+            <Grid Margin="40,32,40,40" MaxWidth="680" HorizontalAlignment="Left">
 
                 <!-- ============ ОБЩЕЕ ============ -->
                 <StackPanel x:Name="SecGeneral">
                     <TextBlock Style="{StaticResource H1}" Text="Общее"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Запуск и поведение острова"/>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Margin="12,0,0,8" Text="ЗАПУСК"/>
+                    <Border Style="{StaticResource Card}">
+                        <DockPanel Style="{StaticResource Row}">
+                            <CheckBox DockPanel.Dock="Right" x:Name="Autostart" Click="OnAutostart"/>
+                            <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Power" Width="15" Height="15"/></Border>
+                            <TextBlock Style="{StaticResource RowTitle}" Text="Запуск с Windows"/>
+                        </DockPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ПОКАЗ ОСТРОВА"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Запускать вместе с Windows"/></StackPanel>
-                                <CheckBox x:Name="Autostart" HorizontalAlignment="Right" Click="OnAutostart"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Прятать в полноэкранных приложениях"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Игры, видео на весь экран, презентации. Навёл курсор на верхний край — остров выглянет."/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Fullscreen" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Monitor" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Прятать в полноэкранных"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Игры и видео — курсор вверх, и он выглянет"/>
                                 </StackPanel>
-                                <CheckBox x:Name="Fullscreen" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Прятать остров, пока он не нужен (OLED)"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Остров уезжает за верхний край и не выжигает экран. Подведи курсор к самому верху — появится. Клик мимо — снова спрячется."/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Oled" Click="OnOled"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Moon" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Прятать до наведения"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Остров уезжает за верхний край и не выжигает экран. Подведи курсор к самому верху — появится. Клик мимо — снова спрячется."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Бережёт OLED"/>
                                 </StackPanel>
-                                <CheckBox x:Name="Oled" HorizontalAlignment="Right" Click="OnOled"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Показывать остров на скриншотах и в записи экрана"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Обычно его там нет: ни скриншоты, ни запись, ни трансляция остров не видят."/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Hover" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="ChevRight" Width="15" Height="15" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="-90"/></h:Icon.RenderTransform></h:Icon></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Открывать у края"/>
+                                        <TextBlock x:Name="HoverNote" Style="{StaticResource Info}"/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Курсор к самому верху над чёлкой"/>
                                 </StackPanel>
-                                <CheckBox x:Name="Captures" HorizontalAlignment="Right" Click="OnCaptures"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Рисовать пометки на снимке видеокартой"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Быстрее, но на части компьютеров при рисовании появляются чёрные квадраты. Если они есть — выключи."/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Captures" Click="OnCaptures"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Image" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Виден на скриншотах и записи"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Обычно остров на них не попадает"/>
                                 </StackPanel>
-                                <CheckBox x:Name="CaptureSoft" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Открывать у края экрана"/>
-                                    <TextBlock x:Name="HoverNote" Style="{StaticResource RowNote}" Text="Подведи курсор к самому верху экрана над чёлкой. Просто водить по чёлке можно — она не откроется. Если выключить — только кликом или Ctrl+Alt+Space."/></StackPanel>
-                                <CheckBox x:Name="Hover" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="24-часовой формат времени"/></StackPanel>
-                                <CheckBox x:Name="Clock24" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ПОГОДА"/>
                     <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Данные Isle"/>
-                                    <TextBlock Style="{StaticResource RowNote}" x:Name="DataDirText"/></StackPanel>
-                                <Button Style="{StaticResource SFlat}" Content="Открыть папку" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnDataDir"/>
-                            </Grid>
-                        </StackPanel>
+                        <DockPanel Style="{StaticResource Row}">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Найти" Margin="8,0,0,0" Click="OnCity"/>
+                            <TextBox DockPanel.Dock="Right" x:Name="CityBox" Width="220" Tag="Например, Шымкент" KeyDown="OnCityKey"/>
+                            <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Sun" Width="15" Height="15"/></Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Город"/>
+                                    <TextBlock Style="{StaticResource Info}" ToolTip="Прогноз MET Norway. От погоды зависят наряд Клоди и снег из-под чёлки."/>
+                                </StackPanel>
+                                <TextBlock x:Name="CityStatus" Style="{StaticResource RowNote}" MaxWidth="200"/>
+                            </StackPanel>
+                        </DockPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- ============ ВНЕШНИЙ ВИД ============ -->
-                <StackPanel x:Name="SecLook" Visibility="Collapsed">
+                <StackPanel x:Name="SecLook" Style="{StaticResource Page}">
                     <TextBlock Style="{StaticResource H1}" Text="Внешний вид"/>
-                    <!-- превью свёрнутого острова -->
-                    <Border Background="{DynamicResource SCard}" BorderBrush="{DynamicResource SCardBorder}" BorderThickness="1" CornerRadius="16" Height="150" Margin="0,0,0,14">
-                        <Grid>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Тема, цвет и размер острова"/>
+
+                    <!-- превью свёрнутого острова и ряда вкладок -->
+                    <Border Style="{StaticResource Card}" Height="132">
+                        <Grid ClipToBounds="True">
                             <Border x:Name="Preview" Background="Black" CornerRadius="0,0,16,16" HorizontalAlignment="Center" VerticalAlignment="Top"
                                     Height="34" Padding="16,0" BorderBrush="#26262B" BorderThickness="1,0,1,1" MouseEnter="OnPreviewEnter" MouseLeave="OnPreviewLeave">
                                 <Border.LayoutTransform><ScaleTransform x:Name="PreviewScale" ScaleX="1" ScaleY="1"/></Border.LayoutTransform>
@@ -272,479 +499,777 @@
                                 </StackPanel>
                             </Border>
                             <!-- ряд вкладок раскрытой чёлки — сразу видно порядок и какие спрятаны -->
-                            <Border Background="Black" CornerRadius="16" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,56,0,0"
-                                    Padding="6" BorderBrush="#26262B" BorderThickness="1">
+                            <Border Background="Black" CornerRadius="14" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,50,0,0"
+                                    Padding="4" BorderBrush="#26262B" BorderThickness="1">
                                 <StackPanel x:Name="PreviewTabs" Orientation="Horizontal"/>
                             </Border>
-                            <TextBlock Text="Свёрнутая чёлка и вкладки" FontSize="11" Foreground="{DynamicResource SNote}" VerticalAlignment="Bottom" Margin="14,0,0,10"/>
+                            <TextBlock Text="Свёрнутая чёлка и вкладки" FontSize="11" Foreground="{DynamicResource SLabel}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
                         </Grid>
                     </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                        <StackPanel>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Вкладки"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Галочка — вкладка видна в чёлке, стрелки — порядок. «Главную» спрятать нельзя."/>
-                                </StackPanel>
-                            </Grid>
-                            <StackPanel x:Name="TabsList" Margin="0,4,0,0"/>
-                        </StackPanel>
-                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ТЕМА И АКЦЕНТ"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Персонаж"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Клоди живёт в чёлке: пляшет под музыку, думает вместе с ИИ, радуется готовому и засыпает, когда тебя нет."/>
-                                    <WrapPanel Margin="0,10,0,0">
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Клоди" x:Name="ChPixel" Click="OnCharacter" Tag="pixel"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Глаза" x:Name="ChEyes" Click="OnCharacter" Tag="eyes"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Без персонажа" x:Name="ChNone" Click="OnCharacter" Tag="none"/>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Одежда Клоди"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="«По погоде» — сам одевается по погоде за окном: шапка и шарф, берет, ушанка, дождевик, панама, кепка. Или выбери наряд насовсем."/>
-                                    <WrapPanel x:Name="Outfits" Margin="0,10,0,0">
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="По погоде" Click="OnOutfit" Tag="auto"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Без одежды" Click="OnOutfit" Tag="None"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ковбой" Click="OnOutfit" Tag="Cowboy"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Корона" Click="OnOutfit" Tag="Crown"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Волшебник" Click="OnOutfit" Tag="Wizard"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Пират" Click="OnOutfit" Tag="Pirate"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Повар" Click="OnOutfit" Tag="Chef"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Праздник" Click="OnOutfit" Tag="Party"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Викинг" Click="OnOutfit" Tag="Viking"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Детектив" Click="OnOutfit" Tag="Detective"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ниндзя" Click="OnOutfit" Tag="Ninja"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Венок" Click="OnOutfit" Tag="Flowers"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Выпускник" Click="OnOutfit" Tag="Graduate"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ушанка" Click="OnOutfit" Tag="Frost"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Берет" Click="OnOutfit" Tag="Autumn"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Дождевик" Click="OnOutfit" Tag="Storm"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Панама" Click="OnOutfit" Tag="Heat"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Шапка и шарф" Click="OnOutfit" Tag="Winter"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Кепка" Click="OnOutfit" Tag="Sunny"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Очки" Click="OnOutfit" Tag="Summer"/>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Тема"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="«Закат» — неоновый вечер у океана: размытые пальмы и солнце за матовым стеклом в панели, розовый акцент, у Клоди гавайская рубашка."/>
-                                    <WrapPanel x:Name="Themes" Margin="0,10,0,0">
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel x:Name="Themes" Orientation="Horizontal">
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="theme" Content="Тёмная" Click="OnTheme" Tag="dark"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="theme" Content="Закат" Click="OnTheme" Tag="sunset"/>
-                                    </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Тема"/>
+                                    <TextBlock Style="{StaticResource Info}" ToolTip="«Закат» — неоновый вечер у океана: пальмы за матовым стеклом, розовый акцент, у Клоди гавайская рубашка."/>
                                 </StackPanel>
-                            </Grid>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Снег из-под чёлки"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="«Зимой» — с 1 декабря по 14 января, а в другие дни — когда за окном идёт снег (по прогнозу погоды)."/>
-                                    <TextBlock x:Name="SnowWhy" Style="{StaticResource RowNote}" Margin="0,4,0,0"/>
-                                    <WrapPanel x:Name="SnowModes" Margin="0,10,0,0">
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Зимой" Click="OnSnowMode" Tag="auto"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Всегда" Click="OnSnowMode" Tag="on"/>
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Выключен" Click="OnSnowMode" Tag="off"/>
-                                    </WrapPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <WrapPanel x:Name="Accents" Orientation="Horizontal"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Акцент"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет или градиент"/>
                                 </StackPanel>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Акцент"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Цвет кнопок, таймера и полосок музыки — один цвет или градиент. По умолчанию — белый."/>
-                                    <WrapPanel x:Name="Accents" Margin="0,10,0,0"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="РАЗМЕР И ПРОЗРАЧНОСТЬ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Slider x:Name="ScaleSlider" Width="200" Minimum="70" Maximum="200" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnScale"/>
+                                    <TextBlock x:Name="ScaleText" Width="48" TextAlignment="Right" VerticalAlignment="Center" FontSize="12.5" Foreground="{DynamicResource SNote}"/>
                                 </StackPanel>
-                            </Grid>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Размер"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="На 4K — крупнее"/>
+                                </StackPanel>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Режим выреза, как на MacBook"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Сверху появляется чёрная полоса высотой с чёлку, и развёрнутые окна встают ниже неё — чёлка ничего не закрывает. «В браузере» — только пока впереди браузер, развёрнутый на весь экран."/>
-                                    <WrapPanel x:Name="NotchModes" Margin="0,10,0,0">
-                                        <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="Выключен" Click="OnNotchMode" Tag="off"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Slider x:Name="OpacitySlider" Width="200" Minimum="50" Maximum="100" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnOpacity"/>
+                                    <TextBlock x:Name="OpacityText" Width="48" TextAlignment="Right" VerticalAlignment="Center" FontSize="12.5" Foreground="{DynamicResource SNote}"/>
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Непрозрачность"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Меньше — виден стол"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ВЫРЕЗ И ПЛАВНОСТЬ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel x:Name="NotchModes" Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="Выкл" Click="OnNotchMode" Tag="off"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="В браузере" Click="OnNotchMode" Tag="browser"/>
                                         <RadioButton Style="{StaticResource SSegment}" GroupName="notch" Content="Всегда" Click="OnNotchMode" Tag="always"/>
-                                    </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Вырез сверху"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Сверху чёрная полоса высотой с чёлку, развёрнутые окна встают ниже — чёлка ничего не закрывает. «В браузере» — только пока впереди браузер на весь экран."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Окна ниже чёлки, как на MacBook"/>
                                 </StackPanel>
-                            </Grid>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/></Grid.ColumnDefinitions>
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Размер острова"/><TextBlock Style="{StaticResource RowNote}" Text="На 4K-мониторе сделай крупнее"/></StackPanel>
-                                <Slider x:Name="ScaleSlider" Grid.Column="1" Minimum="70" Maximum="200" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnScale"/>
-                                <TextBlock x:Name="ScaleText" Grid.Column="2" TextAlignment="Right" VerticalAlignment="Center"/>
-                            </Grid>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps30" Content="30" Tag="30" Click="OnFps"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps60" Content="60" Tag="60" Click="OnFps"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps120" Content="120" Tag="120" Click="OnFps"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="FpsMax" Content="Как монитор" Tag="0" Click="OnFps"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Плавность"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Кадров в секунду"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ ПЕРСОНАЖ ============ -->
+                <StackPanel x:Name="SecCharacter" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="Персонаж"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Кто живёт в чёлке"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Клоди" x:Name="ChPixel" Click="OnCharacter" Tag="pixel"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Глаза" x:Name="ChEyes" Click="OnCharacter" Tag="eyes"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="ch" Content="Никого" x:Name="ChNone" Click="OnCharacter" Tag="none"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Кто в чёлке"/>
+                                    <TextBlock Style="{StaticResource Info}" ToolTip="Клоди пляшет под музыку, думает вместе с ИИ, радуется готовому и засыпает, когда тебя нет."/>
+                                </StackPanel>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/></Grid.ColumnDefinitions>
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Непрозрачность"/><TextBlock Style="{StaticResource RowNote}" Text="Чуть видно рабочий стол сквозь остров"/></StackPanel>
-                                <Slider x:Name="OpacitySlider" Grid.Column="1" Minimum="50" Maximum="100" IsSnapToTickEnabled="True" TickFrequency="5" VerticalAlignment="Center" ValueChanged="OnOpacity"/>
-                                <TextBlock x:Name="OpacityText" Grid.Column="2" TextAlignment="Right" VerticalAlignment="Center"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <StackPanel><TextBlock Style="{StaticResource RowTitle}" Text="Плавность анимаций"/><TextBlock Style="{StaticResource RowNote}" Text="Больше кадров — плавнее, но больше нагрузка"/></StackPanel>
-                                <WrapPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps30" Content="30 к/с" Tag="30" Click="OnFps"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps60" Content="60 к/с" Tag="60" Click="OnFps"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="Fps120" Content="120 к/с" Tag="120" Click="OnFps"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="fps" x:Name="FpsMax" Content="Как у монитора" Tag="0" Click="OnFps"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel x:Name="SnowModes" Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Зимой" Click="OnSnowMode" Tag="auto"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Всегда" Click="OnSnowMode" Tag="on"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="snow" Content="Выкл" Click="OnSnowMode" Tag="off"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Снег из-под чёлки"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="«Зимой» — с 1 декабря по 14 января, а в другие дни — когда за окном идёт снег (по прогнозу)."/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="SnowWhy" Style="{StaticResource RowNote}" MaxWidth="300"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="НАРЯД"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Margin="16,14,16,16">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Наряд Клоди"/>
+                                <TextBlock Style="{StaticResource Info}" ToolTip="«По погоде» — сам одевается по погоде за окном: шапка и шарф, берет, ушанка, дождевик, панама, кепка. Или выбери наряд насовсем."/>
+                            </StackPanel>
+                            <Border Style="{StaticResource SSegBox}" Margin="0,10,0,0" HorizontalAlignment="Stretch">
+                                <WrapPanel x:Name="Outfits">
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="По погоде" Click="OnOutfit" Tag="auto"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Без наряда" Click="OnOutfit" Tag="None"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ковбой" Click="OnOutfit" Tag="Cowboy"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Корона" Click="OnOutfit" Tag="Crown"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Волшебник" Click="OnOutfit" Tag="Wizard"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Пират" Click="OnOutfit" Tag="Pirate"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Повар" Click="OnOutfit" Tag="Chef"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Праздник" Click="OnOutfit" Tag="Party"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Викинг" Click="OnOutfit" Tag="Viking"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Детектив" Click="OnOutfit" Tag="Detective"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ниндзя" Click="OnOutfit" Tag="Ninja"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Венок" Click="OnOutfit" Tag="Flowers"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Выпускник" Click="OnOutfit" Tag="Graduate"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Ушанка" Click="OnOutfit" Tag="Frost"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Берет" Click="OnOutfit" Tag="Autumn"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Дождевик" Click="OnOutfit" Tag="Storm"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Панама" Click="OnOutfit" Tag="Heat"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Шапка и шарф" Click="OnOutfit" Tag="Winter"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Кепка" Click="OnOutfit" Tag="Sunny"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="outfit" Content="Очки" Click="OnOutfit" Tag="Summer"/>
                                 </WrapPanel>
-                            </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ ЧЁЛКА ============ -->
+                <StackPanel x:Name="SecNotch" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="Чёлка"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Вкладки и свёрнутый вид"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="12,0,0,8">
+                        <TextBlock Style="{StaticResource SectionLabel}" Margin="0" Text="ВКЛАДКИ"/>
+                        <TextBlock Style="{StaticResource Info}" ToolTip="Переключатель — вкладка видна в чёлке, стрелки — порядок. «Главную» спрятать нельзя."/>
+                    </StackPanel>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel x:Name="TabsList" Margin="0,4"/>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="СВЁРНУТАЯ ЧЁЛКА"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="ShowClock" Click="OnMusicToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Часы"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Когда больше ничего не происходит"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepSub}"/>
+                            <DockPanel x:Name="RowClockSeconds" Style="{StaticResource SubRow}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="ClockSeconds" Click="OnMusicToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Секунды"/>
+                                    <TextBlock Style="{StaticResource RowNote}" x:Name="SecondsHint" Text="21:05:33 вместо 21:05"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Clock24" Click="OnToggle"/>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="24-часовой формат"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Media" Click="OnMusicToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Музыка в свёрнутой"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Обложка и полоски, пока играет"/>
+                                </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- ============ МУЗЫКА ============ -->
-                <StackPanel x:Name="SecMusic" Visibility="Collapsed">
+                <StackPanel x:Name="SecMusic" Style="{StaticResource Page}">
                     <TextBlock Style="{StaticResource H1}" Text="Музыка"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Пилюля, плеер и текст песен"/>
+
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <StackPanel Margin="0,14">
-                                <TextBlock Style="{StaticResource RowTitle}" Text="Пилюля во время музыки"/>
-                                <TextBlock Style="{StaticResource RowNote}" Text="«Обычная» — обложка и полоски ритма. «С названием» — трек и полоса времени. «Мини-плеер» — обложка, полоса и кнопки; открывается щелчком, а не наведением. «С текстом» — строка песни, которая звучит."/>
-                                <WrapPanel Margin="0,10,0,0">
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillBars" Content="Обычная" Tag="bars" Click="OnPill"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillTitle" Content="С названием" Tag="title" Click="OnPill"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillMini" Content="Мини-плеер" Tag="mini" Click="OnPill"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillLyrics" Content="С текстом" Tag="lyrics" Click="OnPill"/>
-                                </WrapPanel>
-                            </StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillBars" Content="Обычная" Tag="bars" Click="OnPill"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillTitle" Content="С названием" Tag="title" Click="OnPill"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillMini" Content="Мини-плеер" Tag="mini" Click="OnPill"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="pill" x:Name="PillLyrics" Content="С текстом" Tag="lyrics" Click="OnPill"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Пилюля"/>
+                                    <TextBlock Style="{StaticResource Info}" ToolTip="«Обычная» — обложка и полоски ритма. «С названием» — трек и полоса времени. «Мини-плеер» — обложка, полоса и кнопки; открывается щелчком. «С текстом» — строка песни, которая звучит."/>
+                                </StackPanel>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <StackPanel Margin="0,14">
-                                <TextBlock Style="{StaticResource RowTitle}" Text="Плеер на «Главной»"/>
-                                <TextBlock Style="{StaticResource RowNote}" Text="«Мягкое зеркало» — обложка по центру, вокруг её размытое свечение. «Заливка» — весь плеер в цветах обложки. «Компактный» — обложка слева, без свечения."/>
-                                <WrapPanel Margin="0,10,0,0">
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpMirror" Content="Мягкое зеркало" Tag="mirror" Click="OnHomePlayer"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpFill" Content="Заливка" Tag="fill" Click="OnHomePlayer"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpCompact" Content="Компактный" Tag="compact" Click="OnHomePlayer"/>
-                                </WrapPanel>
-                            </StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpMirror" Content="Зеркало" Tag="mirror" Click="OnHomePlayer"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpFill" Content="Заливка" Tag="fill" Click="OnHomePlayer"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="hp" x:Name="HpCompact" Content="Компактный" Tag="compact" Click="OnHomePlayer"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Плеер на Главной"/>
+                                    <TextBlock Style="{StaticResource Info}" ToolTip="«Зеркало» — обложка по центру, вокруг её размытое свечение. «Заливка» — весь плеер в цветах обложки. «Компактный» — обложка слева, без свечения."/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ТЕКСТ ПЕСНИ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Lyrics" Click="OnMusicToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Текст песни"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Строки в такт музыке — в плеере и в пилюле «С текстом». Текст берётся из открытой базы LRCLIB (lrclib.net) только для песни, которая играет."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Строки в такт музыке"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepSub}"/>
+                            <DockPanel x:Name="RowLyricsHome" Style="{StaticResource SubRow}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="LyricsHome" Click="OnMusicToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="На Главной"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Справа от обложки"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- место для блоков других сервисов (например, Spotify) -->
+                    <StackPanel x:Name="MusicExtras"/>
+                </StackPanel>
+
+                <!-- ============ УВЕДОМЛЕНИЯ ============ -->
+                <StackPanel x:Name="SecModules" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="Уведомления"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Что всплывает в чёлке"/>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Margin="12,0,0,8" Text="СИСТЕМНЫЕ СОБЫТИЯ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Volume" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Volume" Width="15" Height="15"/></Border>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Громкость"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Layout" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Keyboard" Width="15" Height="15"/></Border>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Смена раскладки"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Caps" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Caps" Width="15" Height="15"/></Border>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Caps Lock"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Battery" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Battery" Width="15" Height="15"/></Border>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Зарядка и низкий заряд"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Vpn" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Shield" Width="15" Height="15"/></Border>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="VPN и страна"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="УВЕДОМЛЕНИЯ ПРИЛОЖЕНИЙ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="Notif" Click="OnToggle"/>
+                                <Button DockPanel.Dock="Right" x:Name="NotifAccessBtn" Style="{StaticResource SFlat}" Content="Дать доступ" Visibility="Collapsed" Click="OnNotifAccess"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Bell" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Уведомления приложений"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Ellipse x:Name="NotifDot" Style="{StaticResource Dot}"/>
+                                        <TextBlock x:Name="NotifStatus" Style="{StaticResource RowNote}" Margin="0" MaxWidth="300"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel x:Name="RowNotifOnly" Style="{StaticResource SubRow}" Margin="72,10,16,10">
+                                <CheckBox DockPanel.Dock="Right" x:Name="NotifOnly" Click="OnToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Только в острове"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Isle убирает плашку Windows справа снизу — уведомление видно только в чёлке. Оно пропадает и из центра уведомлений Windows."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Без баннеров Windows"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ЗАГРУЗКИ STEAM"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="SteamExact" Click="OnSteamExact"/>
+                                <!-- видна, пока точная скорость ещё ни разу не заработала -->
+                                <Button DockPanel.Dock="Right" x:Name="SteamActivateBtn" Style="{StaticResource SFlat}" Content="Включить" Visibility="Collapsed" Click="OnSteamActivate"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Download" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Точная скорость Steam"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Скорость, объём и время загрузки — прямо из Steam. Isle сам включит это в Steam и перезапустит его, когда ничего не качается и не запущена игра."/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="SteamExactStatus" Style="{StaticResource RowNote}" MaxWidth="320" Text="Isle один раз перезапустит Steam"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Открыть" Click="OnSteamLog"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="File" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Журнал загрузок"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Что Isle получил от Steam"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ БУФЕР ОБМЕНА ============ -->
+                <StackPanel x:Name="SecClipboard" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="Буфер обмена"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="История скопированного"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="ClipHist" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="History" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="История"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Всё, что копируешь, — под рукой"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel x:Name="RowClipImg" Style="{StaticResource SubRow}" Margin="72,10,16,10">
+                                <CheckBox DockPanel.Dock="Right" x:Name="ClipImg" Click="OnToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Сохранять картинки"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Пароли не сохраняются никогда"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ СНИМКИ И ЗАПИСЬ ============ -->
+                <StackPanel x:Name="SecRecord" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="Снимки и запись"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Скриншоты и запись экрана"/>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Margin="12,0,0,8" Text="СНИМКИ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="PrtScr" Click="OnPrintScreen"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Crop" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="PrintScreen через Isle"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Вместо «Ножниц» Windows"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="SaveShots" Click="OnSaveShots"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Folder" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Сохранять в файл"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Изображения\Isle · иначе только в буфер"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="CaptureSoft" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Pipette" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Пометки видеокартой"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Быстрее, но на части компьютеров при рисовании появляются чёрные квадраты. Если они есть — выключи."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Чёрные квадраты — выключи"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Margin="12,20,0,8">
+                        <TextBlock Style="{StaticResource SectionLabel}" Margin="0" Text="ЗАПИСЬ ЧЕРЕЗ OBS"/>
+                        <TextBlock Style="{StaticResource Info}" ToolTip="Если OBS запущен, кнопка «Запись экрана» начинает и останавливает запись в нём. Иначе пишет сам Isle: выдели область — она запишется в MP4 (Видео\Isle). В OBS включи: Инструменты → Настройки сервера WebSocket → «Включить сервер WebSocket»."/>
+                    </StackPanel>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <TextBox DockPanel.Dock="Right" x:Name="ObsPort" Width="120" Tag="4455" LostFocus="OnObsFields"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Порт"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Порт 4455, пароль из OBS → WebSocket"/>
+                                </StackPanel>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Текст песни"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Строки в такт музыке — в плеере и в пилюле «С текстом». Текст берётся из открытой базы LRCLIB (lrclib.net) только для песни, которая играет."/></StackPanel>
-                                <CheckBox x:Name="Lyrics" HorizontalAlignment="Right" Click="OnMusicToggle"/>
-                            </Grid>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnObsSave"/>
+                                <PasswordBox DockPanel.Dock="Right" x:Name="ObsPass" Width="200" Tag="Пароль WebSocket"/>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Пароль"/>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Текст в плеере на «Главной»"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Строки песни справа от обложки и кнопок"/></StackPanel>
-                                <CheckBox x:Name="LyricsHome" HorizontalAlignment="Right" Click="OnMusicToggle"/>
-                            </Grid>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SPrimary}" Content="Проверить" Margin="12,0,0,0" Click="OnObsTest"/>
+                                <TextBlock x:Name="ObsResult" Style="{StaticResource Result}"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="ObsStatus" Click="OnToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="REC в чёлке"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Пока OBS записывает или ведёт трансляцию, в чёлке горит REC или LIVE, а сохранённая запись приходит карточкой."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Запись и трансляция OBS"/>
+                                </StackPanel>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Музыка в свёрнутой чёлке"/></StackPanel>
-                                <CheckBox x:Name="Media" HorizontalAlignment="Right" Click="OnMusicToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Часы в свёрнутом острове"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Пока на острове больше ничего не происходит"/></StackPanel>
-                                <CheckBox x:Name="ShowClock" HorizontalAlignment="Right" Click="OnMusicToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Секунды в часах"/>
-                                    <TextBlock Style="{StaticResource RowNote}" x:Name="SecondsHint" Text="21:05:33 вместо 21:05"/></StackPanel>
-                                <CheckBox x:Name="ClockSeconds" HorizontalAlignment="Right" Click="OnMusicToggle"/>
-                            </Grid>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SQuiet}" Content="Как в OBS" Margin="4,0,0,0" Click="OnObsFolderReset"/>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Выбрать…" Click="OnObsFolder"/>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Папка записей"/>
+                                    <TextBlock x:Name="ObsFolder" Style="{StaticResource RowNote}" MaxWidth="330"/>
+                                </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- ============ ИИ ============ -->
-                <StackPanel x:Name="SecAi" Visibility="Collapsed">
+                <StackPanel x:Name="SecAi" Style="{StaticResource Page}">
                     <TextBlock Style="{StaticResource H1}" Text="ИИ"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Сервис для чата и команд"/>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Margin="12,0,0,8" Text="СЕРВИС"/>
                     <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <WrapPanel x:Name="AiPresets"/>
-                            <TextBlock x:Name="AiNote" Style="{StaticResource RowNote}" Margin="0,4,0,0"/>
-                            <TextBlock Style="{StaticResource RowNote}" Foreground="#C9A15B" Margin="0,6,0,0"
-                                       Text="Groq, Gemini и OpenRouter доступны не во всех странах: если сервис не отвечает, включи VPN или выбери другой."/>
-                            <Button x:Name="AiKeyLink" Style="{StaticResource Ghost}" Padding="0" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnAiKeyLink">
-                                <TextBlock Text="Получить ключ →" TextDecorations="Underline" FontSize="12"/>
-                            </Button>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Ключ API"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Хранится только на этом компьютере, зашифрован средствами Windows и никому не передаётся."/>
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <PasswordBox x:Name="AiKey"/>
-                                <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnAiSaveKey"/>
-                                <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Удалить" Foreground="#F87171" Margin="6,0,0,0" Click="OnAiDeleteKey"/>
-                            </Grid>
-                            <TextBlock x:Name="AiKeyState" Style="{StaticResource RowNote}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Адрес API и модель"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Кнопка сервиса выше подставляет их сама. «Модели» показывает все модели, доступные твоему ключу."/>
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox x:Name="AiBase" Tag="https://…/v1" LostFocus="OnAiFieldsChanged"/>
-                                <TextBox x:Name="AiModel" Grid.Column="1" Margin="8,0,0,0" Tag="модель" LostFocus="OnAiFieldsChanged"/>
-                                <Button x:Name="ModelsBtn" Grid.Column="2" Style="{StaticResource SFlat}" Margin="8,0,0,0" Click="OnModels">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Модели"/><h:Icon Kind="Next" Width="11" Height="11" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform></h:Icon></StackPanel>
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <ComboBox DockPanel.Dock="Right" x:Name="AiPresets" Width="230" SelectionChanged="OnAiPresetPicked"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Сервис"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Groq, Gemini и OpenRouter доступны не во всех странах: если сервис не отвечает, включи VPN или выбери другой."/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="AiNote" Style="{StaticResource RowNote}" MaxWidth="300"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnAiSaveKey"/>
+                                <PasswordBox DockPanel.Dock="Right" x:Name="AiKey" Width="230" Tag="Вставь ключ"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Ключ API"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Хранится только на этом компьютере, зашифрован средствами Windows и никому не передаётся."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Ellipse x:Name="AiKeyDot" Style="{StaticResource Dot}"/>
+                                        <TextBlock x:Name="AiKeyState" Style="{StaticResource RowNote}" Margin="0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}" MinHeight="28" Margin="16,6,16,8">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SDanger}" Content="Удалить ключ" Click="OnAiDeleteKey"/>
+                                <Button x:Name="AiKeyLink" Style="{StaticResource SQuiet}" Padding="0" HorizontalAlignment="Left" Click="OnAiKeyLink">
+                                    <TextBlock Text="Получить ключ →" Foreground="{StaticResource Fg}"/>
                                 </Button>
-                            </Grid>
-                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                <Button Style="{StaticResource Primary}" Content="Проверить" Click="OnAiTest" Padding="16,8"/>
-                                <TextBlock x:Name="AiTestResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ПОДКЛЮЧЕНИЕ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <TextBox DockPanel.Dock="Right" x:Name="AiBase" Width="340" Tag="https://…/v1" LostFocus="OnAiFieldsChanged"/>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Адрес"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" x:Name="ModelsBtn" Style="{StaticResource SFlat}" Margin="8,0,0,0" Click="OnModels" ToolTip="Модели, доступные твоему ключу">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Список"/><h:Icon Kind="Next" Width="10" Height="10" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform></h:Icon></StackPanel>
+                                </Button>
+                                <TextBox DockPanel.Dock="Right" x:Name="AiModel" Width="250" Tag="модель" LostFocus="OnAiFieldsChanged"/>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Модель"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SPrimary}" Content="Проверить" Margin="12,0,0,0" Click="OnAiTest"/>
+                                <TextBlock x:Name="AiTestResult" Style="{StaticResource Result}"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ ДИКТОВКА ============ -->
+                <StackPanel x:Name="SecVoice" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="Диктовка"/>
+                    <TextBlock x:Name="VoiceNote" Style="{StaticResource PageDesc}" Text="Ctrl+Alt+D — скажи, и текст в буфере"/>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Margin="12,0,0,8" Text="СЕРВИС"/>
+                    <Border Style="{StaticResource Card}">
+                        <DockPanel Style="{StaticResource Row}">
+                            <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpGroq" Click="OnVoicePreset" Tag="groq" Content="Groq" ToolTip="Whisper · бесплатно"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpPolza" Click="OnVoicePreset" Tag="polza" Content="Polza.ai"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpOpenAi" Click="OnVoicePreset" Tag="openai" Content="OpenAI"/>
+                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpCustom" Click="OnVoicePreset" Tag="custom" Content="Свой"/>
+                                </StackPanel>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Сервис"/>
+                                    <TextBlock Style="{StaticResource Info}" ToolTip="Groq: бесплатно, до 8 часов речи в день, отвечает за секунду и хорошо понимает русский. Polza.ai: распознавание за рубли без VPN — модель выбери кнопкой «Список». OpenAI — платно."/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource RowNote}" Text="Распознавание Whisper"/>
                             </StackPanel>
-                        </StackPanel>
+                        </DockPanel>
                     </Border>
-                </StackPanel>
 
-                <!-- ============ ГОЛОС ============ -->
-                <StackPanel x:Name="SecVoice" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource H1}" Text="Голос в текст"/>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock x:Name="VoiceNote" Style="{StaticResource RowNote}" Margin="0" Text="Нажми Ctrl+Alt+D, скажи и нажми ещё раз: текст окажется в буфере. Запись уходит в выбранный сервис распознавания (Whisper)."/>
-                            <WrapPanel Margin="0,12,0,0">
-                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpGroq" Click="OnVoicePreset" Tag="groq">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Groq · Whisper"/><Border Background="#1F2A22" CornerRadius="6" Padding="5,1" Margin="8,0,0,0"><TextBlock Text="бесплатно" FontSize="10" Foreground="#8BD49E"/></Border></StackPanel>
-                                </RadioButton>
-                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpPolza" Click="OnVoicePreset" Tag="polza" Content="Polza.ai"/>
-                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpOpenAi" Click="OnVoicePreset" Tag="openai" Content="OpenAI · Whisper"/>
-                                <RadioButton Style="{StaticResource SSegment}" GroupName="vp" x:Name="VpCustom" Click="OnVoicePreset" Tag="custom" Content="Свой адрес"/>
-                            </WrapPanel>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Groq: бесплатно, до 8 часов речи в день, отвечает за секунду и хорошо понимает русский. Polza.ai: распознавание за рубли без VPN — модель выбери кнопкой «Модели». Если в разделе «ИИ» выбран тот же сервис — ключ берётся оттуда."/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Адрес API и модель"/>
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox x:Name="VoiceBase" Tag="https://…/v1" LostFocus="OnVoiceFields"/>
-                                <TextBox x:Name="VoiceModel" Grid.Column="1" Margin="8,0,0,0" Tag="модель" LostFocus="OnVoiceFields"/>
-                                <Button x:Name="VoiceModelsBtn" Grid.Column="2" Style="{StaticResource SFlat}" Content="Модели" Margin="8,0,0,0" Click="OnVoiceModels"
-                                        ToolTip="Только модели «голос → текст», от дешёвых к дорогим"/>
-                            </Grid>
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Ключ распознавания" Margin="0,16,0,0"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Можно оставить пустым, если в разделе «ИИ» выбран тот же сервис: у Groq, Polza.ai и OpenAI один ключ подходит и для чата, и для диктовки."/>
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <PasswordBox x:Name="VoiceKey"/>
-                                <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnVoiceSaveKey"/>
-                                <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Удалить" Foreground="#F87171" Margin="6,0,0,0" Click="OnVoiceDeleteKey"/>
-                            </Grid>
-                            <TextBlock x:Name="VoiceKeyState" Style="{StaticResource RowNote}"/>
-                        </StackPanel>
-                    </Border>
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ПОДКЛЮЧЕНИЕ"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,260,0"><TextBlock Style="{StaticResource RowTitle}" Text="Язык речи"/><TextBlock Style="{StaticResource RowNote}" Text="Подсказка сервису: с ней он реже путает языки"/></StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlAuto" Content="Сам определит" Tag="" Click="OnVoiceLang"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlRu" Content="Русский" Tag="ru" Click="OnVoiceLang"/>
-                                    <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlEn" Content="English" Tag="en" Click="OnVoiceLang"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <TextBox DockPanel.Dock="Right" x:Name="VoiceBase" Width="340" Tag="https://…/v1" LostFocus="OnVoiceFields"/>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Адрес"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" x:Name="VoiceModelsBtn" Style="{StaticResource SFlat}" Margin="8,0,0,0" Click="OnVoiceModels" ToolTip="Только модели «голос → текст», от дешёвых к дорогим">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="Список"/><h:Icon Kind="Next" Width="10" Height="10" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5"><h:Icon.RenderTransform><RotateTransform Angle="90"/></h:Icon.RenderTransform></h:Icon></StackPanel>
+                                </Button>
+                                <TextBox DockPanel.Dock="Right" x:Name="VoiceModel" Width="250" Tag="модель" LostFocus="OnVoiceFields"/>
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Модель"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Сохранить" Margin="8,0,0,0" Click="OnVoiceSaveKey"/>
+                                <PasswordBox DockPanel.Dock="Right" x:Name="VoiceKey" Width="200" Tag="Вставь ключ"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Ключ (необязательно)"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Можно оставить пустым, если в разделе «ИИ» выбран тот же сервис: у Groq, Polza.ai и OpenAI один ключ подходит и для чата, и для диктовки."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Ellipse x:Name="VoiceKeyDot" Style="{StaticResource Dot}"/>
+                                        <TextBlock x:Name="VoiceKeyState" Style="{StaticResource RowNote}" Margin="0" MaxWidth="220"/>
+                                    </StackPanel>
                                 </StackPanel>
-                            </Grid>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Расставлять знаки препинания"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="После распознавания ИИ из раздела «ИИ» расставит точки, запятые и заглавные буквы. Слова не меняются."/></StackPanel>
-                                <CheckBox x:Name="VoicePunct" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Сразу вставлять текст"/><TextBlock Style="{StaticResource RowNote}" Text="В окно, где стоял курсор. В буфере текст остаётся в любом случае."/></StackPanel>
-                                <CheckBox x:Name="VoicePaste" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,12">
-                                <Button Style="{StaticResource Primary}" Content="Проверить" Click="OnVoiceTest" Padding="16,8"/>
-                                <TextBlock x:Name="VoiceTestResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                            </StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SPrimary}" Content="Проверить" Margin="12,0,0,0" Click="OnVoiceTest"/>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SDanger}" Content="Удалить ключ" Margin="8,0,0,0" Click="OnVoiceDeleteKey"/>
+                                <TextBlock x:Name="VoiceTestResult" Style="{StaticResource Result}"/>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
-                </StackPanel>
 
-                <!-- ============ ЗАПИСЬ ЭКРАНА ============ -->
-                <StackPanel x:Name="SecRecord" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource H1}" Text="Запись экрана"/>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Чем записывать"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Основной — OBS: если он запущен, кнопка «Запись экрана» начинает и останавливает запись в нём. Если OBS не запущен — пишет сам Isle: выдели область, и она запишется в MP4 (папка «Видео\Isle») со звуком компьютера и, если включишь, микрофоном. Остановить — клик по «стопу» в чёлке, плитка «Запись экрана» или сочетание клавиш."/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Через OBS"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Если OBS запущен, кнопка «Запись экрана» начинает и останавливает запись прямо в нём. В OBS включи: Инструменты → Настройки сервера WebSocket → «Включить сервер WebSocket»."/>
-                            <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox x:Name="ObsPort" Tag="порт" LostFocus="OnObsFields"/>
-                                <PasswordBox x:Name="ObsPass" Grid.Column="1" Margin="8,0,0,0"/>
-                                <Button Grid.Column="2" Style="{StaticResource SFlat}" Content="Сохранить пароль" Margin="8,0,0,0" Click="OnObsSave"/>
-                            </Grid>
-                            <Grid Margin="0,14,0,4">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="OBS: запись и трансляция в чёлке"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Пока OBS записывает или ведёт трансляцию, в чёлке горит REC или LIVE, а сохранённая запись приходит карточкой."/></StackPanel>
-                                <CheckBox x:Name="ObsStatus" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnToggle"/>
-                            </Grid>
-                            <Grid Margin="0,14,0,4">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <StackPanel Margin="0,0,12,0"><TextBlock Style="{StaticResource RowTitle}" Text="Папка для записей"/>
-                                    <TextBlock x:Name="ObsFolder" Style="{StaticResource RowNote}" TextTrimming="CharacterEllipsis"/></StackPanel>
-                                <Button Grid.Column="1" Style="{StaticResource SFlat}" Content="Выбрать…" VerticalAlignment="Center" Click="OnObsFolder"/>
-                                <Button Grid.Column="2" Style="{StaticResource SFlat}" Content="Как в OBS" Margin="8,0,0,0" VerticalAlignment="Center" Click="OnObsFolderReset"/>
-                            </Grid>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Порт по умолчанию 4455. Пароль — тот, что показан в настройках сервера WebSocket (если включена аутентификация)."/>
-                            <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                <Button Style="{StaticResource Primary}" Content="Проверить подключение" Click="OnObsTest" Padding="16,8" VerticalAlignment="Top"/>
-                                <TextBlock Grid.Column="1" x:Name="ObsResult" Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!-- ============ ПОГОДА ============ -->
-                <StackPanel x:Name="SecWeather" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource H1}" Text="Погода"/>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,12">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Город"/>
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox x:Name="CityBox" Tag="Например, Шымкент" KeyDown="OnCityKey"/>
-                                <Button Grid.Column="1" Style="{StaticResource Primary}" Content="Найти" Margin="8,0,0,0" Padding="16,8" Click="OnCity"/>
-                            </Grid>
-                            <TextBlock x:Name="CityStatus" Style="{StaticResource RowNote}"/>
-                            <TextBlock Style="{StaticResource RowNote}" Text="Прогноз MET Norway. Снег и осадки определяются по почасовым данным; обновление учитывает лимиты сервиса."/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!-- ============ МОДУЛИ ============ -->
-                <StackPanel x:Name="SecModules" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource H1}" Text="Всплывашки и модули"/>
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="РЕЗУЛЬТАТ"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Громкость"/><CheckBox x:Name="Volume" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Смена раскладки"/><CheckBox x:Name="Layout" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Caps Lock"/><CheckBox x:Name="Caps" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Зарядка и низкий заряд"/><CheckBox x:Name="Battery" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Уведомления других приложений"/><TextBlock x:Name="NotifStatus" Style="{StaticResource RowNote}"/></StackPanel>
-                                <CheckBox x:Name="Notif" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Уведомления только в острове"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Isle убирает плашку Windows справа снизу — уведомление видно только в чёлке. Оно пропадает и из центра уведомлений Windows."/></StackPanel>
-                                <CheckBox x:Name="NotifOnly" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="Статус VPN и страна"/><CheckBox x:Name="Vpn" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Точная скорость Steam"/>
-                                    <TextBlock Style="{StaticResource RowNote}" TextWrapping="Wrap" Text="Скорость, объём и время загрузки — прямо из Steam. Isle сам включит это в Steam и перезапустит его, когда ничего не качается и не запущена игра"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Border DockPanel.Dock="Right" Style="{StaticResource SSegBox}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlAuto" Content="Авто" Tag="" Click="OnVoiceLang"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlRu" Content="Русский" Tag="ru" Click="OnVoiceLang"/>
+                                        <RadioButton Style="{StaticResource SSegment}" GroupName="vl" x:Name="VlEn" Content="English" Tag="en" Click="OnVoiceLang"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Язык речи"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Реже путает языки"/>
                                 </StackPanel>
-                                <CheckBox x:Name="SteamExact" HorizontalAlignment="Right" Click="OnSteamExact"/>
-                            </Grid>
-                            <Grid Style="{StaticResource Row}">
-                                <TextBlock Style="{StaticResource RowNote}" VerticalAlignment="Center" Margin="0,0,170,0" TextWrapping="Wrap"
-                                           Text="Журнал загрузок Steam — всё, что Isle получил от Steam и показал"/>
-                                <Button Style="{StaticResource SFlat}" Content="Показать журнал" HorizontalAlignment="Right" Padding="12,6" Click="OnSteamLog"/>
-                            </Grid>
-                            <!-- временная: видна, пока точная скорость ещё ни разу не заработала -->
-                            <Grid x:Name="SteamActivateRow" Style="{StaticResource Row}" Visibility="Collapsed">
-                                <TextBlock x:Name="SteamExactStatus" Style="{StaticResource RowNote}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,230,0"
-                                           Text="Steam закроется полностью и откроется снова — уже с точной скоростью"/>
-                                <Button x:Name="SteamActivateBtn" Style="{StaticResource SFlat}" Content="Включить точную скорость" HorizontalAlignment="Right" Padding="12,6" Click="OnSteamActivate"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <Grid Style="{StaticResource Row}"><TextBlock Style="{StaticResource RowTitle}" Text="История буфера обмена"/><CheckBox x:Name="ClipHist" HorizontalAlignment="Right" Click="OnToggle"/></Grid>
+                            </DockPanel>
                             <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Сохранять картинки"/><TextBlock Style="{StaticResource RowNote}" Text="Секретные копии из менеджеров паролей не сохраняются никогда."/></StackPanel>
-                                <CheckBox x:Name="ClipImg" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!-- ============ ОБНОВЛЕНИЯ ============ -->
-                <StackPanel x:Name="SecUpdates" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource H1}" Text="Обновления"/>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,14">
-                            <Grid>
-                                <StackPanel Margin="0,0,180,0">
-                                    <TextBlock x:Name="UpdTitle" Style="{StaticResource RowTitle}" FontSize="16" Text="Isle"/>
-                                    <TextBlock x:Name="UpdStatus" Style="{StaticResource RowNote}" Text="Нажми «Проверить»"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="VoicePunct" Click="OnToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Знаки препинания"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="После распознавания ИИ из раздела «ИИ» расставит точки, запятые и заглавные буквы. Слова не меняются."/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Расставит ИИ, слова не меняются"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <Button x:Name="UpdCheckBtn" Style="{StaticResource SFlat}" Content="Проверить" Padding="14,8" Click="OnUpdateCheck"/>
-                                    <Button x:Name="UpdInstallBtn" Style="{StaticResource Primary}" Content="Обновить" Padding="16,8" Margin="8,0,0,0" Click="OnUpdateInstall" Visibility="Collapsed"/>
+                            </DockPanel>
+                            <Border Style="{StaticResource Sep}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="VoicePaste" Click="OnToggle"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Вставлять сразу"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Туда, где курсор; в буфере тоже"/>
                                 </StackPanel>
-                            </Grid>
-                            <Grid x:Name="UpdProgress" Height="6" Margin="0,14,0,0" Visibility="Collapsed">
-                                <Border CornerRadius="3" Background="{DynamicResource SFieldBorder}"/>
-                                <Border x:Name="UpdBar" CornerRadius="3" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
-                            </Grid>
-                            <TextBlock x:Name="UpdNotes" Style="{StaticResource RowNote}" Margin="0,14,0,0" Visibility="Collapsed" FontFamily="Consolas, Segoe UI"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,70,0"><TextBlock Style="{StaticResource RowTitle}" Text="Проверять обновления автоматически"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="При запуске и раз в полчаса. О новой версии скажет всплывашка — обновляешься сам, одной кнопкой."/></StackPanel>
-                                <CheckBox x:Name="AutoUpdate" HorizontalAlignment="Right" Click="OnToggle"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Все версии"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Список изменений и установщики на GitHub"/></StackPanel>
-                                <Button Style="{StaticResource SFlat}" Content="Открыть" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnReleases"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Приветствие"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="То, что показывается при первом запуске: возможности Isle, точная скорость Steam и PrintScreen"/></StackPanel>
-                                <Button Style="{StaticResource SFlat}" Content="Показать" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnShowWelcome"/>
-                            </Grid>
-                            <Border Style="{StaticResource Sep}"/>
-                            <Grid Style="{StaticResource Row}">
-                                <StackPanel Margin="0,0,140,0"><TextBlock Style="{StaticResource RowTitle}" Text="Подробный журнал (отладка)"/>
-                                    <TextBlock Style="{StaticResource RowNote}" Text="Пишет всё: кадры анимаций, зависания, процессор и память, мониторы, ошибки. Без буфера обмена, клавиш и паролей. Журнал — %AppData%\Isle\isle.log"/></StackPanel>
-                                <CheckBox x:Name="DebugLog" HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnToggle"/>
-                            </Grid>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- ============ КЛАВИШИ ============ -->
-                <StackPanel x:Name="SecKeys" Visibility="Collapsed">
+                <StackPanel x:Name="SecKeys" Style="{StaticResource Page}">
                     <TextBlock Style="{StaticResource H1}" Text="Клавиши"/>
-                    <TextBlock Style="{StaticResource RowNote}" Margin="0,0,0,10" Text="Нажми на сочетание и введи новое; ↺ — вернуть как было, ✕ — убрать совсем. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если глобальную комбинацию заняла Windows или другое приложение."/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                        <TextBlock Style="{StaticResource PageDesc}" Margin="0" Text="Нажми на сочетание, чтобы сменить"/>
+                        <TextBlock Style="{StaticResource Info}" ToolTip="Нажми на сочетание и введи новое; ↺ — вернуть как было, ✕ — убрать совсем. Глобальным клавишам нужны Ctrl, Alt, Shift или Win; клавиша сворачивания работает, когда остров активен. Isle сообщит, если комбинацию заняла Windows или другое приложение."/>
+                    </StackPanel>
                     <Border Style="{StaticResource Card}">
-                        <StackPanel Margin="0,8" x:Name="KeysList"/>
+                        <StackPanel x:Name="KeysList"/>
                     </Border>
+                </StackPanel>
+
+                <!-- ============ О ПРОГРАММЕ ============ -->
+                <StackPanel x:Name="SecUpdates" Style="{StaticResource Page}">
+                    <TextBlock Style="{StaticResource H1}" Text="О программе"/>
+                    <TextBlock Style="{StaticResource PageDesc}" Text="Версия, данные и журнал"/>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Margin="12,0,0,8" Text="ОБНОВЛЕНИЯ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" x:Name="UpdInstallBtn" Style="{StaticResource SPrimary}" Content="Обновить" Margin="8,0,0,0" Click="OnUpdateInstall" Visibility="Collapsed"/>
+                                <Button DockPanel.Dock="Right" x:Name="UpdCheckBtn" Style="{StaticResource SFlat}" Content="Проверить" Click="OnUpdateCheck"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Restart" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock x:Name="UpdTitle" Style="{StaticResource RowTitle}" Text="Isle"/>
+                                    <TextBlock x:Name="UpdStatus" Style="{StaticResource RowNote}" Text="Нажми «Проверить»"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Grid x:Name="UpdProgress" Height="4" Margin="56,0,16,12" Visibility="Collapsed">
+                                <Border CornerRadius="2" Background="{DynamicResource SFieldBorder}"/>
+                                <Border x:Name="UpdBar" CornerRadius="2" Background="{DynamicResource Accent}" HorizontalAlignment="Left" Width="0"/>
+                            </Grid>
+                            <TextBlock x:Name="UpdNotes" Style="{StaticResource Result}" Margin="56,0,16,12" MaxWidth="560" Visibility="Collapsed" FontFamily="Consolas, Segoe UI"/>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="AutoUpdate" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Timer" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Проверять сам"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="При запуске и раз в полчаса"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Открыть" Click="OnReleases"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="External" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Все версии"/>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Изменения и установщики на GitHub"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ДАННЫЕ И ЖУРНАЛ"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Открыть" Click="OnDataDir"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Folder" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Папка данных"/>
+                                    <TextBlock Style="{StaticResource RowNote}" x:Name="DataDirText" MaxWidth="380"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource SepIcon}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" x:Name="DebugLog" Click="OnToggle"/>
+                                <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Code" Width="15" Height="15"/></Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowTitle}" Text="Журнал для отладки"/>
+                                        <TextBlock Style="{StaticResource Info}" ToolTip="Пишет всё: кадры анимаций, зависания, процессор и память, мониторы, ошибки. Без буфера обмена, клавиш и паролей. Файл — %AppData%\Isle\isle.log"/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource RowNote}" Text="Без буфера, клавиш и паролей"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="ЗНАКОМСТВО"/>
+                    <Border Style="{StaticResource Card}">
+                        <DockPanel Style="{StaticResource Row}">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource SFlat}" Content="Открыть снова" Click="OnShowWelcome"/>
+                            <Border DockPanel.Dock="Left" Style="{StaticResource Tile}"><h:Icon Kind="Home" Width="15" Height="15"/></Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource RowTitle}" Text="Знакомство с Isle"/>
+                                <TextBlock Style="{StaticResource RowNote}" Text="То, что было при первом запуске"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <Button Style="{StaticResource SQuiet}" Content="Закрыть Isle" HorizontalAlignment="Left" Margin="4,20,0,0" Click="OnExit"/>
                 </StackPanel>
             </Grid>
         </ScrollViewer>
