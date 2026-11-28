@@ -85,6 +85,8 @@ namespace Isle.Helpers
                 int len = Math.Min(word.Length, text.Length - at);
                 double ws = line.Words[w].At.TotalSeconds;
                 double we = w + 1 < line.Words.Count ? line.Words[w + 1].At.TotalSeconds : lineEnd;
+                // сервис знает точный конец слова/слога (Spicy Lyrics) — берём его, но не позже начала следующего
+                if (line.Words[w].End is TimeSpan wEnd && wEnd.TotalSeconds > ws) we = Math.Min(we, wEnd.TotalSeconds);
                 // протяжная нота может тянуться, но не дольше разумного: иначе слово «зависает» на секунды
                 we = Math.Min(we, ws + Math.Max(0.35, len * 0.35 + 0.3));
                 if (we <= ws) we = ws + 0.2;

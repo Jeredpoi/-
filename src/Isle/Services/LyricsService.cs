@@ -15,7 +15,12 @@ namespace Isle.Services
         public List<LyricWord> Words;
     }
 
-    public class LyricWord { public TimeSpan At; public string Text; }
+    public class LyricWord
+    {
+        public TimeSpan At; public string Text;
+        /// <summary>Конец слова или слога, если сервис его знает (Spicy Lyrics); иначе — до начала следующего.</summary>
+        public TimeSpan? End;
+    }
 
     /// <summary>Синхронизированный текст песен с lrclib.net (бесплатно, без ключа).</summary>
     public static class LyricsService
@@ -175,6 +180,9 @@ namespace Isle.Services
         public List<LyricLine> Lines { get; private set; }
         public string Key { get; private set; } = "";
         public bool Loading { get; private set; }
+        /// <summary>Откуда текст: «Spicy Lyrics» или «LRCLIB» (пусто — текста нет). Для подписи на «Главной».</summary>
+        public string Source { get; private set; } = "";
+        public const string SourceSpicy = "Spicy Lyrics", SourceLrclib = "LRCLIB";
         public event Action Changed;
 
         public LyricsState(MediaService media)
@@ -191,6 +199,16 @@ namespace Isle.Services
             Lines = null;
             Loading = true;
             Changed?.Invoke();
+
+            // привязан Spotify и играет именно он — сначала Spicy Lyrics (по слогам); любая неудача — LRCLIB как раньше
+            SpicyLyrics.Result spicy = null;
+            if (SpotifyAuth.IsLinked && SpotifyAuth.IsSpotifyApp(m.SourceAppId))
+            {
+                try { spicy = await SpicyLyrics.TryGetAsync(m); } catch { spicy = null; }
+                if (key != Key) return;
+                if (spicy?.Outcome == SpicyLyrics.Outcome.Ok && spicy.Lines != null) { Set(spicy.Lines, key, SourceSpicy); return; }
+            }
+
             var lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
             // сеть подвела — ещё две попытки с паузой, пока играет тот же трек
             for (int attempt = 0; lyr == null && LyricsService.LastFailed && attempt < 2 && key == Key; attempt++)
@@ -201,12 +219,28 @@ namespace Isle.Services
             }
             if (key != Key) return;
             Loading = false;
-            Set(lyr, key);
+            Set(lyr, key, SourceLrclib);
+            if (spicy?.Outcome == SpicyLyrics.Outcome.Queued) _ = RetryQueuedAsync(m, key);
         }
 
-        private void Set(List<LyricLine> lines, string key)
+        /// <summary>
+        /// Spicy Lyrics поставил трек в очередь (503): пока показан LRCLIB, через 20 с спрашиваем ещё один раз.
+        /// Пришёл текст и трек тот же — подменяем.
+        /// </summary>
+        private async Task RetryQueuedAsync(MediaInfo m, string key)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(20));
+            if (key != Key || Loading) return;
+            SpicyLyrics.Result r;
+            try { r = await SpicyLyrics.TryGetAsync(m, retryQueued: true); } catch { return; }
+            if (key != Key || Loading) return;
+            if (r?.Outcome == SpicyLyrics.Outcome.Ok && r.Lines != null) Set(r.Lines, key, SourceSpicy);
+        }
+
+        private void Set(List<LyricLine> lines, string key, string source = "")
         {
             Lines = lines;
+            Source = lines == null || lines.Count == 0 ? "" : source;
             Key = key;
             Loading = false;
             Changed?.Invoke();

@@ -385,6 +385,7 @@ namespace Isle.Views
             LyricsStack.Children.Clear();
             LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
             LyricsShift.Y = 0;
+            ShowLyricsSource(lyr != null && lyr.Count > 0 && AppHost.Lyrics?.Source == LyricsState.SourceSpicy);
             if (lyr == null || lyr.Count == 0)
             {
                 LyrStatus.Text = AppHost.Media.Current.HasSession && !string.IsNullOrEmpty(AppHost.Media.Current.Title) ? "Текст песни не найден" : "";
@@ -404,6 +405,25 @@ namespace Isle.Views
                 _lines.Add(tb);
                 LyricsStack.Children.Add(tb);
             }
+        }
+
+        private bool _spicyCredit;
+
+        /// <summary>Подпись источника: обычно «LRCLIB»; текст из Spicy Lyrics — маленькая кликабельная благодарность автору.</summary>
+        private void ShowLyricsSource(bool spicy)
+        {
+            _spicyCredit = spicy;
+            LyrSource.Text = spicy ? SpicyLyrics.Credit : "LRCLIB";
+            LyrSource.FontSize = spicy ? 10 : 9;
+            LyrSource.Cursor = spicy ? System.Windows.Input.Cursors.Hand : null;
+            LyrSource.ToolTip = spicy ? "github.com/Spikerko/spicy-lyrics" : null;
+        }
+
+        private void OnLyrSourceClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (!_spicyCredit) return;
+            e.Handled = true;
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SpicyLyrics.RepoUrl) { UseShellExecute = true }); } catch { }
         }
 
         /// <summary>Плавно прокручивает текст так, чтобы текущая строка стояла на трети высоты; она ярче и крупнее.</summary>
