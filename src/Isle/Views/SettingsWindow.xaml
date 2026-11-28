@@ -390,7 +390,7 @@
         </Border>
 
         <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" x:Name="Scroll" Background="Transparent">
-            <Grid Margin="40,32,40,40" MaxWidth="680" HorizontalAlignment="Left">
+            <Grid Margin="40,32,40,40" MaxWidth="680" HorizontalAlignment="Stretch">
 
                 <!-- ============ ОБЩЕЕ ============ -->
                 <StackPanel x:Name="SecGeneral">

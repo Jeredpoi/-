@@ -1077,7 +1077,7 @@ namespace Isle.Views
                 var chip = new Border
                 {
                     Height = 24, MinWidth = 24, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(0, 0, 0, 2), Padding = new Thickness(7, 0, 7, 0),
-                    Child = new TextBlock { Text = parts[i].Replace("Space", "Пробел"), FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = CapFg,
+                    Child = new TextBlock { Text = parts[i].Replace("Space", "Пробел").Replace("Escape", "Esc"), FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = CapFg,
                         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
                 };
                 chip.SetResourceReference(Border.BackgroundProperty, "SKeyCap");
