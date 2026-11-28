@@ -64,11 +64,11 @@ namespace Isle
                 AppSettings.Current.WelcomeShown = true;
                 AppSettings.Current.AutoUpdateCheck = false;
                 AppSettings.Current.WinterSnow = "off";
-                await Task.Delay(3000);
+                await Task.Delay(1500);
                 var ww = new Isle.Views.WelcomeWindow();
                 ww.Show();
-                await Task.Delay(2500);
-                for (int st = 0; st <= 10; st++)
+                await Task.Delay(1500);
+                for (int st = 10; st <= 10; st++)
                 {
                     Call(ww, "Go", st);
                     await Task.Delay(1600);
@@ -83,7 +83,7 @@ namespace Isle
                 // финал: пилюля улетает в чёлку — смотрим по записи экрана
                 File.WriteAllText(Path.Combine(dir, "fly-start.txt"), DateTime.UtcNow.ToString("O"));
                 Call(ww, "FlyToIsland");
-                for (int k = 0; k < 8; k++) { await Task.Delay(150); try { SnapEl((FrameworkElement)ww.Content, dir, "fly-" + k); } catch { } }
+                await Task.Delay(1200);
                 await Task.Delay(1500);
                 log.AppendLine("после финала: окно " + (ww.IsLoaded ? "открыто" : "закрыто") + ", остров " + w.State + " видим=" + w.IsVisible);
                 log.AppendLine("память: " + Environment.WorkingSet / 1048576 + " МБ");
