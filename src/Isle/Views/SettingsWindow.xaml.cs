@@ -598,15 +598,21 @@ namespace Isle.Views
         /// Тема окна настроек. «Закат»: фото пальм под плотной лиловой вуалью, меню и карточки — матовое стекло.
         /// Тёмная: убираем подмены — остаются цвета из ресурсов окна.
         /// </summary>
+        private void SetCityStatus(string text)
+        {
+            CityStatus.Text = text ?? "";
+            CityStatus.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         private void ApplyTheme()
         {
             var keys = new[] { "SBg", "SSide", "SCard", "SCardBorder", "SField", "SFieldBorder", "SBtn", "SBtnBorder", "SSeg", "SSegHover", "SSegSel",
                 "SNavHover", "SNavSel", "SSep", "SNote", "SRowNote", "SLabel", "STile", "SKeyCap", "SKeyCapEdge" };
             if (!_darkRes.ContainsKey("SBg")) foreach (var k in keys) _darkRes[k] = Resources[k];
             // в «Закате» акцент всегда розовый — выбор цвета акцента не действует, показываем это
-            Accents.IsEnabled = !Helpers.SunsetTheme.On;
-            Accents.Opacity = Helpers.SunsetTheme.On ? 0.4 : 1;
-            Accents.ToolTip = Helpers.SunsetTheme.On ? "В теме «Закат» акцент розовый" : null;
+            // в «Закате» кружки не гасим (выглядело как поломка) — прячем и пишем, почему
+            AccentsBox.Visibility = Helpers.SunsetTheme.On ? Visibility.Collapsed : Visibility.Visible;
+            AccentNote.Text = Helpers.SunsetTheme.On ? "В «Закате» — розовый" : "Цвет или градиент";
             if (!Helpers.SunsetTheme.On)
             {
                 foreach (var k in keys) Resources[k] = _darkRes[k];
@@ -1034,18 +1040,18 @@ namespace Isle.Views
 
         private async void OnCity(object s, RoutedEventArgs e)
         {
-            CityStatus.Text = "Ищу…";
+            SetCityStatus("Ищу…");
             try
             {
                 var r = await WeatherService.GeocodeAsync(CityBox.Text.Trim());
-                if (r == null) { CityStatus.Text = "Город не найден"; return; }
+                if (r == null) { SetCityStatus("Город не найден"); return; }
                 S.City = r.Value.name; S.Latitude = r.Value.lat; S.Longitude = r.Value.lon;
                 S.Save();
                 CityBox.Text = S.City;
-                CityStatus.Text = "Готово: " + S.City;
+                SetCityStatus("Готово: " + S.City);
                 await AppHost.Window.RefreshWeather();
             }
-            catch (Exception ex) { CityStatus.Text = "Нет связи: " + ex.Message; }
+            catch (Exception ex) { SetCityStatus("Нет связи: " + ex.Message); }
         }
 
         // ---------- Клавиши ----------

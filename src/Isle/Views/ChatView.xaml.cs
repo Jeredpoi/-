@@ -80,8 +80,10 @@ namespace Isle.Views
         private void BuildRecent()
         {
             RecentChats.Children.Clear();
-            var recent = ChatHistory.All().Take(4).ToList();
+            var recent = ChatHistory.All().Take(3).ToList();
             RecentTitle.Visibility = recent.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // с недавними разговорами пустой экран не помещался (Клоди уезжал за верх) — подсказки тогда прячем
+            Suggestions.Visibility = recent.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
             foreach (var c in recent)
             {
                 var b = new Button
@@ -449,7 +451,8 @@ namespace Isle.Views
             AttachStrip.Visibility = _attach.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             bool imgs = _attach.Any(ChatFiles.IsImage);
             VisionHint.Visibility = imgs && !vision ? Visibility.Visible : Visibility.Collapsed;
-            VisionHint.Text = "Текущая модель (" + AppSettings.Current.AiModel + ") не видит изображения — отправится только текст. Сменить модель: шестерёнка → «ИИ».";
+            VisionHint.Text = "Модель не видит картинки — уйдёт только текст";
+            VisionHint.ToolTip = "Сейчас: " + AppSettings.Current.AiModel + ". Сменить модель: шестерёнка → «ИИ».";
         }
 
         private async System.Threading.Tasks.Task WarmVision()
