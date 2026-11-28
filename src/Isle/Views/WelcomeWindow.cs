@@ -112,7 +112,15 @@ namespace Isle.Views
             layers.SizeChanged += (_, __) => layers.Clip = new RectangleGeometry(new Rect(0, 0, layers.ActualWidth, layers.ActualHeight), 27, 27);
             card.Child = layers;
             Content = card;
-            card.MouseLeftButtonDown += (_, e) => { if (!_flying && (e.OriginalSource is Border || e.OriginalSource is Grid || e.OriginalSource is Canvas)) try { DragMove(); } catch { } };
+            // окно таскается за фон; по кликабельному (кружки цвета, точки прогресса — у них курсор «рука») не таскаем:
+            // DragMove забирал мышь, отпускание не доходило, и цвет в «Под себя» не выбирался
+            card.MouseLeftButtonDown += (_, e) =>
+            {
+                if (_flying || !(e.OriginalSource is Border || e.OriginalSource is Grid || e.OriginalSource is Canvas)) return;
+                for (var d = e.OriginalSource as DependencyObject; d != null && d != card; d = VisualTreeHelper.GetParent(d))
+                    if (d is FrameworkElement fe && (fe.Cursor == Cursors.Hand || fe is System.Windows.Controls.Primitives.ButtonBase)) return;
+                try { DragMove(); } catch { }
+            };
             KeyDown += OnKey;
 
             // окно «вырастает» из центра
