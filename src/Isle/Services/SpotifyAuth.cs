@@ -13,14 +13,17 @@ using System.Threading.Tasks;
 namespace Isle.Services
 {
     /// <summary>
-    /// Необязательная привязка Spotify (OAuth PKCE, без секрета): нужна только чтобы узнать id играющего трека
-    /// и получить токен для Spicy Lyrics. Токены лежат в настройках зашифрованными (DPAPI), в журнал не пишутся.
+    /// Необязательная привязка Spotify (OAuth PKCE, без секрета): id играющего трека и токен для Spicy Lyrics,
+    /// а с правом user-modify-playback-state — ещё и управление музыкой через Web API (SpotifyControl).
+    /// Токены лежат в настройках зашифрованными (DPAPI), в журнал не пишутся.
     /// </summary>
     public static class SpotifyAuth
     {
         public const int Port = 47533;
         public const string RedirectUri = "http://127.0.0.1:47533/spotify-callback";
-        private const string Scopes = "user-read-currently-playing user-read-playback-state";
+        private const string Scopes = "user-read-currently-playing user-read-playback-state " + ControlScope;
+        /// <summary>Право управлять воспроизведением (пауза, перемотка, громкость…). У старых привязок его нет.</summary>
+        public const string ControlScope = "user-modify-playback-state";
 
         private static readonly HttpClient Http = Helpers.Net.Client(TimeSpan.FromSeconds(15));
         private static readonly SemaphoreSlim RefreshLock = new(1, 1);
@@ -39,6 +42,20 @@ namespace Isle.Services
         }
 
         public static bool IsLinking => _linkCts != null;
+
+        /// <summary>
+        /// Токен выдан с правом управлять Spotify. Привязки, сделанные до появления этого права, его не имеют —
+        /// для них кнопки работают по-старому (через Windows), а в настройках просим перепривязать.
+        /// </summary>
+        public static bool HasControlScope
+        {
+            get
+            {
+                if (!IsLinked) return false;
+                var sc = AppSettings.Current.SpotifyScopes ?? "";
+                return Array.IndexOf(sc.Split(' ', StringSplitOptions.RemoveEmptyEntries), ControlScope) >= 0;
+            }
+        }
 
         /// <summary>Музыка играет в приложении Spotify (а не в браузере или другом плеере).</summary>
         public static bool IsSpotifyApp(string appId) => !string.IsNullOrEmpty(appId) && appId.IndexOf("Spotify", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -133,6 +150,7 @@ namespace Isle.Services
             s.SpotifyAccessProtected = "";
             s.SpotifyTokenExpiry = default;
             s.SpotifyUserName = "";
+            s.SpotifyScopes = "";
             s.Save();
             SpicyLyrics.Reset();
             Journal.Info("spotify", "отвязано");
@@ -223,6 +241,13 @@ namespace Isle.Services
                 s.SpotifyRefreshToken = rt.GetString();
             int sec = root.TryGetProperty("expires_in", out var ex) && ex.ValueKind == JsonValueKind.Number ? ex.GetInt32() : 3600;
             s.SpotifyTokenExpiry = DateTime.UtcNow.AddSeconds(Math.Max(60, sec - 60));
+            // какие права реально выданы (при обновлении токена Spotify тоже присылает scope)
+            if (root.TryGetProperty("scope", out var sc) && sc.ValueKind == JsonValueKind.String)
+            {
+                bool had = HasControlScope;
+                s.SpotifyScopes = sc.GetString() ?? "";
+                if (had != HasControlScope) Changed?.Invoke();
+            }
         }
 
         /// <summary>Действующий токен доступа (обновляется сам, когда истёк или после 401). null — не привязан или не вышло.</summary>
@@ -296,6 +321,7 @@ namespace Isle.Services
         public static async Task<string> CurrentTrackIdAsync(string title, CancellationToken ct)
         {
             // Spotify Web API узнаёт о смене трека чуть позже Windows — одна повторная попытка через 1,5 с
+            string lastName = null;
             for (int attempt = 0; attempt < 2; attempt++)
             {
                 if (attempt > 0) await Task.Delay(1500, ct);
@@ -307,8 +333,11 @@ namespace Isle.Services
                 }
                 if (status == 429 || (status != 200 && status != 204)) { Journal.Info("spotify", "сейчас играет: " + status); return null; }
                 if (status == 200 && id != null && LooseMatch(name, title)) return id;
+                if (status == 200) lastName = name;
             }
-            Journal.Info("spotify", "сейчас играет: трек Spotify не совпал с плеером Windows");
+            // названия песен в журнал писать можно — по ним видно, почему не совпало
+            Journal.Info("spotify", "сейчас играет: трек Spotify не совпал с плеером Windows: Spotify «" + Journal.Short(lastName ?? "(ничего)", 100)
+                                    + "», Windows «" + Journal.Short(title ?? "", 100) + "»");
             return null;
         }
 
@@ -332,19 +361,62 @@ namespace Isle.Services
             return (200, id, name);
         }
 
-        /// <summary>Нестрогое сравнение названий: без регистра, скобок, «- Remastered» и знаков.</summary>
+        /// <summary>
+        /// Нестрогое сравнение названий: без регистра, диакритики (NFKD), скобок, «feat.», «- Remastered 2011»
+        /// и прочих хвостов через дефис, знаков. Совпадает и когда одно название содержится в другом.
+        /// </summary>
         public static bool LooseMatch(string a, string b)
         {
             string na = Norm(a), nb = Norm(b);
-            if (na.Length == 0 || nb.Length == 0) return false;
-            return na == nb || na.StartsWith(nb, StringComparison.Ordinal) || nb.StartsWith(na, StringComparison.Ordinal);
+            if (na.Length == 0 || nb.Length == 0)
+            {
+                // название целиком в скобках или из одних знаков — сравниваем без чистки хвостов
+                na = Letters(a); nb = Letters(b);
+                return na.Length > 0 && na == nb;
+            }
+            if (na == nb) return true;
+            // «содержит» — только если короткое название не совсем крошечное, иначе «Ты» совпало бы с чем угодно
+            string shortS = na.Length <= nb.Length ? na : nb, longS = na.Length <= nb.Length ? nb : na;
+            if (shortS.Length >= 4 || shortS.Length * 2 >= longS.Length)
+                if (longS.Contains(shortS, StringComparison.Ordinal)) return true;
+            // хвосты через дефис уже сняты; сравним ещё и полные строки без чистки (Windows мог отрезать скобки сам)
+            string fa = Letters(a), fb = Letters(b);
+            return fa.Length > 0 && fb.Length > 0 && (fa == fb || (Math.Min(fa.Length, fb.Length) >= 4 && (fa.Contains(fb, StringComparison.Ordinal) || fb.Contains(fa, StringComparison.Ordinal))));
         }
+
+        private static readonly Regex FeatRx = new(@"\s(feat\.?|ft\.?|featuring|при\s+уч\.?|при\s+участии)\s.*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BracketsRx = new(@"[\(\[\{（【].*?[\)\]\}）】]", RegexOptions.Compiled);
+        private static readonly Regex DashTailRx = new(@"\s[-–—]\s.*$", RegexOptions.Compiled);
+        private static readonly Regex RemasterRx = new(@"\b(\d{4}\s+)?(remaster(ed)?|ремастер(инг)?|remix|ремикс|version|версия|live|mono|stereo|radio\s+edit|edit)(\s+\d{4})?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static string Norm(string s)
         {
-            s = (s ?? "").ToLowerInvariant();
-            s = Regex.Replace(s, @"[\(\[].*?[\)\]]", " ");
-            s = Regex.Replace(s, @"\s[-–—]\s.*$", " ");
+            s = Fold(s);
+            s = BracketsRx.Replace(s, " ");
+            s = DashTailRx.Replace(s, " ");
+            s = FeatRx.Replace(s, " ");
+            s = RemasterRx.Replace(s, " ");
+            return Letters(s, folded: true);
+        }
+
+        /// <summary>Нижний регистр, NFKD без диакритики, ё → е.</summary>
+        private static string Fold(string s)
+        {
+            s = (s ?? "").Normalize(NormalizationForm.FormKD).ToLowerInvariant();
+            var sb = new StringBuilder(s.Length);
+            foreach (var c in s)
+            {
+                var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+                if (cat == System.Globalization.UnicodeCategory.NonSpacingMark || cat == System.Globalization.UnicodeCategory.EnclosingMark) continue;
+                sb.Append(c);
+            }
+            // NFKD раскладывает «ё» → «е» + знак, «й» → «и» + знак; знаки сняты — одинаково для обеих сторон
+            return sb.ToString().Normalize(NormalizationForm.FormC);
+        }
+
+        private static string Letters(string s, bool folded = false)
+        {
+            if (!folded) s = Fold(s);
             var sb = new StringBuilder();
             foreach (var c in s) if (char.IsLetterOrDigit(c)) sb.Append(c);
             return sb.ToString();

@@ -22,7 +22,8 @@ namespace Isle.Services
         public const string RepoUrl = "https://github.com/Spikerko/spicy-lyrics";
         private const string Api = "https://api.spicylyrics.org/query";
 
-        public enum Outcome { Ok, None, Queued, Failed, Skipped }
+        /// <summary>NoMatch — трек в Spotify не нашёлся или не совпал с тем, что показывает Windows (часто временно).</summary>
+        public enum Outcome { Ok, None, Queued, Failed, Skipped, NoMatch }
 
         public sealed class Result
         {
@@ -83,7 +84,7 @@ namespace Isle.Services
                     // трек) — раньше он запоминался, и для этой песни Spicy больше не спрашивался до перезапуска
                     if (id != null) lock (Ids) Ids[key] = id;
                 }
-                if (id == null) return res;
+                if (id == null) { res.Outcome = Outcome.NoMatch; return res; }
                 res.TrackId = id;
                 lock (Cache)
                     if (Cache.TryGetValue(id, out var cached))

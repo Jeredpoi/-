@@ -98,6 +98,7 @@ namespace Isle.Services
         public const string Prev = "M18 6v12l-8.5-6zM6 6v12";
         public const string Repeat = "M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4";
         public const string Next = "M6 6v12l8.5-6zM18 6v12";
+        public const string Shuffle = "M17 3l3 3-3 3M3 6h3.5c1.3 0 2.5.6 3.2 1.7l4.6 8.6c.7 1.1 1.9 1.7 3.2 1.7H20M17 15l3 3-3 3M3 18h3.5c1 0 1.9-.4 2.6-1M20 6h-3.5c-1 0-1.9.4-2.6 1";
         public const string Play = "M8 5.5v13l10-6.5z";
         public const string Pause = "M8.5 5.5v13M15.5 5.5v13";
         public const string Crop = "M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15M9.5 12h5M12 9.5v5";

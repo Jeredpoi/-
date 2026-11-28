@@ -208,6 +208,8 @@ namespace Isle.Services
         public DateTime SpotifyTokenExpiry { get; set; }
         /// <summary>Имя привязанного аккаунта Spotify («Не привязан», если пусто).</summary>
         public string SpotifyUserName { get; set; } = "";
+        /// <summary>Права, которые Spotify реально выдал токену (через пробел). Пусто — привязка старая, права неизвестны.</summary>
+        public string SpotifyScopes { get; set; } = "";
         [System.Text.Json.Serialization.JsonIgnore]
         public string SpotifyRefreshToken { get => Unprotect(SpotifyRefreshProtected); set => SpotifyRefreshProtected = Protect(value); }
         [System.Text.Json.Serialization.JsonIgnore]

@@ -13,6 +13,8 @@ namespace Isle.Services
         /// <summary>Конец строки (если сервис его знает) и время начала каждого слова — для точного караоке.</summary>
         public TimeSpan? End;
         public List<LyricWord> Words;
+        /// <summary>Строка второго голоса (дуэт, бэк-вокал) — в списке на «Главной» стоит справа, как в Spotify. Заполняет источник, если знает.</summary>
+        public bool OppositeAligned;
     }
 
     public class LyricWord
@@ -185,9 +187,27 @@ namespace Isle.Services
         public const string SourceSpicy = "Spicy Lyrics", SourceLrclib = "LRCLIB";
         public event Action Changed;
 
+        private readonly MediaService _media;
+        /// <summary>Трек, для которого Spicy ещё стоит переспросить (Spotify не совпал с Windows), и сколько раз уже спросили.</summary>
+        private string _spicyRetryKey;
+        private int _spicyRetries;
+        private bool _spicyBusy, _wasPlaying;
+
         public LyricsState(MediaService media)
         {
+            _media = media;
             media.TrackChanged += m => _ = LoadAsync(m);
+            media.Changed += OnMediaChanged;
+        }
+
+        /// <summary>Пауза сменилась на «играет» — Spotify Web API к этому моменту уже знает трек: переспросим Spicy.</summary>
+        private void OnMediaChanged()
+        {
+            var m = _media.Current;
+            bool playing = m != null && m.IsPlaying;
+            if (playing && !_wasPlaying && _spicyRetryKey != null && _spicyRetryKey == m.Artist + "|" + m.Title)
+                _ = RetrySpicyAsync(m, _spicyRetryKey, "трек заиграл");
+            _wasPlaying = playing;
         }
 
         public async Task LoadAsync(MediaInfo m)
@@ -198,6 +218,8 @@ namespace Isle.Services
             Key = key;
             Lines = null;
             Loading = true;
+            _spicyRetryKey = null;
+            _spicyRetries = 0;
             Changed?.Invoke();
 
             // привязан Spotify и играет именно он — сначала Spicy Lyrics (по слогам); любая неудача — LRCLIB как раньше
@@ -207,6 +229,13 @@ namespace Isle.Services
                 try { spicy = await SpicyLyrics.TryGetAsync(m); } catch { spicy = null; }
                 if (key != Key) return;
                 if (spicy?.Outcome == SpicyLyrics.Outcome.Ok && spicy.Lines != null) { Set(spicy.Lines, key, SourceSpicy); return; }
+                // сразу после смены трека (особенно на паузе) Spotify Web API ещё отдаёт прошлую песню —
+                // пока показываем LRCLIB, а Spicy переспрашиваем через 3 и 8 с и когда трек заиграет
+                if (spicy?.Outcome == SpicyLyrics.Outcome.NoMatch)
+                {
+                    _spicyRetryKey = key;
+                    _ = ScheduleSpicyRetriesAsync(m, key);
+                }
             }
 
             var lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
@@ -218,6 +247,7 @@ namespace Isle.Services
                 lyr = await LyricsService.GetAsync(m.Artist, m.Title, m.Duration);
             }
             if (key != Key) return;
+            if (Source == SourceSpicy && Lines != null) return; // пока ждали LRCLIB, повтор Spicy уже подставил текст
             Loading = false;
             Set(lyr, key, SourceLrclib);
             if (spicy?.Outcome == SpicyLyrics.Outcome.Queued) _ = RetryQueuedAsync(m, key);
@@ -235,6 +265,52 @@ namespace Isle.Services
             try { r = await SpicyLyrics.TryGetAsync(m, retryQueued: true); } catch { return; }
             if (key != Key || Loading) return;
             if (r?.Outcome == SpicyLyrics.Outcome.Ok && r.Lines != null) Set(r.Lines, key, SourceSpicy);
+        }
+
+        private async Task ScheduleSpicyRetriesAsync(MediaInfo m, string key)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3));
+            await RetrySpicyAsync(m, key, "через 3 с");
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            await RetrySpicyAsync(m, key, "через 8 с");
+        }
+
+        /// <summary>
+        /// Ещё раз спросить Spicy Lyrics, пока играет тот же трек. Получилось — подменяем строки (LRCLIB → Spicy).
+        /// Не больше 4 попыток на трек.
+        /// </summary>
+        private async Task RetrySpicyAsync(MediaInfo m, string key, string why)
+        {
+            if (key != Key || _spicyRetryKey != key || _spicyBusy) return;
+            if (++_spicyRetries > 4) { _spicyRetryKey = null; return; }
+            if (!SpotifyAuth.IsLinked || !SpotifyAuth.IsSpotifyApp(m.SourceAppId)) { _spicyRetryKey = null; return; }
+            _spicyBusy = true;
+            SpicyLyrics.Result r;
+            try
+            {
+                Journal.Info("lyrics", "Spicy: повтор (" + why + ")");
+                r = await SpicyLyrics.TryGetAsync(m);
+            }
+            catch { r = null; }
+            finally { _spicyBusy = false; }
+            if (key != Key || _spicyRetryKey != key) return;
+            switch (r?.Outcome)
+            {
+                case SpicyLyrics.Outcome.Ok when r.Lines != null:
+                    _spicyRetryKey = null;
+                    Journal.Info("lyrics", "Spicy: текст нашёлся со второй попытки — заменяю " + (string.IsNullOrEmpty(Source) ? "пустой" : Source));
+                    Set(r.Lines, key, SourceSpicy);
+                    break;
+                case SpicyLyrics.Outcome.NoMatch:
+                    break; // ждём следующего повода
+                case SpicyLyrics.Outcome.Queued:
+                    _spicyRetryKey = null;
+                    _ = RetryQueuedAsync(m, key);
+                    break;
+                default:
+                    _spicyRetryKey = null; // текста у Spicy нет или сервис на паузе — остаётся LRCLIB
+                    break;
+            }
         }
 
         private void Set(List<LyricLine> lines, string key, string source = "")

@@ -49,16 +49,21 @@ namespace Isle.Views
                 TickPosition();
                 if (++_appVolTicks % 10 != 0) return;
                 SyncAppVolume();
+                // раз в 5 с — повтор, перемешивание и громкость самого Spotify (их меняют и в приложении Spotify)
+                if (_appVolTicks % 50 == 0 && SpotifyControl.Handles(AppHost.Media.Current)) _ = SpotifyControl.RefreshStateAsync();
                 // раз в секунду: пауза затянулась — пора спрятать плеер (событий от плеера в это время нет)
                 bool idleNow = _pausedSince.HasValue && DateTime.Now - _pausedSince.Value > PlayerIdleTimeout;
                 if (idleNow != _shownIdle) Refresh();
             };
             AppVol.ValueChanged += OnAppVolume;
+            SpotifyControl.StateChanged += () => { UpdateRepeat(); UpdateShuffle(); SyncAppVolume(); };
             Command.TextChanged += (_, __) => CommandResult.Text = TryCalc(Command.Text, out var r) ? "= " + r : "";
             IsVisibleChanged += (_, __) =>
             {
-                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += KaraokeFrame; }
-                else { _tick.Stop(); Helpers.FrameClock.Tick -= KaraokeFrame; }
+                // OnShown зовётся ещё до того, как вкладка стала видимой, — SyncAppVolume там ничего не делал,
+                // и крутилка ждала секундного тика; синхронизируем сразу, как только видно
+                if (IsVisible) { _tick.Start(); Helpers.FrameClock.Tick += LyricsFrame; SyncAppVolume(); }
+                else { _tick.Stop(); Helpers.FrameClock.Tick -= LyricsFrame; }
             };
             foreach (var p in AppSettings.Current.Launcher) _launch.Add(new LauncherItem { Path = p });
             Launcher.ItemsSource = _launch;
@@ -261,6 +266,10 @@ namespace Isle.Views
         {
             var m = AppHost.Media.Current;
             UpdateRepeat();
+            UpdateShuffle();
+            // новый трек или переключились на Spotify — перечитать его повтор/перемешивание/громкость
+            var stateKey = m.SourceAppId + "|" + m.Title;
+            if (stateKey != _spotifyStateKey && SpotifyControl.Handles(m)) { _spotifyStateKey = stateKey; _ = SpotifyControl.RefreshStateAsync(force: true); }
             // музыка на паузе дольше 3 минут — вместо плеера показываем «Недавно скопировано»
             if (m.HasSession && m.IsPlaying) _pausedSince = null;
             else if (_pausedSince == null) _pausedSince = DateTime.Now;
@@ -279,6 +288,7 @@ namespace Isle.Views
                 CoverGlow.Source = null;
                 PlayIcon.Kind = "Play";
                 AppVol.Visibility = Visibility.Collapsed;
+                _shownLyricsKey = null; // колонку очистили — при возвращении трека текст надо построить заново
                 SetLyrics(null);
                 return;
             }
@@ -291,7 +301,11 @@ namespace Isle.Views
             PlayIcon.Kind = m.IsPlaying ? "Pause" : "Play";
             DurText.Text = Fmt(m.Duration);
             TickPosition();
-            if (_shownLyricsKey != AppHost.Lyrics.Key || AppHost.Lyrics.Loading) OnLyricsChanged();
+            // Раньше здесь сравнивался только ключ трека. Плеер на миг присылал пустое название (смена трека, Spotify),
+            // мы шли в ветку «ничего не играет» и чистили колонку (SetLyrics(null)), а ключ оставался прежним; затем
+            // LyricsState видел тот же трек с уже загруженным текстом и Changed не поднимал — колонка пустовала до
+            // следующего трека, хотя пилюля (она читает Lines каждый кадр) текст показывала. Теперь сверяем и сами строки.
+            OnLyricsChanged();
         }
 
         private async void OnSources(object s, RoutedEventArgs e)
@@ -365,54 +379,47 @@ namespace Isle.Views
             TitleStack.VerticalAlignment = VerticalAlignment.Center;
         }
 
-        /// <summary>Текст берётся из общего состояния (его же показывает пилюля «С текстом»).</summary>
+        /// <summary>
+        /// Текст берётся из общего состояния (его же показывает пилюля «С текстом»). Сравниваем с тем, что реально
+        /// построено в колонке (_lyrics), а не только с ключом трека: иначе после «пустого» обновления плеера
+        /// колонка оставалась пустой до следующего трека (см. Refresh).
+        /// </summary>
         private void OnLyricsChanged()
         {
             var st = AppHost.Lyrics;
+            if (st == null) return;
             if (st.Loading)
             {
-                _lyrics = null; _lines.Clear(); LyricsStack.Children.Clear();
+                if (_shownLyricsKey == null && _lyrics == null && LyrStatus.Visibility == Visibility.Visible && LyrStatus.Text == "Ищу текст песни…") return;
+                _lyrics = null; LyricsList.SetLines(null);
                 LyrStatus.Text = "Ищу текст песни…";
                 LyrStatus.Visibility = Visibility.Visible;
+                LyrSource.Visibility = Visibility.Collapsed;
                 _shownLyricsKey = null;
                 return;
             }
-            if (_shownLyricsKey == st.Key && _lyrics == st.Lines) return;
+            if (_shownLyricsKey == st.Key && ReferenceEquals(_lyrics, st.Lines) && (_lyrics != null || LyrStatus.Visibility == Visibility.Visible)) return;
             _shownLyricsKey = st.Key;
             SetLyrics(st.Lines);
         }
 
-        private int _curLine = -2;
-        private readonly List<TextBlock> _lines = new();
-
         private void SetLyrics(List<LyricLine> lyr)
         {
             _lyrics = lyr;
-            _curLine = -2;
-            _lines.Clear();
-            LyricsStack.Children.Clear();
-            LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
-            LyricsShift.Y = 0;
-            ShowLyricsSource(lyr != null && lyr.Count > 0 && AppHost.Lyrics?.Source == LyricsState.SourceSpicy);
-            if (lyr == null || lyr.Count == 0)
+            bool has = lyr != null && lyr.Count > 0;
+            LyricsList.SetLines(has ? lyr : null);
+            ShowLyricsSource(has && AppHost.Lyrics?.Source == LyricsState.SourceSpicy);
+            LyrSource.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+            if (!has)
             {
                 LyrStatus.Text = AppHost.Media.Current.HasSession && !string.IsNullOrEmpty(AppHost.Media.Current.Title) ? "Текст песни не найден" : "";
                 LyrStatus.Visibility = Visibility.Visible;
                 return;
             }
             LyrStatus.Visibility = Visibility.Collapsed;
-            foreach (var l in lyr)
-            {
-                var tb = new TextBlock
-                {
-                    Text = l.Text.Length == 0 ? "♪" : l.Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, FontWeight = FontWeights.SemiBold,
-                    // Keep a small right inset so glyph overhangs never touch the clipped viewport edge.
-                    Foreground = (System.Windows.Media.Brush)FindResource("Fg"), Opacity = 0.3, Margin = new Thickness(0, 0, 8, 10),
-                    RenderTransformOrigin = new Point(0, 0.5), RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
-                };
-                _lines.Add(tb);
-                LyricsStack.Children.Add(tb);
-            }
+            // сразу ставим текущую строку на место, без «въезда» всего списка
+            var m = AppHost.Media.Current;
+            if (m.HasSession) LyricsList.Render(m.LivePosition, snap: true);
         }
 
         private bool _spicyCredit;
@@ -434,37 +441,6 @@ namespace Isle.Views
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SpicyLyrics.RepoUrl) { UseShellExecute = true }); } catch { }
         }
 
-        /// <summary>Плавно прокручивает текст так, чтобы текущая строка стояла на трети высоты; она ярче и крупнее.</summary>
-        private void ShowLine(int i)
-        {
-            if (i == _curLine || _lines.Count == 0) return;
-            // караоке: у прошлой строки снова обычный текст, у новой — слова, которые загораются по очереди
-            if (_curLine >= 0 && _curLine < _lines.Count) { var old = _lines[_curLine]; var t = _lyrics[_curLine].Text; old.Inlines.Clear(); old.Text = t.Length == 0 ? "♪" : t; }
-            if (i >= 0 && i < _lines.Count && _lyrics[i].Text.Length > 0) Helpers.KaraokeText.Set(_lines[i], _lyrics[i], Helpers.KaraokeText.NextAt(_lyrics, i), KaraokeOff);
-            _curLine = i;
-            if (_lines[0].ActualHeight <= 0) LyricsStack.UpdateLayout();
-            var dur = TimeSpan.FromMilliseconds(420);
-            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
-            for (int k = 0; k < _lines.Count; k++)
-            {
-                int d = Math.Abs(k - i);
-                double op = k == i ? 1 : d == 1 ? 0.45 : d == 2 ? 0.25 : 0.12;
-                double sc = k == i ? 1.12 : 1;
-                _lines[k].BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(op, dur) { EasingFunction = ease });
-                var st = (System.Windows.Media.ScaleTransform)_lines[k].RenderTransform;
-                // Scale vertically only: horizontal scaling pushed the final glyph beyond LyricsViewport's clip.
-                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
-                st.ScaleX = 1;
-                st.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(sc, dur) { EasingFunction = ease });
-            }
-            double y = 0;
-            for (int k = 0; k < Math.Max(0, i); k++) y += _lines[k].ActualHeight + 10;
-            double target = -(y - LyricsViewport.ActualHeight / 3);
-            if (i < 0) target = LyricsViewport.ActualHeight / 3;
-            LyricsShift.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(target, TimeSpan.FromMilliseconds(520)) { EasingFunction = ease });
-        }
-
         private void TickPosition()
         {
             var m = AppHost.Media.Current;
@@ -476,58 +452,90 @@ namespace Isle.Views
                 Progress.Value = Math.Min(Progress.Maximum, pos.TotalSeconds);
             }
             PosText.Text = Fmt(pos);
-            if (_lyrics != null && _lyrics.Count > 0)
-            {
-                int idx = Helpers.KaraokeText.Index(_lyrics, pos);
-                ShowLine(idx);
-                if (idx >= 0 && idx < _lines.Count) Helpers.KaraokeText.Update(_lines[idx], pos, KaraokeOn, KaraokeOff);
-            }
         }
 
-        /// <summary>Заливка букв — каждый кадр (таймер позиции раз в 100 мс давал рывки).</summary>
-        private void KaraokeFrame(double dt)
+        /// <summary>Текст песни — каждый кадр (общий FrameClock), только пока «Главная» и колонка видны.</summary>
+        private void LyricsFrame(double dt)
         {
-            if (_lyrics == null || _curLine < 0 || _curLine >= _lines.Count) return;
+            if (_lyrics == null || !LyricsList.HasLines || LyricsBorder.Visibility != Visibility.Visible || PlayerPanel.Visibility != Visibility.Visible) return;
             var m = AppHost.Media.Current;
             if (!m.HasSession) return;
-            Helpers.KaraokeText.Update(_lines[_curLine], m.LivePosition, KaraokeOn, KaraokeOff);
+            LyricsList.Render(m.LivePosition, dt);
         }
-
-        private static readonly System.Windows.Media.Brush KaraokeOn = Frozen(System.Windows.Media.Color.FromRgb(0xEC, 0xEC, 0xF1));
-        private static readonly System.Windows.Media.Brush KaraokeOff = Frozen(System.Windows.Media.Color.FromArgb(0x70, 0xEC, 0xEC, 0xF1));
-        private static System.Windows.Media.Brush Frozen(System.Windows.Media.Color c) { var b = new System.Windows.Media.SolidColorBrush(c); b.Freeze(); return b; }
 
         private static string Fmt(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : ((int)t.TotalMinutes) + ":" + t.Seconds.ToString("00");
 
         private int _appVolTicks;
         private DateTime _appVolSetAt;
+        private string _spotifyStateKey = "";
+        /// <summary>Последняя известная громкость каждого плеера (по AUMID) — показываем её, пока звуковой сессии ещё нет.</summary>
+        private readonly Dictionary<string, double> _appVolKnown = new();
+        /// <summary>Громкость, которую выставили крутилкой, когда звуковой сессии плеера ещё не было, — применим, как появится.</summary>
+        private readonly Dictionary<string, double> _appVolPending = new();
 
         /// <summary>
         /// Громкость плеера — та же, что в самом приложении и в «Микшере громкости» Windows:
         /// в Spotify стоит 30 % — крутилка показывает 30 %, переключился на браузер со 100 % — покажет 100 %.
+        /// Spotify привязан с правом управления — крутилка управляет громкостью самого Spotify (Web API).
+        /// Крутилка видна сразу, как есть плеер: звуковая сессия у плеера появляется только когда он начал
+        /// выводить звук (через секунду-другую после смены трека), до этого — последнее известное значение.
         /// </summary>
         private void SyncAppVolume()
         {
             if (!IsVisible) return; // вкладка скрыта — не опрашиваем звуковые сессии зря (обновится при показе)
             var m = AppHost.Media.Current;
             if (!m.HasSession || string.IsNullOrEmpty(m.SourceAppId)) { AppVol.Visibility = Visibility.Collapsed; return; }
+            AppVol.Visibility = Visibility.Visible;
             if (AppVol.IsMouseCaptured || DateTime.Now - _appVolSetAt < TimeSpan.FromSeconds(1)) return; // крутят сейчас — не перебиваем
-            var v = AppHost.Audio.AppVolume(m.SourceAppId);
-            AppVol.Visibility = v.HasValue ? Visibility.Visible : Visibility.Collapsed;
-            if (v.HasValue) AppVol.Value = v.Value;
+            var id = m.SourceAppId;
+            if (SpotifyControl.Handles(m) && SpotifyControl.VolumePercent is int sp)
+            {
+                AppVol.Value = sp / 100.0;
+                AppVol.ToolTip = "Громкость Spotify · крути колесиком";
+                return;
+            }
+            var v = AppHost.Audio.AppVolume(id);
+            if (v.HasValue)
+            {
+                if (_appVolPending.Remove(id, out var want) && Math.Abs(want - v.Value) > 0.005)
+                {
+                    AppHost.Audio.SetAppVolume(id, (float)want); // крутили, пока сессии не было
+                    v = (float)want;
+                }
+                _appVolKnown[id] = v.Value;
+                AppVol.Value = v.Value;
+            }
+            else AppVol.Value = _appVolPending.TryGetValue(id, out var p) ? p : _appVolKnown.TryGetValue(id, out var k) ? k : 1.0;
             AppVol.ToolTip = "Громкость " + (string.IsNullOrEmpty(m.SourceApp) ? "плеера" : m.SourceApp) + " · крути колесиком";
         }
 
         private async void OnAppVolume(double v)
         {
             _appVolSetAt = DateTime.Now;
-            var id = AppHost.Media.Current.SourceAppId;
-            AppHost.Audio.SetAppVolume(id, (float)v);
+            var m = AppHost.Media.Current;
+            var id = m.SourceAppId;
+            if (string.IsNullOrEmpty(id)) return;
+            if (SpotifyControl.Handles(m))
+            {
+                // громкость самого Spotify; запросы прореживаются, отказ — громкость в микшере Windows
+                SpotifyControl.SetVolume(v, x => SetWindowsAppVolume(id, x));
+                return;
+            }
+            if (!SetWindowsAppVolume(id, v)) return;
             // некоторые плееры сразу возвращают свою громкость обратно — проверим и скажем честно
             await System.Threading.Tasks.Task.Delay(600);
             var now = AppHost.Audio.AppVolume(id);
             if (now.HasValue && Math.Abs(now.Value - v) > 0.04)
                 AppVol.ToolTip = "Плеер не дал изменить громкость извне — поменяй её в самом приложении";
+        }
+
+        /// <summary>Громкость плеера в микшере Windows. false — звуковой сессии пока нет (применим, когда появится).</summary>
+        private bool SetWindowsAppVolume(string id, double v)
+        {
+            if (!AppHost.Audio.SetAppVolume(id, (float)v)) { _appVolPending[id] = v; return false; }
+            _appVolPending.Remove(id);
+            _appVolKnown[id] = v;
+            return true;
         }
 
         private void OnPrev(object s, RoutedEventArgs e) => AppHost.Media.Previous();
@@ -547,13 +555,49 @@ namespace Isle.Views
             UpdateRepeat();
         }
 
+        /// <summary>Вид кнопки-переключателя: включено — подложка, яркая иконка и точка; выключено — приглушено.</summary>
+        private static void PaintToggle(Helpers.Icon icon, FrameworkElement bg, FrameworkElement dot, bool on, bool supported)
+        {
+            icon.SetResourceReference(Helpers.Icon.ForegroundProperty, on ? "Accent" : "Muted");
+            icon.Opacity = on ? 1 : supported ? 0.6 : 0.35;
+            bg.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            dot.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void UpdateRepeat()
         {
-            var (supported, on) = AppHost.Media.Repeat;
-            RepeatIcon.SetResourceReference(Helpers.Icon.ForegroundProperty, on ? "Accent" : "Muted");
-            RepeatOne.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-            RepeatBtn.Opacity = supported ? 1 : 0.55;
-            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи" : on ? "Повтор трека включён — нажми, чтобы выключить" : "Повторять трек";
+            var (supported, mode) = AppHost.Media.RepeatInfo;
+            bool on = mode != MediaService.RepeatMode.Off, one = mode == MediaService.RepeatMode.One;
+            PaintToggle(RepeatIcon, RepeatBg, RepeatDot, on, supported);
+            RepeatOne.Visibility = one ? Visibility.Visible : Visibility.Collapsed;
+            bool spotify = SpotifyControl.Handles(AppHost.Media.Current);
+            RepeatBtn.ToolTip = !supported ? "Повтор — этот плеер не даёт включать его снаружи"
+                : one ? "Повтор трека включён — нажми, чтобы выключить"
+                : on ? (spotify ? "Повтор плейлиста включён — нажми: повтор трека" : "Повтор включён — нажми, чтобы выключить")
+                : spotify ? "Повтор выключен — нажми: повтор плейлиста" : "Повторять трек";
+        }
+
+        private void UpdateShuffle()
+        {
+            var (supported, on) = AppHost.Media.ShuffleInfo;
+            PaintToggle(ShuffleIcon, ShuffleBg, ShuffleDot, on, supported);
+            ShuffleBtn.ToolTip = !supported ? "Перемешивание — этот плеер не даёт включать его снаружи"
+                : on ? "Перемешивание включено — нажми, чтобы выключить" : "Перемешивать";
+        }
+
+        private async void OnShuffle(object s, RoutedEventArgs e)
+        {
+            if (!await AppHost.Media.ToggleShuffleAsync())
+            {
+                var app = AppHost.Media.Current?.SourceApp ?? "";
+                ToastBus.Show(new Toast
+                {
+                    Kind = ToastKind.Info, Title = "Перемешивание переключается только в самом плеере", Icon = Icons.Shuffle, Important = true, Duration = TimeSpan.FromSeconds(3.5),
+                    Subtitle = app.Contains("spotify", StringComparison.OrdinalIgnoreCase) ? "Spotify не даёт включать его снаружи — в Spotify: Ctrl+S" : "Этот плеер не даёт включать перемешивание снаружи",
+                });
+            }
+            await System.Threading.Tasks.Task.Delay(300);
+            UpdateShuffle();
         }
         private void OnNext(object s, RoutedEventArgs e) => AppHost.Media.Next();
         private void OnPlay(object s, RoutedEventArgs e) => AppHost.Media.PlayPause();
