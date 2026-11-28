@@ -561,21 +561,31 @@ namespace Isle.Helpers
         private KaraokeStyle _style;
 
         private static readonly Effect Blur1 = MakeBlur(1.2), Blur2 = MakeBlur(2.4);
+        private readonly LinearGradientBrush _mask;
+
+        /// <summary>Маска краёв — по высоте окна; меняется только при смене размера.</summary>
+        private void FitMask()
+        {
+            double h = _viewport.ActualHeight;
+            if (h > 0 && Math.Abs(_mask.EndPoint.Y - h) > 0.5) _mask.EndPoint = new Point(0, h);
+        }
 
         public LyricsScroller()
         {
             _viewport = new Canvas { ClipToBounds = true };
             _stack = new StackPanel { RenderTransform = _shift };
             _viewport.Children.Add(_stack);
-            _viewport.SizeChanged += (_, __) => { _stack.Width = _viewport.ActualWidth; };
-            // края уходят в прозрачность — строки появляются и исчезают мягко, как в Spotify
-            var mask = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
-            mask.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 0));
-            mask.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), 0.14));
-            mask.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), 0.78));
-            mask.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 1));
-            mask.Freeze();
-            _viewport.OpacityMask = mask;
+            _viewport.SizeChanged += (_, __) => { _stack.Width = _viewport.ActualWidth; FitMask(); };
+            // края уходят в прозрачность — строки появляются и исчезают мягко, как в Spotify.
+            // Маска — в пикселях окна (Absolute), а не в долях: «доли» WPF считает от границ СОДЕРЖИМОГО
+            // (весь длинный список, уехавший вверх и вниз за обрезку), и затухание ложилось не на края окна,
+            // а на верх списка — первые строки песни (и текущая вместе с ними) выходили тусклыми.
+            _mask = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+            _mask.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 0));
+            _mask.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), 0.14));
+            _mask.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), 0.78));
+            _mask.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 1));
+            _viewport.OpacityMask = _mask;
             Children.Add(_viewport);
             _glow = new MovingGlow(10, Colors.White);
             IsVisibleChanged += (_, __) => { if (IsVisible) Snap(); };
@@ -675,6 +685,7 @@ namespace Isle.Helpers
             // для мгновенной расстановки нужны настоящие высоты строк — досчитываем раскладку прямо сейчас
             if (snap && (_viewport.ActualHeight <= 0 || !_stack.IsArrangeValid)) UpdateLayout();
             if (_viewport.ActualHeight > 0 && _stack.IsArrangeValid) _snapNext = false;
+            FitMask(); // стенд расставляет без менеджера раскладки — SizeChanged может не прийти
             dt = Math.Clamp(dt, 0, 0.1);
 
             double now = pos.TotalSeconds;
@@ -797,6 +808,7 @@ namespace Isle.Helpers
             public double Start, End, X;
             public double Op = -1, Y = double.NaN;
             public int Mask = -1;
+            public readonly LinearGradientBrush FadeRight = MakeFade(false), FadeBoth = MakeFade(true); // свои у ячейки: ширина окна своя
         }
 
         private readonly Slot _a, _b;
@@ -808,7 +820,6 @@ namespace Isle.Helpers
         private readonly LyricPalette _pal = LyricPalette.For(Color.FromRgb(0xEC, 0xEC, 0xF1)); // пилюля всегда тёмная
         private readonly KaraokeStyle _style;
         private readonly MovingGlow _glow = new(6, Colors.White);
-        private static readonly Brush FadeRight = MakeFade(false), FadeBoth = MakeFade(true);
 
         public PillLyric()
         {
@@ -851,14 +862,17 @@ namespace Isle.Helpers
             return new Slot { Root = root, Plain = plain, Box = box, Line = line, Scroll = scroll, Dots = dots, Shift = shift };
         }
 
-        private static Brush MakeFade(bool left)
+        /// <summary>
+        /// Затухание краёв окна пилюли — в пикселях окна (Absolute): в долях WPF мерил бы от границ содержимого,
+        /// то есть всей уехавшей влево строки, и тусклым выходил бы не край пилюли, а начало строки.
+        /// </summary>
+        private static LinearGradientBrush MakeFade(bool left)
         {
-            var b = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
+            var b = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
             b.GradientStops.Add(new GradientStop(Color.FromArgb(left ? (byte)0 : (byte)255, 0, 0, 0), 0));
             b.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), left ? 0.08 : 0.0));
             b.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), 0.9));
             b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 1));
-            b.Freeze();
             return b;
         }
 
@@ -928,7 +942,12 @@ namespace Isle.Helpers
             if (Math.Abs(x - target) < 0.2) x = target;
             if (x != s.X) { s.X = x; s.Scroll.X = -Math.Round(x * 2) / 2; }
             int mask = over <= 0 ? 0 : x > 1 ? 2 : 1;
-            if (mask != s.Mask) { s.Mask = mask; s.Box.OpacityMask = mask == 0 ? null : mask == 1 ? FadeRight : FadeBoth; }
+            if (viewW > 0 && Math.Abs(s.FadeRight.EndPoint.X - viewW) > 0.5)
+            {
+                s.FadeRight.EndPoint = new Point(viewW, 0);
+                s.FadeBoth.EndPoint = new Point(viewW, 0);
+            }
+            if (mask != s.Mask) { s.Mask = mask; s.Box.OpacityMask = mask == 0 ? null : mask == 1 ? s.FadeRight : s.FadeBoth; }
         }
 
         private void Prepare(Slot s, List<LyricLine> lines, int idx, LyricLine line, string fallback)
