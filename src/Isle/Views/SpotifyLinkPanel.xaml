@@ -1,0 +1,73 @@
+<UserControl x:Class="Isle.Views.SpotifyLinkPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Необязательная привязка Spotify: текст песен по слогам из Spicy Lyrics. Блок самодостаточный —
+         вставляется на страницу «Музыка» в настройках как есть. -->
+    <UserControl.Resources>
+        <Style x:Key="PTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="PNote" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <!-- заголовок + подсказка с шагами настройки -->
+        <DockPanel LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left" Style="{StaticResource PTitle}" Text="Spotify для текста песен"/>
+            <Border x:Name="InfoBadge" DockPanel.Dock="Left" Width="16" Height="16" CornerRadius="8" Margin="8,0,0,0" VerticalAlignment="Center"
+                    BorderThickness="1" BorderBrush="{DynamicResource Muted}" Background="Transparent" Cursor="Help"
+                    ToolTipService.InitialShowDelay="150" ToolTipService.ShowDuration="60000">
+                <TextBlock Text="i" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                <Border.ToolTip>
+                    <StackPanel MaxWidth="330">
+                        <TextBlock FontWeight="SemiBold" Text="Как привязать (один раз):"/>
+                        <TextBlock Margin="0,6,0,0" Text="1. Открой developer.spotify.com → Dashboard → Create app (название любое, API — Web API)."/>
+                        <TextBlock Margin="0,4,0,0" Text="2. В поле Redirect URIs добавь http://127.0.0.1:47533/spotify-callback и сохрани."/>
+                        <TextBlock Margin="0,4,0,0" Text="3. Скопируй Client ID сюда и нажми «Привязать Spotify» — откроется вход в браузере."/>
+                    </StackPanel>
+                </Border.ToolTip>
+            </Border>
+        </DockPanel>
+
+        <TextBlock Style="{StaticResource PNote}" Margin="0,3,0,0" Text="Необязательно. Без привязки текст берётся из LRCLIB."/>
+
+        <!-- статус -->
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+            <Ellipse x:Name="Dot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Muted}"/>
+            <TextBlock x:Name="StatusText" Margin="8,0,0,0" FontSize="13" VerticalAlignment="Center" Text="Не привязан"/>
+        </StackPanel>
+
+        <!-- Client ID -->
+        <TextBox x:Name="ClientIdBox" Margin="0,10,0,0" Tag="Client ID приложения Spotify" LostFocus="OnClientIdLostFocus"/>
+
+        <!-- Redirect URI: его надо вставить в настройки приложения на developer.spotify.com -->
+        <DockPanel Margin="0,6,0,0">
+            <Button DockPanel.Dock="Right" Style="{StaticResource Ghost}" Padding="6,2" FontSize="11" Content="Скопировать" Click="OnCopyRedirect"
+                    Foreground="{DynamicResource Muted}" ToolTip="Скопировать Redirect URI"/>
+            <TextBlock Style="{StaticResource PNote}" FontSize="11" VerticalAlignment="Center">
+                <Run Text="Redirect URI:"/>
+                <Run x:Name="RedirectRun" Text="http://127.0.0.1:47533/spotify-callback"/>
+            </TextBlock>
+        </DockPanel>
+
+        <!-- кнопки -->
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button x:Name="LinkBtn" Style="{StaticResource Primary}" Content="Привязать Spotify" Click="OnLink"/>
+            <Button x:Name="UnlinkBtn" Style="{StaticResource Ghost}" Margin="8,0,0,0" Padding="10,6" Content="Отвязать" Click="OnUnlink"/>
+        </StackPanel>
+
+        <TextBlock x:Name="ErrorText" Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource Danger}" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+        <!-- благодарность автору сервиса -->
+        <TextBlock Margin="0,10,0,0" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap">
+            <Run Text="Текст по слогам — "/><Hyperlink NavigateUri="https://github.com/Spikerko/spicy-lyrics" RequestNavigate="OnCredit"
+                       Foreground="{DynamicResource Muted}" ToolTip="github.com/Spikerko/spicy-lyrics">Spicy Lyrics · Spikerko</Hyperlink>
+        </TextBlock>
+    </StackPanel>
+</UserControl>

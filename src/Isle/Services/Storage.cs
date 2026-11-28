@@ -198,6 +198,21 @@ namespace Isle.Services
         public bool ShowClock { get; set; } = true;
         public bool ClockSeconds { get; set; } = false;
 
+        // Spotify (необязательно): только для текста песен из Spicy Lyrics. Без привязки — LRCLIB, как раньше.
+        /// <summary>Client ID своего приложения с developer.spotify.com (вход через PKCE, секрет не нужен).</summary>
+        public string SpotifyClientId { get; set; } = "";
+        /// <summary>Токены Spotify хранятся зашифрованными через Windows DPAPI — как ключ ИИ.</summary>
+        public string SpotifyRefreshProtected { get; set; } = "";
+        public string SpotifyAccessProtected { get; set; } = "";
+        /// <summary>Когда истекает токен доступа (UTC).</summary>
+        public DateTime SpotifyTokenExpiry { get; set; }
+        /// <summary>Имя привязанного аккаунта Spotify («Не привязан», если пусто).</summary>
+        public string SpotifyUserName { get; set; } = "";
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string SpotifyRefreshToken { get => Unprotect(SpotifyRefreshProtected); set => SpotifyRefreshProtected = Protect(value); }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string SpotifyAccessToken { get => Unprotect(SpotifyAccessProtected); set => SpotifyAccessProtected = Protect(value); }
+
         public static string Protect(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";

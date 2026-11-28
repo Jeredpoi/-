@@ -151,7 +151,9 @@
                             </StackPanel>
                         </Canvas>
                         <TextBlock x:Name="LyrStatus" FontSize="13" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="LyrSource" Text="LRCLIB" FontSize="9" Foreground="{DynamicResource Muted}" Opacity="0.6" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
+                        <!-- откуда текст: LRCLIB или (при привязанном Spotify) благодарность Spicy Lyrics со ссылкой на репозиторий -->
+                        <TextBlock x:Name="LyrSource" Text="LRCLIB" FontSize="9" Foreground="{DynamicResource Muted}" Opacity="0.6" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                   MouseLeftButtonUp="OnLyrSourceClick"/>
                     </Grid>
                 </Border>
             </Grid>
