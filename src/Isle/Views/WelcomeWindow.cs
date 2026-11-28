@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,9 +15,10 @@ using Isle.Services;
 namespace Isle.Views
 {
     /// <summary>
-    /// Знакомство при самом первом запуске (и снова — из меню чёлки). Шесть шагов и финал:
-    /// «Знакомство» — привет, открыть чёлку по-настоящему, буфер, снимки; «Настройка» — город, акцент и Клоди,
-    /// разрешения (автозапуск, уведомления, точная скорость Steam). В конце окно «прилетает» на место чёлки.
+    /// Знакомство при самом первом запуске (и снова — из меню чёлки). Десять шагов и финал:
+    /// «Знакомство» — привет, открыть чёлку по-настоящему, буфер, снимки, музыка, таймер и календарь,
+    /// телефон и полка, ИИ и голос; «Настройка» — город, акцент и Клоди, разрешения (автозапуск, уведомления,
+    /// точная скорость Steam). В конце карточка сжимается в чёрную пилюлю и улетает на место чёлки.
     /// Цвета — из общих ресурсов (Card, ChipBg, SelBg, Accent, Muted, Fg), главная кнопка — цветом акцента.
     /// </summary>
     public class WelcomeWindow : Window
@@ -26,9 +28,14 @@ namespace Isle.Views
         private static readonly Brush Amber = Frz(Color.FromRgb(0xFB, 0xBF, 0x24));
         private static SolidColorBrush Frz(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
-        // шаги: 0 привет · 1 открыть чёлку · 2 буфер · 3 снимки | 4 под себя · 5 разрешения | 6 финал
-        private const int StepHello = 0, StepOpen = 1, StepClip = 2, StepShot = 3, StepSetup = 4, StepPerms = 5, StepDone = 6;
-        private const int Steps = 7;
+        // шаги: 0 привет · 1 открыть чёлку · 2 буфер · 3 снимки · 4 музыка · 5 таймер и календарь · 6 телефон и полка · 7 ИИ и голос
+        //       | 8 под себя · 9 разрешения | 10 финал
+        private const int StepHello = 0, StepOpen = 1, StepClip = 2, StepShot = 3, StepMusic = 4, StepTime = 5, StepFiles = 6, StepAi = 7,
+                          StepSetup = 8, StepPerms = 9, StepDone = 10;
+        private const int Steps = 11;
+
+        /// <summary>Шаги-рассказы без заданий: листаются стрелками и Enter.</summary>
+        private static bool IsInfo(int step) => step is StepHello or StepShot or StepMusic or StepTime or StepFiles or StepAi;
 
         private readonly Grid _host = new();
         private readonly List<Border> _dotEls = new();
@@ -48,6 +55,8 @@ namespace Isle.Views
         private bool _autostartDecided;
         private Border _card;
         private bool _flying, _landed;
+        /// <summary>Закрываемся по-настоящему (после финала или без чёлки) — OnClosing не перехватывает.</summary>
+        private bool _closeNow, _closed;
 
         private static WelcomeWindow _open;
 
@@ -101,7 +110,7 @@ namespace Isle.Views
             layers.SizeChanged += (_, __) => layers.Clip = new RectangleGeometry(new Rect(0, 0, layers.ActualWidth, layers.ActualHeight), 27, 27);
             card.Child = layers;
             Content = card;
-            card.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource is Border || e.OriginalSource is Grid || e.OriginalSource is Canvas) try { DragMove(); } catch { } };
+            card.MouseLeftButtonDown += (_, e) => { if (!_flying && (e.OriginalSource is Border || e.OriginalSource is Grid || e.OriginalSource is Canvas)) try { DragMove(); } catch { } };
             KeyDown += OnKey;
 
             // окно «вырастает» из центра
@@ -119,6 +128,7 @@ namespace Isle.Views
             };
             Closed += (_, __) =>
             {
+                _closed = true;
                 _cleanup?.Invoke(); _cleanup = null;
                 _token++;
                 ApplyDefaults();
@@ -149,9 +159,9 @@ namespace Isle.Views
             }
             bool done = _step == StepOpen && _openDone || _step == StepClip && _clipDone;
             // стрелки и Enter листают только информационные шаги; на шагах-заданиях — когда задание выполнено
-            if ((e.Key == Key.Right || e.Key == Key.Enter) && (_step == StepHello || _step == StepShot || done)) { Next(); e.Handled = true; }
+            if ((e.Key == Key.Right || e.Key == Key.Enter) && (IsInfo(_step) || done)) { Next(); e.Handled = true; }
             else if (e.Key == Key.Enter && _step == StepDone) { FlyToIsland(); e.Handled = true; }
-            else if (e.Key == Key.Left && _step > 0 && _step <= StepShot) { Back(); e.Handled = true; }
+            else if (e.Key == Key.Left && _step > 0 && _step < StepSetup) { Back(); e.Handled = true; }
         }
 
         // ---------- шаги ----------
@@ -186,6 +196,10 @@ namespace Isle.Views
                 StepOpen => OpenStep(),
                 StepClip => ClipStep(),
                 StepShot => ShotStep(),
+                StepMusic => MusicStep(),
+                StepTime => TimeStep(),
+                StepFiles => FilesStep(),
+                StepAi => AiStep(),
                 StepSetup => SetupStep(),
                 StepPerms => PermsStep(),
                 _ => Done(),
@@ -207,8 +221,8 @@ namespace Isle.Views
             _grpSetup.SetResourceReference(TextBlock.ForegroundProperty, _step is >= StepSetup and < StepDone ? "Fg" : "Muted");
             _hint.Text = _step switch
             {
-                StepHello or StepShot => "← → — листать  ·  Enter — дальше",
                 StepDone => "Enter — начать",
+                _ when IsInfo(_step) => "← → — листать  ·  Enter — дальше",
                 _ => "",
             };
             _skip.Visibility = _step == StepDone ? Visibility.Collapsed : Visibility.Visible;
@@ -262,7 +276,7 @@ namespace Isle.Views
                 }
                 return g;
             }
-            row.Children.Add(Group("Знакомство", StepHello, StepShot, out _grpIntro));
+            row.Children.Add(Group("Знакомство", StepHello, StepAi, out _grpIntro));
             row.Children.Add(Group("Настройка", StepSetup, StepPerms, out _grpSetup));
             return row;
         }
@@ -709,7 +723,7 @@ namespace Isle.Views
         private FrameworkElement Hello()
         {
             _buddy.Mood = Mood.Idle;
-            var sp = Page("Привет! Я Клоди", "Isle — чёлка для Windows. Покажу главное за минуту.", buddy: true);
+            var sp = Page("Привет! Я Клоди", "Isle — чёлка для Windows. Покажу главное — это пара минут.", buddy: true);
             sp.Loaded += (_, __) => _buddy.ForceActivity(3, 2.2); // машет: «привет!»
             sp.Children.Add(Buttons(Pill("Я сам разберусь", false, SkipIntro), Pill("Поехали", true, Next)));
             return sp;
@@ -983,7 +997,435 @@ namespace Isle.Views
             return sp;
         }
 
-        // ---------- 5) Под себя: город, акцент, Клоди ----------
+        // ---------- кирпичики для шагов-рассказов ----------
+
+        /// <summary>«Экран» для живой картинки: скруглённая подложка, внутри — свободная сетка.</summary>
+        private static (Border screen, Grid area) MiniScreen(double w, double h)
+        {
+            var screen = new Border { Width = w, Height = h, CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1), ClipToBounds = true, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 18, 0, 6) };
+            screen.SetResourceReference(Border.BackgroundProperty, "ChipBg");
+            screen.SetResourceReference(Border.BorderBrushProperty, "CardBorder");
+            var area = new Grid();
+            screen.Child = area;
+            return (screen, area);
+        }
+
+        /// <summary>Чёрная модель чёлки, прижатая к верху «экрана».</summary>
+        private static Border MiniIsland(double w, double h, double r = 18) => new()
+        {
+            Background = Brushes.Black, CornerRadius = new CornerRadius(0, 0, r, r), Width = w, Height = h,
+            VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Center, ClipToBounds = true
+        };
+
+        /// <summary>Плавно поменять размер модели чёлки.</summary>
+        private static void Resize(FrameworkElement island, double w, double h)
+        {
+            var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            var d = TimeSpan.FromMilliseconds(460);
+            island.BeginAnimation(WidthProperty, new DoubleAnimation(w, d) { EasingFunction = ease });
+            island.BeginAnimation(HeightProperty, new DoubleAnimation(h, d) { EasingFunction = ease });
+        }
+
+        /// <summary>Показать один слой из нескольких (остальные гаснут).</summary>
+        private static void ShowLayer(FrameworkElement[] layers, int index)
+        {
+            for (int i = 0; i < layers.Length; i++)
+                layers[i].BeginAnimation(OpacityProperty, new DoubleAnimation(i == index ? 1 : 0, TimeSpan.FromMilliseconds(i == index ? 300 : 150)) { BeginTime = TimeSpan.FromMilliseconds(i == index ? 220 : 0) });
+        }
+
+        /// <summary>Короткий факт: значок в плашке, жирный заголовок, серое пояснение.</summary>
+        private static FrameworkElement Fact(string icon, string title, string text)
+        {
+            var g = new Grid { Width = 470, Margin = new Thickness(0, 5, 0, 5) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+            var ic = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(9), VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Child = Ico(icon, 15) };
+            ic.SetResourceReference(Border.BackgroundProperty, "SelBg");
+            g.Children.Add(ic);
+            var tx = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            tx.Children.Add(Txt(title, 13.5, "Fg", FontWeights.SemiBold));
+            var sub = Txt(text, 12, "Muted");
+            sub.Margin = new Thickness(0, 1, 0, 0);
+            tx.Children.Add(sub);
+            Grid.SetColumn(tx, 1);
+            g.Children.Add(tx);
+            return g;
+        }
+
+        private static StackPanel Facts(params FrameworkElement[] rows)
+        {
+            var list = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+            for (int i = 0; i < rows.Length; i++) { Stagger(rows[i], i, 250, 90); list.Children.Add(rows[i]); }
+            return list;
+        }
+
+        private static Brush AccentNow(double angle = 0) => AccentPaint.Brush(AppSettings.Current.AccentHex, angle);
+        private static readonly Brush IslandMuted = Frz(Color.FromRgb(0x8B, 0x8B, 0x95));
+
+        // ---------- 5) Музыка ----------
+
+        private FrameworkElement MusicStep()
+        {
+            var sp = Page("Музыка в чёлке", "Spotify, браузер, Яндекс Музыка — в чёлке обложка и полоски в такт, а Клоди танцует.");
+            var (screen, area) = MiniScreen(420, 136);
+            sp.Children.Add(screen);
+
+            // модель плеера: обложка, название, полоски спектра и строка песни
+            var island = MiniIsland(372, 108, 22);
+            area.Children.Add(island);
+            var body = new StackPanel { Margin = new Thickness(14, 10, 14, 0) };
+            island.Child = body;
+            var top = new Grid();
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            top.ColumnDefinitions.Add(new ColumnDefinition());
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            top.Children.Add(new Border
+            {
+                Width = 38, Height = 38, CornerRadius = new CornerRadius(9), Background = AccentNow(45),
+                Child = new Icon { Data = Icons.Wave, Width = 18, Height = 18, Foreground = Brushes.White }
+            });
+            var names = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            names.Children.Add(new TextBlock { Text = "Песенка из чёлки", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
+            names.Children.Add(new TextBlock { Text = "Клоди", FontSize = 10.5, Foreground = IslandMuted });
+            Grid.SetColumn(names, 1);
+            top.Children.Add(names);
+            // полоски спектра «играют» цветом акцента
+            var bars = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Height = 22 };
+            double[] hs = { 10, 18, 13, 21, 9, 15 };
+            var accent = AccentNow(90);
+            for (int i = 0; i < hs.Length; i++)
+            {
+                var bar = new Border { Width = 3, Height = hs[i], CornerRadius = new CornerRadius(1.5), Margin = new Thickness(1.5, 0, 1.5, 0), VerticalAlignment = VerticalAlignment.Center, Background = accent };
+                bar.BeginAnimation(HeightProperty, new DoubleAnimation(3, hs[i], TimeSpan.FromMilliseconds(280 + i * 70)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
+                bars.Children.Add(bar);
+            }
+            Grid.SetColumn(bars, 2);
+            top.Children.Add(bars);
+            body.Children.Add(top);
+
+            // строка песни: слова загораются по очереди, как в караоке
+            var line = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
+            var words = "Я живу в чёлке и пою для тебя".Split(' ');
+            var els = new List<TextBlock>();
+            foreach (var w in words)
+            {
+                var tb = new TextBlock { Text = w, FontSize = 17, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Opacity = 0.28, Margin = new Thickness(0, 0, 6, 0) };
+                els.Add(tb);
+                line.Children.Add(tb);
+            }
+            body.Children.Add(line);
+            int at = -2;
+            Loop(sp, TimeSpan.FromMilliseconds(400), () =>
+            {
+                if (++at > words.Length + 2) at = -1; // пауза на конце строки — и сначала
+                for (int i = 0; i < els.Count; i++)
+                {
+                    els[i].Foreground = i == at ? accent : Brushes.White;
+                    els[i].BeginAnimation(OpacityProperty, new DoubleAnimation(at < 0 ? 0.28 : i < at ? 0.85 : i == at ? 1 : 0.28, TimeSpan.FromMilliseconds(180)));
+                }
+            });
+
+            sp.Children.Add(Facts(
+                Fact(Icons.Text, "Текст песни", "Кликни по треку — слова поедут в такт, как в караоке"),
+                Fact(Icons.Volume, "Своя громкость", "На Главной — крутилка громкости самого плеера, отдельно от системной")));
+            sp.Children.Add(NavRow());
+            return sp;
+        }
+
+        // ---------- 6) Таймер, будильник, календарь ----------
+
+        private FrameworkElement TimeStep()
+        {
+            var sp = Page("Таймер и календарь", "Чёлка следит за временем, пока ты занят.");
+            var (screen, area) = MiniScreen(420, 96);
+            sp.Children.Add(screen);
+            var bg = new SolidColorBrush(Colors.Black);
+            var island = MiniIsland(200, 34, 17);
+            island.Background = bg;
+            area.Children.Add(island);
+            var layers = new Grid();
+            island.Child = layers;
+            var red = Frz(Color.FromRgb(0xF8, 0x71, 0x71));
+
+            // а) идёт таймер: красные часики и обратный отсчёт
+            var timer = new Grid { Margin = new Thickness(14, 0, 14, 0) };
+            timer.Children.Add(new StackPanel
+            {
+                Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center,
+                Children = { new Icon { Data = Icons.Timer, Width = 14, Height = 14, Foreground = red }, new TextBlock { Text = "Таймер", FontSize = 12, Foreground = Brushes.White, Margin = new Thickness(8, 0, 0, 0) } }
+            });
+            var count = new TextBlock { Text = "0:03", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = red, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            timer.Children.Add(count);
+
+            // б) время вышло: колокольчик качается, чёлка переливается красным
+            var bell = new Icon { Data = Icons.Bell, Width = 16, Height = 16, Foreground = Brushes.White, RenderTransformOrigin = new Point(0.5, 0.1), RenderTransform = new RotateTransform() };
+            var alarm = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0,
+                Children = { bell, new TextBlock { Text = "Время вышло! Нажми, чтобы выключить", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, Margin = new Thickness(9, 0, 0, 0) } }
+            };
+
+            // в) событие календаря начинается
+            var ev = new Grid { Margin = new Thickness(10, 0, 14, 0), Opacity = 0 };
+            ev.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ev.ColumnDefinitions.Add(new ColumnDefinition());
+            ev.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ev.Children.Add(new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(8), Background = AccentNow(45), VerticalAlignment = VerticalAlignment.Center, Child = new Icon { Data = Icons.Calendar, Width = 15, Height = 15, Foreground = Brushes.White } });
+            var evText = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            evText.Children.Add(new TextBlock { Text = "Созвон с командой", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
+            evText.Children.Add(new TextBlock { Text = "Начинается · " + DateTime.Now.ToString("HH:mm"), FontSize = 10.5, Foreground = IslandMuted });
+            Grid.SetColumn(evText, 1);
+            ev.Children.Add(evText);
+            var evBell = new Icon { Data = Icons.Bell, Width = 14, Height = 14, Foreground = IslandMuted, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(evBell, 2);
+            ev.Children.Add(evBell);
+
+            FrameworkElement[] all = { timer, alarm, ev };
+            foreach (var l in all) layers.Children.Add(l);
+
+            // сценарий по секундам: 3…2…1 → звенит (2 с) → напоминание календаря (3 с) → сначала
+            int sec = -1;
+            void Tick()
+            {
+                sec = (sec + 1) % 8;
+                if (sec <= 2)
+                {
+                    if (sec == 0)
+                    {
+                        Resize(island, 200, 34);
+                        ShowLayer(all, 0);
+                        bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(250)));
+                    }
+                    count.Text = "0:0" + (3 - sec);
+                }
+                else if (sec == 3)
+                {
+                    count.Text = "0:00";
+                    Resize(island, 330, 40);
+                    ShowLayer(all, 1);
+                    bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0x9B, 0x1C, 0x1C), Color.FromRgb(0x3A, 0x3A, 0x42), TimeSpan.FromMilliseconds(420)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+                    ((RotateTransform)bell.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(-22, 22, TimeSpan.FromMilliseconds(140)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+                }
+                else if (sec == 5)
+                {
+                    ((RotateTransform)bell.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, null);
+                    bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(250)));
+                    Resize(island, 300, 46);
+                    ShowLayer(all, 2);
+                }
+            }
+            sp.Loaded += (_, __) => Tick();
+            Loop(sp, TimeSpan.FromSeconds(1), Tick);
+
+            sp.Children.Add(Facts(
+                Fact(Icons.Timer, "Таймер и будильник", "Вкладка «Заметка». Время вышло — чёлка мигает и пищит, пока не нажмёшь"),
+                Fact(Icons.Calendar, "Календарь", "События по дням, а в момент начала — напоминание со звуком"),
+                Fact(Icons.Note, "Напоминания по-человечески", "«позвонить маме завтра в 9» — Isle сам поймёт, когда")));
+            sp.Children.Add(NavRow());
+            return sp;
+        }
+
+        // ---------- 7) Телефон и полка ----------
+
+        private FrameworkElement FilesStep()
+        {
+            var sp = Page("Телефон и полка", "Файлы туда-сюда — без проводов и приложений.");
+            var (screen, area) = MiniScreen(420, 140);
+            sp.Children.Add(screen);
+            var stage = new Canvas();
+            area.Children.Add(stage);
+
+            // телефон с QR-кодом слева
+            var phone = new Border { Width = 66, Height = 118, CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(2), Background = Brushes.Black, RenderTransformOrigin = new Point(0.5, 0.5) };
+            phone.SetResourceReference(Border.BorderBrushProperty, "Fg");
+            var qr = new System.Windows.Controls.Primitives.UniformGrid { Rows = 7, Columns = 7, Width = 42, Height = 42 };
+            var rnd = new Random(7);
+            for (int y = 0; y < 7; y++)
+                for (int x = 0; x < 7; x++)
+                {
+                    // угловые «глазки» QR — всегда залиты по краю, середина — случайный узор
+                    bool corner = (x < 3 && y < 3) || (x > 3 && y < 3) || (x < 3 && y > 3);
+                    bool hole = x == 1 && y == 1 || x == 5 && y == 1 || x == 1 && y == 5;
+                    bool on = corner ? !hole : rnd.Next(2) == 0;
+                    qr.Children.Add(new Border { Background = on ? Brushes.White : Brushes.Transparent, Margin = new Thickness(0.4) });
+                }
+            phone.Child = qr;
+            Canvas.SetLeft(phone, 70); Canvas.SetTop(phone, 10);
+            stage.Children.Add(phone);
+
+            // компьютер с чёлкой справа
+            var monitor = new Border { Width = 150, Height = 92, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2), RenderTransformOrigin = new Point(0.5, 0.5) };
+            monitor.SetResourceReference(Border.BorderBrushProperty, "Fg");
+            monitor.SetResourceReference(Border.BackgroundProperty, "SelBg");
+            monitor.Child = new Border { Width = 50, Height = 11, CornerRadius = new CornerRadius(0, 0, 6, 6), Background = Brushes.Black, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Center };
+            Canvas.SetLeft(monitor, 222); Canvas.SetTop(monitor, 14);
+            stage.Children.Add(monitor);
+            var stand = new Border { Width = 46, Height = 4, CornerRadius = new CornerRadius(2) };
+            stand.SetResourceReference(Border.BackgroundProperty, "Fg");
+            Canvas.SetLeft(stand, 274); Canvas.SetTop(stand, 116);
+            stage.Children.Add(stand);
+
+            // летящая карточка: фото с телефона на компьютер, потом файл обратно
+            var tokenIcon = new Icon { Data = Icons.Image, Width = 14, Height = 14, Foreground = Brushes.White };
+            var token = new Border { Width = 30, Height = 24, CornerRadius = new CornerRadius(7), Background = AccentNow(45), Child = tokenIcon, Opacity = 0, RenderTransform = new TranslateTransform() };
+            Canvas.SetLeft(token, 88); Canvas.SetTop(token, 57);
+            stage.Children.Add(token);
+            bool toPc = true;
+            void Fly()
+            {
+                var tt = (TranslateTransform)token.RenderTransform;
+                double from = toPc ? 0 : 194, to = toPc ? 0 + 194 : 0;
+                tokenIcon.Data = toPc ? Icons.Image : Icons.File;
+                var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(900)) { EasingFunction = ease });
+                // путь — дуга: вверх и вниз
+                var arc = new DoubleAnimationUsingKeyFrames();
+                arc.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                arc.KeyFrames.Add(new EasingDoubleKeyFrame(-38, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450)), new QuadraticEase { EasingMode = EasingMode.EaseOut }));
+                arc.KeyFrames.Add(new EasingDoubleKeyFrame(-4, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900)), new QuadraticEase { EasingMode = EasingMode.EaseIn }));
+                tt.BeginAnimation(TranslateTransform.YProperty, arc);
+                var fade = new DoubleAnimationUsingKeyFrames();
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150))));
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(760))));
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900))));
+                token.BeginAnimation(OpacityProperty, fade);
+                // получатель чуть «вздрагивает», когда карточка долетела
+                var receiver = toPc ? monitor : phone;
+                After(880, () =>
+                {
+                    var st = new ScaleTransform();
+                    receiver.RenderTransform = st;
+                    var bump = new DoubleAnimation(1, 1.07, TimeSpan.FromMilliseconds(110)) { AutoReverse = true };
+                    st.BeginAnimation(ScaleTransform.ScaleXProperty, bump);
+                    st.BeginAnimation(ScaleTransform.ScaleYProperty, bump);
+                });
+                toPc = !toPc;
+            }
+            sp.Loaded += (_, __) => After(400, Fly);
+            Loop(sp, TimeSpan.FromMilliseconds(2000), Fly);
+
+            sp.Children.Add(Facts(
+                Fact(Icons.Phone, "Телефон без приложений", "Вкладка «Телефон»: наведи камеру на QR — фото, видео, файлы и текст летят в обе стороны"),
+                Fact(Icons.Wifi, "Одна сеть", "Общий Wi-Fi или интернет с телефона. Всё пришедшее остаётся в истории"),
+                Fact(Icons.Tray, "Полка", "Перетащи файл на чёлку — полежит, пока не вытащишь в нужное окно")));
+            sp.Children.Add(NavRow());
+            return sp;
+        }
+
+        // ---------- 8) ИИ и голос ----------
+
+        private FrameworkElement AiStep()
+        {
+            var s = AppSettings.Current;
+            var sp = Page("ИИ и голос", "Чат в чёлке открывает программы, ставит таймеры и отвечает на вопросы.");
+            var (screen, area) = MiniScreen(420, 150);
+            sp.Children.Add(screen);
+
+            // модель чата: строка ввода с «+» и микрофоном, над ней — пузыри
+            var dock = new DockPanel { Margin = new Thickness(14, 10, 14, 12), LastChildFill = true };
+            area.Children.Add(dock);
+            var input = new Border { Height = 36, CornerRadius = new CornerRadius(18), Padding = new Thickness(12, 0, 10, 0) };
+            input.SetResourceReference(Border.BackgroundProperty, "SelBg");
+            DockPanel.SetDock(input, Dock.Bottom);
+            dock.Children.Add(input);
+            var ig = new Grid();
+            ig.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ig.ColumnDefinitions.Add(new ColumnDefinition());
+            ig.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var plus = Ico(Icons.Plus, 15, "Muted");
+            plus.VerticalAlignment = VerticalAlignment.Center;
+            ig.Children.Add(plus);
+            var field = new Grid { Margin = new Thickness(10, 0, 10, 0) };
+            Grid.SetColumn(field, 1);
+            ig.Children.Add(field);
+            var typed = Txt("", 13);
+            typed.TextWrapping = TextWrapping.NoWrap;
+            typed.VerticalAlignment = VerticalAlignment.Center;
+            field.Children.Add(typed);
+            // волна голоса — пока «слушаем»
+            var wave = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Opacity = 0 };
+            for (int i = 0; i < 22; i++)
+            {
+                var b = new Border { Width = 3, Height = 4, CornerRadius = new CornerRadius(1.5), Margin = new Thickness(1.5, 0, 1.5, 0), VerticalAlignment = VerticalAlignment.Center };
+                b.SetResourceReference(Border.BackgroundProperty, "Fg");
+                b.BeginAnimation(HeightProperty, new DoubleAnimation(3, 6 + (i * 7 % 13), TimeSpan.FromMilliseconds(220 + i * 37 % 180)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+                wave.Children.Add(b);
+            }
+            field.Children.Add(wave);
+            var mic = new Icon { Data = Icons.Mic, Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
+            mic.SetResourceReference(Isle.Helpers.Icon.ForegroundProperty, "Muted");
+            Grid.SetColumn(mic, 2);
+            ig.Children.Add(mic);
+            input.Child = ig;
+
+            var chat = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
+            dock.Children.Add(chat);
+            Border Bubble(string text, bool mine)
+            {
+                var t = new TextBlock { Text = text, FontSize = 12.5, TextWrapping = TextWrapping.Wrap };
+                var b = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 6, 12, 7), Margin = new Thickness(0, 3, 0, 3), MaxWidth = 300, Child = t, Opacity = 0, HorizontalAlignment = mine ? HorizontalAlignment.Right : HorizontalAlignment.Left, RenderTransformOrigin = new Point(mine ? 1 : 0, 1) };
+                if (mine) { b.Background = AccentNow(45); t.Foreground = _onAccent; }
+                else { b.SetResourceReference(Border.BackgroundProperty, "SelBg"); t.SetResourceReference(TextBlock.ForegroundProperty, "Fg"); }
+                return b;
+            }
+            const string ask = "поставь таймер на 10 минут";
+            var q = Bubble(ask, true);
+            var a = Bubble("Готово — таймер на 10:00 ⏱", false);
+            chat.Children.Add(q); chat.Children.Add(a);
+            void Pop2(UIElement el)
+            {
+                var st = new ScaleTransform(0.85, 0.85);
+                el.RenderTransform = st;
+                var ease = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut };
+                st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+                st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+                el.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)));
+            }
+
+            // сценарий по «тикам» 70 мс: печатаем вопрос → он улетает в чат → ответ → голосовой ввод → сначала
+            int n = -6, len = ask.Length;
+            Loop(sp, TimeSpan.FromMilliseconds(70), () =>
+            {
+                n++;
+                if (n >= 0 && n < len) typed.Text = ask.Substring(0, n + 1);
+                else if (n == len + 5) { typed.Text = ""; Pop2(q); }
+                else if (n == len + 14) Pop2(a);
+                else if (n == len + 34)
+                {
+                    // голос: волна вместо текста, микрофон цветом акцента
+                    typed.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
+                    wave.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)));
+                    mic.Foreground = AccentNow();
+                }
+                else if (n == len + 62)
+                {
+                    wave.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)));
+                    typed.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150)));
+                    mic.SetResourceReference(Isle.Helpers.Icon.ForegroundProperty, "Muted");
+                    q.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(200)));
+                    a.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(200)));
+                    n = -6;
+                }
+            });
+
+            var keys = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+            var k1 = KeyRow(s.HotkeyVoice, "голос в текст — туда, где курсор");
+            var k2 = KeyRow(s.HotkeyVoiceCommand, "голосовая команда: «открой телеграм»");
+            Stagger(k1, 0, 250); Stagger(k2, 1, 250);
+            keys.Children.Add(k1); keys.Children.Add(k2);
+            sp.Children.Add(keys);
+            var note = Txt("В чате «+» или Ctrl+V — картинки и файлы. Нужен ключ ИИ: бесплатный у Groq → Настройки → ИИ.", 12, "Muted");
+            note.TextAlignment = TextAlignment.Center;
+            note.HorizontalAlignment = HorizontalAlignment.Center;
+            note.MaxWidth = 470;
+            note.Margin = new Thickness(0, 10, 0, 0);
+            sp.Children.Add(note);
+            sp.Children.Add(NavRow());
+            return sp;
+        }
+
+        // ---------- 9) Под себя: город, акцент, Клоди ----------
 
         private FrameworkElement SetupStep()
         {
@@ -1091,7 +1533,7 @@ namespace Isle.Views
             return sp;
         }
 
-        // ---------- 6) Разрешения ----------
+        // ---------- 10) Разрешения ----------
 
         private FrameworkElement PermsStep()
         {
@@ -1314,17 +1756,76 @@ namespace Isle.Views
             CompositionTarget.Rendering += tick;
         }
 
-        // ---------- финал: окно сминается в пилюлю и «прилипает» на место чёлки ----------
+        // ---------- финал: карточка сжимается в чёрную пилюлю и улетает на место чёлки ----------
+
+        /// <summary>Закрыть окно по-настоящему, мимо перехвата в OnClosing.</summary>
+        private void CloseNow()
+        {
+            _closeNow = true;
+            try { Close(); } catch (InvalidOperationException) { }
+        }
+
+        /// <summary>Alt+F4 и прочие «закрыть» — тоже через финал: пилюля улетает в чёлку, а не окно просто исчезает.</summary>
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            if (!_closeNow && !_landed && Application.Current != null && !Dispatcher.HasShutdownStarted && AppHost.Window != null)
+            {
+                e.Cancel = true;
+                if (!_flying)
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_closed || _flying) return;
+                        Journal.Info("welcome", "окно закрыли на шаге " + _step + " — улетаем в чёлку");
+                        HideConfirm();
+                        ApplyDefaults();
+                        FlyToIsland();
+                    }));
+                return;
+            }
+            base.OnClosing(e);
+        }
+
+        private static double Clamp01(double x) => x < 0 ? 0 : x > 1 ? 1 : x;
+        private static double Lerp(double a, double b, double t) => a + (b - a) * t;
+        private static double EaseInOutCubic(double t) => t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
+        /// <summary>Плавно туда с лёгким «приседанием» на старте и небольшим перелётом в конце.</summary>
+        private static double EaseInOutBack(double t, double c1 = 0.7)
+        {
+            double c2 = c1 * 1.525;
+            return t < 0.5
+                ? Math.Pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2) / 2
+                : (Math.Pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2;
+        }
+        private static Color LerpColor(Color a, Color b, double t) => Color.FromArgb(
+            (byte)Lerp(a.A, b.A, t), (byte)Lerp(a.R, b.R, t), (byte)Lerp(a.G, b.G, t), (byte)Lerp(a.B, b.B, t));
+
+        /// <summary>Самый светлый цвет акцента (у градиента — светлый конец): им светится вспышка при посадке.</summary>
+        private Color AccentColor()
+        {
+            var br = TryFindResource("Accent") as Brush ?? Application.Current?.TryFindResource("Accent") as Brush;
+            if (br is SolidColorBrush sb) return sb.Color;
+            if (br is GradientBrush gb && gb.GradientStops.Count > 0)
+            {
+                var c = gb.GradientStops[0].Color;
+                foreach (var st in gb.GradientStops) if (Lum(st.Color) > Lum(c)) c = st.Color;
+                return c;
+            }
+            return Colors.White;
+        }
 
         /// <summary>
-        /// Окно сминается в чёрную пилюлю размером с чёлку, тяжело плывёт к верху экрана, зависает под своим местом
-        /// и дрожит, будто его тянет магнит, — и со шлепком прилипает. В этот момент проявляется настоящая чёлка.
+        /// Финал. Карточка (~660×600) сминается в чёрную пилюлю размером со свёрнутую чёлку: углы скругляются,
+        /// содержимое гаснет первым, фон уходит в чистый чёрный. Одновременно пилюля по дуге (с лёгким «приседанием»
+        /// и перелётом) улетает к точному месту чёлки на экране, верхние углы выпрямляются, как у чёлки.
+        /// На месте проявляется настоящая чёлка (с пружинкой) и вспыхивает мягкое свечение, окно закрывается.
+        /// Окно растягивается один раз на общий прямоугольник «карточка + чёлка», дальше двигается только карточка
+        /// внутри (TranslateTransform + размер) — без дёрганья размеров окна на каждом кадре. Около 1,2 с.
         /// </summary>
         private void FlyToIsland()
         {
-            if (_flying) return;
+            if (_flying || _closed) return;
             var main = AppHost.Window;
-            if (main == null || !IsLoaded || _card == null) { Close(); return; }
+            if (main == null || !IsLoaded || _card == null) { CloseNow(); return; }
             // настоящая чёлка должна быть спрятана — пилюля «прилетит» на её место; раскрытой сначала дать свернуться
             if (main.State == IslandState.Expanded)
             {
@@ -1336,120 +1837,153 @@ namespace Isle.Views
             main.HideForWelcome(true);
             _confirm.Visibility = Visibility.Collapsed;
             _flying = true;
+            _cleanup?.Invoke(); _cleanup = null;
+            _token++; // отложенные действия шага больше не нужны
             Rect target; double radiusPx;
             try { target = main.IslandScreenRect(out radiusPx); }
-            catch (Exception ex) { Journal.Warn("welcome", "не нашёл чёлку на экране: " + ex.Message); Close(); return; }
+            catch (Exception ex) { Journal.Warn("welcome", "не нашёл чёлку на экране: " + ex.Message); CloseNow(); return; }
 
-            // экранные пиксели → точки этого окна
+            // экранные пиксели → точки этого окна (с учётом масштаба экрана)
             var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
             var tl = m.Transform(target.TopLeft);
             var br = m.Transform(target.BottomRight);
-            double pw = Math.Max(80, br.X - tl.X), ph = Math.Max(24, br.Y - tl.Y), pr = Math.Max(4, radiusPx * m.M11);
+            double pw = Math.Max(80, br.X - tl.X), ph = Math.Max(24, br.Y - tl.Y), pr = Math.Min(ph / 2, Math.Max(4, radiusPx * m.M11));
             var goal = new Point((tl.X + br.X) / 2, (tl.Y + br.Y) / 2);
-            // страховка: центр пилюли не выше половины её высоты от верха экрана
+            // страховка: пилюля не выше верха экрана
             double screenTop = SystemParameters.VirtualScreenTop;
             if (goal.Y - ph / 2 < screenTop) goal.Y = screenTop + ph / 2;
             Journal.Info("welcome", "знакомство завершено — летим к чёлке: " + Math.Round(goal.X) + "," + Math.Round(goal.Y) + " " + Math.Round(pw) + "×" + Math.Round(ph));
 
             var card = _card;
-            card.RenderTransform = null;
             card.BeginAnimation(OpacityProperty, null);
             card.Opacity = 1;
             double w0 = card.ActualWidth, h0 = card.ActualHeight;
-            card.Width = w0; card.Height = h0;
-            card.HorizontalAlignment = HorizontalAlignment.Center;
-            card.VerticalAlignment = VerticalAlignment.Center;
+            var cardTl = card.TranslatePoint(new Point(0, 0), this);
+            var start = new Point(Left + cardTl.X + w0 / 2, Top + cardTl.Y + h0 / 2);
+
+            // содержимое замораживаем в прежнем размере (без перекладки на каждом кадре), оно сжимается вместе с карточкой и гаснет
+            var inner = card.Child as FrameworkElement;
+            ScaleTransform innerScale = null;
+            if (inner != null)
+            {
+                inner.Width = inner.ActualWidth; inner.Height = inner.ActualHeight;
+                inner.HorizontalAlignment = HorizontalAlignment.Center;
+                inner.VerticalAlignment = VerticalAlignment.Center;
+                inner.RenderTransformOrigin = new Point(0.5, 0.5);
+                inner.RenderTransform = innerScale = new ScaleTransform();
+            }
             card.ClipToBounds = true;
-            // содержимое гаснет, карточка темнеет до чёрного, как чёлка
-            card.Child?.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(200)));
-            var bg = new SolidColorBrush((TryFindResource("Card") as SolidColorBrush)?.Color ?? Color.FromRgb(0x13, 0x13, 0x16));
+            var c0 = (TryFindResource("Card") as SolidColorBrush)?.Color ?? Color.FromRgb(0x13, 0x13, 0x16);
+            var bg = new SolidColorBrush(c0);
             card.Background = bg;
-            bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Colors.Black, TimeSpan.FromMilliseconds(420)));
+            var edge = new SolidColorBrush((TryFindResource("CardBorder") as SolidColorBrush)?.Color ?? Color.FromRgb(0x23, 0x23, 0x2A));
+            card.BorderBrush = edge;
 
-            var start = new Point(Left + Width / 2, Top + Height / 2);
-            var hover = new Point(goal.X, goal.Y + ph + 22); // зависает чуть ниже своего места
-            const double Morph = 0.52, Travel = 1.05, Shake = 0.55, Snap = 0.16;
-            const double pad = 40;
-            bool shrunk = false;
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-
+            // окно — один раз на общий прямоугольник «карточка + чёлка» с запасом под дугу и свечение;
+            // прозрачные поля пропускают клики насквозь
+            var box = Rect.Union(new Rect(start.X - w0 / 2, start.Y - h0 / 2, w0, h0), new Rect(goal.X - pw / 2, goal.Y - ph / 2, pw, ph));
+            box.Inflate(140, 70);
+            var stage = new Canvas();
+            Content = null;
+            card.HorizontalAlignment = HorizontalAlignment.Left;
+            card.VerticalAlignment = VerticalAlignment.Top;
+            var pos = new TranslateTransform();
+            card.RenderTransform = pos;
+            stage.Children.Add(card);
+            Content = stage;
             void Place(Point c, double w, double h)
             {
-                Left = c.X - Width / 2;
-                Top = c.Y - Height / 2;
                 card.Width = w; card.Height = h;
+                pos.X = c.X - box.X - w / 2;
+                pos.Y = c.Y - box.Y - h / 2;
             }
-            static double Smooth(double t) => t * t * t * (t * (t * 6 - 15) + 10);  // плавный старт и финиш
-            static double Lerp(double a, double b, double t) => a + (b - a) * t;
+            Place(start, w0, h0);
+            Left = box.X; Top = box.Y; Width = box.Width; Height = box.Height;
 
+            // путь — квадратичная дуга с уходом вбок; на перелёте (k > 1) пилюля продолжает движение по касательной
+            var ctrl = new Point((start.X + goal.X) / 2 + 120, (start.Y + goal.Y) / 2 + 30);
+            Point Bezier(double k) => new(
+                (1 - k) * (1 - k) * start.X + 2 * (1 - k) * k * ctrl.X + k * k * goal.X,
+                (1 - k) * (1 - k) * start.Y + 2 * (1 - k) * k * ctrl.Y + k * k * goal.Y);
+
+            const double Morph = 0.50, FlyFrom = 0.12, FlyTo = 0.90, Fade = 0.18, Dark = 0.32;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            bool contentGone = false, landed = false;
             EventHandler tick = null;
-            bool landed = false;
             tick = (_, __) =>
             {
-                if (landed) return; // окно закрывается — вложенный кадр не должен «приземлить» чёлку второй раз
+                if (_closed) { CompositionTarget.Rendering -= tick; return; }
+                if (landed) return; // окно закрывается — лишний кадр не должен «приземлить» чёлку второй раз
                 double t = clock.Elapsed.TotalSeconds;
-                if (t < Morph)
+                double ks = EaseInOutCubic(Clamp01(t / Morph));       // сжатие в пилюлю
+                double u = Clamp01((t - FlyFrom) / (FlyTo - FlyFrom)); // полёт
+                double kf = EaseInOutBack(u);
+
+                // содержимое гаснет первым, фон темнеет до чистого чёрного, рамка растворяется
+                if (!contentGone)
                 {
-                    // 1) сминается: размер → пилюля, углы → полукруг
-                    double k = Smooth(t / Morph);
-                    double w = Lerp(w0, pw, k), h = Lerp(h0, ph, k);
-                    card.CornerRadius = new CornerRadius(Lerp(28, h / 2, k));
-                    // лёгкое «сжатие» в середине: поперёк чуть уже, как будто комкают
-                    double squeeze = Math.Sin(Math.PI * k) * 0.06;
-                    Place(start, w * (1 - squeeze), h * (1 + squeeze));
+                    double fo = Clamp01(t / Fade);
+                    if (inner != null)
+                    {
+                        inner.Opacity = 1 - fo;
+                        double sc = Lerp(1, 0.85, fo);
+                        innerScale.ScaleX = sc; innerScale.ScaleY = sc;
+                        if (fo >= 1) inner.Visibility = Visibility.Collapsed;
+                    }
+                    if (fo >= 1) contentGone = true;
+                }
+                double kd = Clamp01(t / Dark);
+                bg.Color = LerpColor(c0, Colors.Black, kd);
+                edge.Opacity = 1 - kd;
+
+                if (u >= 1)
+                {
+                    // 3) на месте: настоящая чёлка проявляется и пружинит, пилюля гаснет, вспыхивает свечение
+                    landed = true;
+                    CompositionTarget.Rendering -= tick;
+                    Place(goal, pw, ph);
+                    card.CornerRadius = new CornerRadius(0, 0, pr, pr);
+                    _landed = true;
+                    main.LandFromWelcome();
+                    card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(110)));
+                    Flash(stage, new Point(goal.X - box.X, goal.Y - box.Y), pw, ph);
+                    After(320, CloseNow, stepBound: false);
                     return;
                 }
-                if (!shrunk)
-                {
-                    // окно ужимаем до пилюли (с полями): дальше двигаем маленькое окно, а не большое прозрачное
-                    shrunk = true;
-                    Width = pw + pad * 2; Height = ph + pad * 2;
-                    card.CornerRadius = new CornerRadius(ph / 2);
-                }
-                t -= Morph;
-                if (t < Travel)
-                {
-                    // 2) тяжело плывёт: медленно трогается, разгоняется, долго тормозит; путь — пологая дуга
-                    double u = t / Travel;
-                    double k = u < 0.35 ? 0.35 * Math.Pow(u / 0.35, 2.4) : 0.35 + 0.65 * (1 - Math.Pow(1 - (u - 0.35) / 0.65, 3));
-                    var c = new Point(Lerp(start.X, hover.X, k), Lerp(start.Y, hover.Y, k));
-                    c.X += Math.Sin(Math.PI * k) * 36;                      // дуга вбок
-                    double stretch = Math.Sin(Math.PI * k) * 0.08;          // на ходу чуть вытягивается вверх
-                    Place(c, pw * (1 - stretch * 0.5), ph * (1 + stretch));
-                    return;
-                }
-                t -= Travel;
-                if (t < Shake)
-                {
-                    // 3) дрожит под своим местом — магнит тянет всё сильнее, пилюля медленно подползает
-                    double u = t / Shake;
-                    double amp = 1 + 5 * u;
-                    var c = new Point(hover.X + Math.Sin(t * 70) * amp, hover.Y - 8 * u * u + Math.Sin(t * 53) * amp * 0.35);
-                    Place(c, pw, ph);
-                    return;
-                }
-                t -= Shake;
-                var from = new Point(hover.X, hover.Y - 8);
-                if (t < Snap)
-                {
-                    // 4) щёлк! — рывок вверх с ускорением, верхние углы выпрямляются, как у чёлки
-                    double u = t / Snap;
-                    double k = u * u * u;
-                    Place(new Point(from.X, Lerp(from.Y, goal.Y, k)), pw * (1 - 0.06 * k), ph * (1 + 0.1 * k));
-                    double r = Lerp(ph / 2, 0, k);
-                    card.CornerRadius = new CornerRadius(r, r, Lerp(ph / 2, pr, k), Lerp(ph / 2, pr, k));
-                    return;
-                }
-                // 5) прилипла: настоящая чёлка проявляется на этом месте и пружинит, окно исчезает
-                landed = true;
-                CompositionTarget.Rendering -= tick;
-                Place(goal, pw, ph);
-                _landed = true;
-                main.LandFromWelcome();
-                Opacity = 0;
-                Close();
+
+                // 1) размер → пилюля; 2) на лету чуть вытягивается вдоль пути, как капля
+                double stretch = Math.Sin(Math.PI * u) * 0.10 * ks;
+                double w = Lerp(w0, pw, ks) * (1 - stretch * 0.5), h = Lerp(h0, ph, ks) * (1 + stretch);
+                Place(Bezier(kf), w, h);
+                // углы: от 28 к полукругу, а у самой цели верхние выпрямляются, нижние — как у чёлки
+                double round = Math.Min(Lerp(28, h / 2, ks), h / 2);
+                double kc = EaseInOutCubic(Clamp01((u - 0.72) / 0.28));
+                double topR = Lerp(round, 0, kc), botR = Lerp(round, pr, kc);
+                card.CornerRadius = new CornerRadius(topR, topR, botR, botR);
             };
             CompositionTarget.Rendering += tick;
+        }
+
+        /// <summary>Мягкая вспышка цвета акцента на месте чёлки в момент посадки.</summary>
+        private void Flash(Canvas stage, Point center, double pw, double ph)
+        {
+            var c = AccentColor();
+            var fill = new RadialGradientBrush();
+            fill.GradientStops.Add(new GradientStop(Color.FromArgb(200, c.R, c.G, c.B), 0));
+            fill.GradientStops.Add(new GradientStop(Color.FromArgb(80, c.R, c.G, c.B), 0.45));
+            fill.GradientStops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1));
+            double w = pw * 1.9, h = ph * 3.4;
+            var glow = new Ellipse { Width = w, Height = h, Fill = fill, IsHitTestVisible = false, RenderTransformOrigin = new Point(0.5, 0.5) };
+            Canvas.SetLeft(glow, center.X - w / 2);
+            Canvas.SetTop(glow, center.Y - h / 2);
+            var st = new ScaleTransform(0.4, 0.4);
+            glow.RenderTransform = st;
+            stage.Children.Add(glow);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var d = TimeSpan.FromMilliseconds(300);
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.4, 1.5, d) { EasingFunction = ease });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.4, 1.5, d) { EasingFunction = ease });
+            glow.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, d) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } });
         }
     }
 }
